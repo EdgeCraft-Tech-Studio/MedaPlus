@@ -1,7 +1,7 @@
 from datetime import datetime, time, timedelta
 
 from django.utils import timezone
-from rest_framework.decorators import api_view, permission_classes, authentication_classes
+from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
@@ -37,7 +37,7 @@ def pitches_list_create(request):
 
     POST:
       - OWNER: create pitch under their tenant (pitch becomes pending approval)
-      - ADMIN: create pitch for any tenant (optional, if you pass tenant_id)
+      - ADMIN: create pitch for tenant_id OR owner_id (owner_id resolves to tenant)
     """
     u = request.user
 
@@ -47,10 +47,12 @@ def pitches_list_create(request):
     if request.method == "GET":
         if is_admin(u):
             qs = Pitch.objects.all().order_by("-created_at")
+
         elif is_owner(u):
             if not hasattr(u, "tenant"):
                 return Response({"detail": "Owner does not have a tenant record yet."}, status=400)
             qs = Pitch.objects.filter(tenant=u.tenant).order_by("-created_at")
+
         else:
             # PLAYER
             qs = Pitch.objects.filter(
@@ -72,12 +74,25 @@ def pitches_list_create(request):
 
     tenant = None
 
-    if is_admin(u) and data.get("tenant_id"):
-        # Admin can create pitch for any tenant
-        try:
-            tenant = Tenant.objects.get(id=data["tenant_id"])
-        except Tenant.DoesNotExist:
-            return Response({"detail": "Tenant not found"}, status=404)
+    if is_admin(u):
+        tenant_id = data.get("tenant_id")
+        owner_id = data.get("owner_id")
+
+        if tenant_id:
+            try:
+                tenant = Tenant.objects.get(id=tenant_id)
+            except Tenant.DoesNotExist:
+                return Response({"detail": "Tenant not found"}, status=404)
+
+        elif owner_id:
+            # Admin selected an OWNER user id; resolve their tenant
+            try:
+                tenant = Tenant.objects.get(owner_id=owner_id)
+            except Tenant.DoesNotExist:
+                return Response({"detail": "This owner has no tenant yet."}, status=400)
+
+        else:
+            return Response({"detail": "Admin must provide tenant_id or owner_id."}, status=400)
 
     elif is_owner(u):
         if not hasattr(u, "tenant"):
@@ -87,6 +102,7 @@ def pitches_list_create(request):
     else:
         return Response({"detail": "Forbidden"}, status=403)
 
+    # Create pitch (pending approval)
     pitch = Pitch.objects.create(
         tenant=tenant,
         name=data["name"],
@@ -109,7 +125,6 @@ def pitches_list_create(request):
         has_lighting=data.get("has_lighting", False),
         other_services=data.get("other_services", ""),
 
-        # approval workflow
         is_approved=False,
         is_active=True,
     )
@@ -122,6 +137,7 @@ def pitches_list_create(request):
     for h in slot_hours:
         start_naive = datetime.combine(slot_date, time(hour=h, minute=0))
         end_naive = start_naive + timedelta(hours=1)
+
         start_dt = timezone.make_aware(start_naive, tz)
         end_dt = timezone.make_aware(end_naive, tz)
 
@@ -143,9 +159,6 @@ def pitches_list_create(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def admin_pending_pitches(request):
-    """
-    Admin sees pitches waiting for approval.
-    """
     if not is_admin(request.user):
         return Response({"detail": "Forbidden"}, status=403)
 
@@ -156,9 +169,6 @@ def admin_pending_pitches(request):
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def admin_approve_pitch(request, pitch_id: str):
-    """
-    Approve a pitch. Only possible if its tenant is approved.
-    """
     if not is_admin(request.user):
         return Response({"detail": "Forbidden"}, status=403)
 

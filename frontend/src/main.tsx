@@ -1,6 +1,8 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import "leaflet/dist/leaflet.css";
+import "./lib/leafletFix";
 
 import Landing from "./pages/Landing";
 import Login from "./pages/Login";
