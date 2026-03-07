@@ -7,16 +7,12 @@ type OwnerOption = { id: string; username: string; is_approved?: boolean };
 type Props = {
   open: boolean;
   onClose: () => void;
-
-  // If admin creates pitch for someone, pass owners list
   isAdmin?: boolean;
   owners?: OwnerOption[];
-
-  // Called after user finishes step2
-  onSubmit: (payload: any) => Promise<void> | void;
+  onSubmit: (payload: FormData) => Promise<void> | void;
 };
 
-const ADDIS_ABABA = { lat: 8.9806, lng: 38.7578 }; // Addis Ababa
+const ADDIS_ABABA = { lat: 8.9806, lng: 38.7578 };
 
 function LocationPicker({
   lat,
@@ -33,20 +29,25 @@ function LocationPicker({
     },
   });
 
-  return <Marker position={[lat, lng]} draggable={true} eventHandlers={{
-    dragend: (e) => {
-      const m = e.target;
-      const pos = m.getLatLng();
-      onChange(pos.lat, pos.lng);
-    }
-  }} />;
+  return (
+    <Marker
+      position={[lat, lng]}
+      draggable={true}
+      eventHandlers={{
+        dragend: (e) => {
+          const marker = e.target;
+          const pos = marker.getLatLng();
+          onChange(pos.lat, pos.lng);
+        },
+      }}
+    />
+  );
 }
 
 export default function PitchWizardModal({ open, onClose, onSubmit, isAdmin, owners }: Props) {
   const [step, setStep] = useState<1 | 2>(1);
   const [error, setError] = useState("");
 
-  // Step 1 fields
   const [ownerId, setOwnerId] = useState("");
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
@@ -66,16 +67,17 @@ export default function PitchWizardModal({ open, onClose, onSubmit, isAdmin, own
   const [lighting, setLighting] = useState(false);
   const [services, setServices] = useState("");
 
-  const [slotDate, setSlotDate] = useState(""); // YYYY-MM-DD
+  const [slotDate, setSlotDate] = useState("");
   const [slotHours, setSlotHours] = useState("8,9,10,11");
 
-  // Step 2 location
+  const [images, setImages] = useState<File[]>([]);
+
   const [lat, setLat] = useState(ADDIS_ABABA.lat);
   const [lng, setLng] = useState(ADDIS_ABABA.lng);
 
   const approvedOwners = useMemo(() => {
     if (!owners) return [];
-    return owners.filter((o) => o.is_approved !== false); // show approved by default
+    return owners.filter((o) => o.is_approved !== false);
   }, [owners]);
 
   function resetAll() {
@@ -98,6 +100,7 @@ export default function PitchWizardModal({ open, onClose, onSubmit, isAdmin, own
     setServices("");
     setSlotDate("");
     setSlotHours("8,9,10,11");
+    setImages([]);
     setLat(ADDIS_ABABA.lat);
     setLng(ADDIS_ABABA.lng);
   }
@@ -110,16 +113,35 @@ export default function PitchWizardModal({ open, onClose, onSubmit, isAdmin, own
   function validateStep1() {
     setError("");
 
-    if (isAdmin && !ownerId) return setError("Please select an owner."), false;
-    if (!name.trim()) return setError("Pitch name is required."), false;
+    if (isAdmin && !ownerId) {
+      setError("Please select an owner.");
+      return false;
+    }
+
+    if (!name.trim()) {
+      setError("Pitch name is required.");
+      return false;
+    }
+
+    if (images.length < 1) {
+      setError("At least one pitch image is required.");
+      return false;
+    }
 
     const h = Number(hourly);
     const w = Number(weekly);
     const m = Number(monthly);
-    if ([h, w, m].some((x) => Number.isNaN(x) || x < 0)) return setError("Prices must be valid numbers."), false;
+
+    if ([h, w, m].some((x) => Number.isNaN(x) || x < 0)) {
+      setError("Prices must be valid numbers.");
+      return false;
+    }
 
     const mh = Number(minHours);
-    if (Number.isNaN(mh) || mh < 1) return setError("Minimum hours must be >= 1"), false;
+    if (Number.isNaN(mh) || mh < 1) {
+      setError("Minimum hours must be at least 1.");
+      return false;
+    }
 
     return true;
   }
@@ -132,40 +154,53 @@ export default function PitchWizardModal({ open, onClose, onSubmit, isAdmin, own
       .map((x) => parseInt(x.trim(), 10))
       .filter((n) => !Number.isNaN(n) && n >= 0 && n <= 23);
 
-    const payload: any = {
-      name,
-      address,
-      latitude: lat,
-      longitude: lng,
+    const formData = new FormData();
 
-      min_hours: Number(minHours),
-      allow_hourly: allowHourly,
-      allow_weekly: allowWeekly,
-      allow_monthly: allowMonthly,
+    formData.append("name", name);
+    formData.append("address", address);
+    formData.append("latitude", String(lat));
+    formData.append("longitude", String(lng));
 
-      hourly_price: hourly,
-      weekly_price: weekly,
-      monthly_price: monthly,
+    formData.append("min_hours", minHours);
+    formData.append("allow_hourly", String(allowHourly));
+    formData.append("allow_weekly", String(allowWeekly));
+    formData.append("allow_monthly", String(allowMonthly));
 
-      has_dressing_room: dressing,
-      has_showers: showers,
-      has_parking: parking,
-      has_lighting: lighting,
-      other_services: services,
+    formData.append("hourly_price", hourly);
+    formData.append("weekly_price", weekly);
+    formData.append("monthly_price", monthly);
 
-      slot_date: slotDate || undefined,
-      slot_hours: hours,
-    };
+    formData.append("has_dressing_room", String(dressing));
+    formData.append("has_showers", String(showers));
+    formData.append("has_parking", String(parking));
+    formData.append("has_lighting", String(lighting));
+    formData.append("other_services", services);
 
-    // IMPORTANT:
-    // If your backend expects tenant_id instead of owner_id, rename this field.
-    if (isAdmin) payload.owner_id = ownerId;
+    if (slotDate) {
+      formData.append("slot_date", slotDate);
+    }
+
+    for (const hour of hours) {
+      formData.append("slot_hours", String(hour));
+    }
+
+    for (const image of images) {
+      formData.append("images", image);
+    }
+
+    if (isAdmin) {
+      formData.append("owner_id", ownerId);
+    }
 
     try {
-      await onSubmit(payload);
+      await onSubmit(formData);
       close();
     } catch (e: any) {
-      setError("Failed to create pitch. Check server logs / API response.");
+      const detail =
+        e?.response?.data?.detail ||
+        e?.response?.data?.images?.[0] ||
+        "Failed to create pitch.";
+      setError(detail);
     }
   }
 
@@ -173,12 +208,25 @@ export default function PitchWizardModal({ open, onClose, onSubmit, isAdmin, own
     <Modal open={open} onClose={close} title={step === 1 ? "Add Pitch Details" : "Pick Pitch Location"}>
       {error && <div style={{ marginBottom: 12, color: "#b00020" }}>{error}</div>}
 
-      {/* Step indicator */}
       <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
-        <div style={{ padding: "6px 10px", borderRadius: 999, background: step === 1 ? "#111" : "#eee", color: step === 1 ? "#fff" : "#333" }}>
+        <div
+          style={{
+            padding: "6px 10px",
+            borderRadius: 999,
+            background: step === 1 ? "#111" : "#eee",
+            color: step === 1 ? "#fff" : "#333",
+          }}
+        >
           1. Details
         </div>
-        <div style={{ padding: "6px 10px", borderRadius: 999, background: step === 2 ? "#111" : "#eee", color: step === 2 ? "#fff" : "#333" }}>
+        <div
+          style={{
+            padding: "6px 10px",
+            borderRadius: 999,
+            background: step === 2 ? "#111" : "#eee",
+            color: step === 2 ? "#fff" : "#333",
+          }}
+        >
           2. Location
         </div>
       </div>
@@ -194,7 +242,11 @@ export default function PitchWizardModal({ open, onClose, onSubmit, isAdmin, own
           {isAdmin && (
             <div style={{ display: "grid", gap: 6 }}>
               <label style={{ fontWeight: 600 }}>Owner</label>
-              <select value={ownerId} onChange={(e) => setOwnerId(e.target.value)} style={{ padding: 10, borderRadius: 10, border: "1px solid #ddd" }}>
+              <select
+                value={ownerId}
+                onChange={(e) => setOwnerId(e.target.value)}
+                style={{ padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
+              >
                 <option value="">Select owner</option>
                 {approvedOwners.map((o) => (
                   <option key={o.id} value={o.id}>
@@ -207,42 +259,95 @@ export default function PitchWizardModal({ open, onClose, onSubmit, isAdmin, own
 
           <div style={{ display: "grid", gap: 6 }}>
             <label style={{ fontWeight: 600 }}>Pitch name</label>
-            <input value={name} onChange={(e) => setName(e.target.value)} style={{ padding: 10, borderRadius: 10, border: "1px solid #ddd" }} />
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              style={{ padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
+            />
           </div>
 
           <div style={{ display: "grid", gap: 6 }}>
-            <label style={{ fontWeight: 600 }}>Address (optional)</label>
-            <input value={address} onChange={(e) => setAddress(e.target.value)} style={{ padding: 10, borderRadius: 10, border: "1px solid #ddd" }} />
+            <label style={{ fontWeight: 600 }}>Address</label>
+            <input
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              style={{ padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
+            />
+          </div>
+
+          <div style={{ display: "grid", gap: 6 }}>
+            <label style={{ fontWeight: 600 }}>Pitch images</label>
+            <input
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={(e) => setImages(Array.from(e.target.files || []))}
+              style={{ padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
+            />
+            <div style={{ fontSize: 12, color: "#666" }}>
+              At least one image is required.
+            </div>
+            {images.length > 0 && (
+              <div style={{ fontSize: 13, color: "#333" }}>
+                Selected: {images.map((img) => img.name).join(", ")}
+              </div>
+            )}
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
             <div style={{ display: "grid", gap: 6 }}>
               <label style={{ fontWeight: 600 }}>Hourly price</label>
-              <input value={hourly} onChange={(e) => setHourly(e.target.value)} style={{ padding: 10, borderRadius: 10, border: "1px solid #ddd" }} />
+              <input
+                value={hourly}
+                onChange={(e) => setHourly(e.target.value)}
+                style={{ padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
+              />
             </div>
             <div style={{ display: "grid", gap: 6 }}>
               <label style={{ fontWeight: 600 }}>Weekly (1x/week)</label>
-              <input value={weekly} onChange={(e) => setWeekly(e.target.value)} style={{ padding: 10, borderRadius: 10, border: "1px solid #ddd" }} />
+              <input
+                value={weekly}
+                onChange={(e) => setWeekly(e.target.value)}
+                style={{ padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
+              />
             </div>
             <div style={{ display: "grid", gap: 6 }}>
               <label style={{ fontWeight: 600 }}>Monthly (4x/month)</label>
-              <input value={monthly} onChange={(e) => setMonthly(e.target.value)} style={{ padding: 10, borderRadius: 10, border: "1px solid #ddd" }} />
+              <input
+                value={monthly}
+                onChange={(e) => setMonthly(e.target.value)}
+                style={{ padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
+              />
             </div>
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
             <div style={{ display: "grid", gap: 6 }}>
               <label style={{ fontWeight: 600 }}>Minimum hours</label>
-              <input value={minHours} onChange={(e) => setMinHours(e.target.value)} style={{ padding: 10, borderRadius: 10, border: "1px solid #ddd" }} />
+              <input
+                value={minHours}
+                onChange={(e) => setMinHours(e.target.value)}
+                style={{ padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
+              />
             </div>
 
             <div style={{ display: "grid", gap: 6 }}>
               <label style={{ fontWeight: 600 }}>Slots (one day)</label>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                <input type="date" value={slotDate} onChange={(e) => setSlotDate(e.target.value)} style={{ padding: 10, borderRadius: 10, border: "1px solid #ddd" }} />
-                <input value={slotHours} onChange={(e) => setSlotHours(e.target.value)} placeholder="8,9,10,11" style={{ padding: 10, borderRadius: 10, border: "1px solid #ddd" }} />
+                <input
+                  type="date"
+                  value={slotDate}
+                  onChange={(e) => setSlotDate(e.target.value)}
+                  style={{ padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
+                />
+                <input
+                  value={slotHours}
+                  onChange={(e) => setSlotHours(e.target.value)}
+                  placeholder="8,9,10,11"
+                  style={{ padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
+                />
               </div>
-              <div style={{ fontSize: 12, color: "#666" }}>Hours: comma separated (0–23)</div>
+              <div style={{ fontSize: 12, color: "#666" }}>Hours: comma separated, 0 to 23</div>
             </div>
           </div>
 
@@ -261,51 +366,49 @@ export default function PitchWizardModal({ open, onClose, onSubmit, isAdmin, own
 
           <div style={{ display: "grid", gap: 6 }}>
             <label style={{ fontWeight: 600 }}>Other services</label>
-            <input value={services} onChange={(e) => setServices(e.target.value)} placeholder="referee, water, ball rental..." style={{ padding: 10, borderRadius: 10, border: "1px solid #ddd" }} />
+            <input
+              value={services}
+              onChange={(e) => setServices(e.target.value)}
+              placeholder="Referee, water, ball rental"
+              style={{ padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
+            />
           </div>
 
-          <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 8 }}>
-            <button type="button" onClick={close} style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid #ddd", background: "white" }}>
-              Cancel
-            </button>
-            <button type="submit" style={{ padding: "10px 14px", borderRadius: 10, border: "none", background: "#111", color: "white" }}>
-              Next
-            </button>
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 6 }}>
+            <button type="button" onClick={close}>Cancel</button>
+            <button type="submit">Next</button>
           </div>
         </form>
       ) : (
-        <div style={{ display: "grid", gap: 10 }}>
-          <div style={{ color: "#666", fontSize: 13 }}>
-            Click on the map to place the marker. You can also drag the marker.
+        <div style={{ display: "grid", gap: 12 }}>
+          <div style={{ fontSize: 14, color: "#555" }}>
+            Click on the map or drag the marker to set the exact pitch location.
           </div>
 
-          <div style={{ height: 420, borderRadius: 14, overflow: "hidden", border: "1px solid #eee" }}>
-            <MapContainer center={[ADDIS_ABABA.lat, ADDIS_ABABA.lng]} zoom={12} style={{ height: "100%", width: "100%" }}>
+          <div style={{ height: 360, borderRadius: 12, overflow: "hidden", border: "1px solid #ddd" }}>
+            <MapContainer
+              center={[lat, lng]}
+              zoom={13}
+              style={{ height: "100%", width: "100%" }}
+            >
               <TileLayer
                 attribution='&copy; OpenStreetMap contributors'
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               />
-              <LocationPicker lat={lat} lng={lng} onChange={(a, b) => { setLat(a); setLng(b); }} />
+              <LocationPicker lat={lat} lng={lng} onChange={(newLat, newLng) => {
+                setLat(newLat);
+                setLng(newLng);
+              }} />
             </MapContainer>
           </div>
 
-          <div style={{ fontSize: 13, color: "#444" }}>
-            Selected: <b>{lat.toFixed(6)}</b>, <b>{lng.toFixed(6)}</b>
+          <div style={{ fontSize: 14, color: "#444" }}>
+            Selected location: {lat.toFixed(6)}, {lng.toFixed(6)}
           </div>
 
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 10, marginTop: 8 }}>
-            <button onClick={() => setStep(1)} style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid #ddd", background: "white" }}>
-              Back
-            </button>
-
-            <div style={{ display: "flex", gap: 10 }}>
-              <button onClick={close} style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid #ddd", background: "white" }}>
-                Cancel
-              </button>
-              <button onClick={finish} style={{ padding: "10px 14px", borderRadius: 10, border: "none", background: "#111", color: "white" }}>
-                Create pitch
-              </button>
-            </div>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+            <button type="button" onClick={() => setStep(1)}>Back</button>
+            <button type="button" onClick={finish}>Create Pitch</button>
           </div>
         </div>
       )}

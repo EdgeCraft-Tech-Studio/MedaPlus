@@ -1,19 +1,15 @@
 from datetime import datetime, time, timedelta
 
-from django.contrib.auth import get_user_model
 from django.utils import timezone
-from rest_framework import status
-from rest_framework.decorators import api_view, permission_classes, parser_classes
-from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework import status
 
 from accounts.models import UserRole
 from bookings.models import Slot, SlotStatus
-from .models import Tenant, Pitch, PitchImage
+from .models import Tenant, Pitch
 from .serializers import PitchSerializer, PitchCreateSerializer
-
-User = get_user_model()
 
 
 def is_admin(u) -> bool:
@@ -32,8 +28,17 @@ def health(request):
 
 @api_view(["GET", "POST"])
 @permission_classes([IsAuthenticated])
-@parser_classes([MultiPartParser, FormParser, JSONParser])
 def pitches_list_create(request):
+    """
+    GET:
+      - ADMIN: all pitches
+      - OWNER: only their tenant pitches
+      - PLAYER: only approved pitches whose tenant is approved+active
+
+    POST:
+      - OWNER: create pitch under their tenant (pitch becomes pending approval)
+      - ADMIN: create pitch for tenant_id OR owner_id (owner_id resolves to tenant)
+    """
     u = request.user
 
     # ------------------------
@@ -55,6 +60,7 @@ def pitches_list_create(request):
             qs = Pitch.objects.filter(tenant=tenant).order_by("-created_at")
 
         else:
+            # PLAYER
             qs = Pitch.objects.filter(
                 is_active=True,
                 is_approved=True,
@@ -62,31 +68,16 @@ def pitches_list_create(request):
                 tenant__is_approved=True,
             ).order_by("-created_at")
 
-        return Response(
-            {"pitches": PitchSerializer(qs, many=True, context={"request": request}).data}
-        )
+        return Response({"pitches": PitchSerializer(qs, many=True).data})
 
     # ------------------------
     # CREATE
     # ------------------------
-    incoming = request.data.copy()
+    s = PitchCreateSerializer(data=request.data)
+    if not s.is_valid():
+        return Response(s.errors, status=status.HTTP_400_BAD_REQUEST)
+    data = s.validated_data
 
-    slot_hours = request.data.getlist("slot_hours")
-    if slot_hours:
-        incoming.setlist("slot_hours", slot_hours)
-
-    serializer = PitchCreateSerializer(data=incoming)
-    if not serializer.is_valid():
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-    images = request.FILES.getlist("images")
-    if not images:
-        return Response(
-            {"images": ["At least one pitch image is required."]},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    data = serializer.validated_data
     tenant = None
 
     if is_admin(u):
@@ -101,12 +92,9 @@ def pitches_list_create(request):
 
         elif owner_id:
             try:
-                owner_user = User.objects.get(id=owner_id)
-            except User.DoesNotExist:
+                owner_user = u.__class__.objects.get(id=owner_id)
+            except u.__class__.DoesNotExist:
                 return Response({"detail": "Owner not found."}, status=404)
-
-            if owner_user.role != UserRole.OWNER:
-                return Response({"detail": "Selected user is not an owner."}, status=400)
 
             tenant, _ = Tenant.objects.get_or_create(
                 owner=owner_user,
@@ -118,55 +106,49 @@ def pitches_list_create(request):
             )
 
         else:
-            return Response(
-                {"detail": "Admin must provide tenant_id or owner_id."},
-                status=400,
-            )
+            return Response({"detail": "Admin must provide tenant_id or owner_id."}, status=400)
 
     elif is_owner(u):
-        tenant, _ = Tenant.objects.get_or_create(
-            owner=u,
-            defaults={
-                "name": f"{u.username}'s Business",
-                "is_active": True,
-                "is_approved": bool(getattr(u, "is_approved", False)),
-            },
-        )
+        if not hasattr(u, "tenant"):
+            return Response({"detail": "Owner does not have a tenant record yet."}, status=400)
+        tenant = u.tenant
 
     else:
         return Response({"detail": "Forbidden"}, status=403)
 
+    # Create pitch (pending approval)
     pitch = Pitch.objects.create(
         tenant=tenant,
         name=data["name"],
         address=data.get("address", ""),
         latitude=data["latitude"],
         longitude=data["longitude"],
+
         min_hours=data.get("min_hours", 1),
         allow_hourly=data.get("allow_hourly", True),
         allow_weekly=data.get("allow_weekly", False),
         allow_monthly=data.get("allow_monthly", False),
+
         hourly_price=data.get("hourly_price", 0),
         weekly_price=data.get("weekly_price", 0),
         monthly_price=data.get("monthly_price", 0),
+
         has_dressing_room=data.get("has_dressing_room", False),
         has_showers=data.get("has_showers", False),
         has_parking=data.get("has_parking", False),
         has_lighting=data.get("has_lighting", False),
         other_services=data.get("other_services", ""),
+
         is_approved=False,
         is_active=True,
     )
 
-    for uploaded_file in images:
-        PitchImage.objects.create(pitch=pitch, image=uploaded_file)
-
+    # Optionally create hourly slots for a given day
     slot_date = data.get("slot_date") or timezone.localdate()
     slot_hours = data.get("slot_hours") or []
     tz = timezone.get_current_timezone()
 
-    for raw_h in slot_hours:
-        h = int(raw_h)
+    for h in slot_hours:
         start_naive = datetime.combine(slot_date, time(hour=h, minute=0))
         end_naive = start_naive + timedelta(hours=1)
 
@@ -181,11 +163,12 @@ def pitches_list_create(request):
             updated_by=u,
         )
 
-    return Response(
-        {"pitch": PitchSerializer(pitch, context={"request": request}).data},
-        status=status.HTTP_201_CREATED,
-    )
+    return Response({"pitch": PitchSerializer(pitch).data}, status=status.HTTP_201_CREATED)
 
+
+# --------------------------
+# ADMIN: Approvals
+# --------------------------
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
@@ -194,9 +177,7 @@ def admin_pending_pitches(request):
         return Response({"detail": "Forbidden"}, status=403)
 
     qs = Pitch.objects.filter(is_approved=False, is_active=True).order_by("-created_at")
-    return Response(
-        {"pending_pitches": PitchSerializer(qs, many=True, context={"request": request}).data}
-    )
+    return Response({"pending_pitches": PitchSerializer(qs, many=True).data})
 
 
 @api_view(["POST"])

@@ -2,6 +2,9 @@ import { api } from "./api";
 
 export type Pitch = {
   id: string;
+  tenant_id?: string | null;
+  tenant_name?: string | null;
+
   name: string;
   address: string;
   latitude: number;
@@ -17,6 +20,9 @@ export type Pitch = {
   has_lighting: boolean;
   other_services: string;
 
+  cover_image_url?: string | null;
+  image_urls?: string[];
+
   is_approved: boolean;
   is_active: boolean;
 };
@@ -26,8 +32,12 @@ export async function listPitches() {
   return res.data.pitches as Pitch[];
 }
 
-export async function createPitch(payload: any) {
-  const res = await api.post("/pitches/", payload);
+export async function createPitch(payload: FormData) {
+  const res = await api.post("/pitches/", payload, {
+    headers: {
+      "Content-Type": "multipart/form-data",
+    },
+  });
   return res.data.pitch as Pitch;
 }
 

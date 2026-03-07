@@ -10,6 +10,7 @@ import Signup from "./pages/Signup";
 import Admin from "./pages/Admin";
 import Owner from "./pages/Owner";
 import App from "./pages/App";
+import PitchDetailPlaceholder from "./pages/PitchDetailPlaceholder";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
@@ -22,6 +23,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
         <Route path="/admin" element={<Admin />} />
         <Route path="/owner" element={<Owner />} />
         <Route path="/app" element={<App />} />
+        <Route path="/app/pitches/:pitchId" element={<PitchDetailPlaceholder />} />
       </Routes>
     </BrowserRouter>
   </React.StrictMode>

@@ -4,7 +4,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from accounts.models import User, UserRole
 from .serializers import RegisterSerializer
-
+from pitches.models import Tenant
 
 def _require_admin(request):
     return request.user.is_authenticated and request.user.role == "ADMIN"
@@ -47,8 +47,22 @@ def admin_approve_owner(request, user_id: str):
     if u.role != UserRole.OWNER:
         return Response({"detail": "User is not an owner"}, status=400)
 
+    tenant, _ = Tenant.objects.get_or_create(
+        owner=u,
+        defaults={
+            "name": f"{u.username}'s Business",
+            "is_active": True,
+            "is_approved": True,
+        },
+    )
+
     u.is_approved = True
     u.save()
+
+    if not tenant.is_approved:
+        tenant.is_approved = True
+        tenant.save(update_fields=["is_approved"])
+
     return Response({"ok": True, "owner_id": str(u.id), "is_approved": u.is_approved})
 
 @api_view(["GET"])

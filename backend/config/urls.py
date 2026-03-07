@@ -1,7 +1,9 @@
+from django.conf import settings
+from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import path, include
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
-from accounts.views import me
+
 from accounts.views import me, health, logout, register
 from accounts.views import admin_list_owners, admin_pending_owners, admin_approve_owner
 
@@ -22,3 +24,6 @@ urlpatterns = [
     path("api/admin/owners/pending/", admin_pending_owners),
     path("api/admin/owners/<str:user_id>/approve/", admin_approve_owner),
 ]
+
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

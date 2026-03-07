@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from accounts.models import User, UserRole
-
+from pitches.models import Tenant
 
 class RegisterSerializer(serializers.Serializer):
     username = serializers.CharField(min_length=3, max_length=150)
@@ -31,4 +31,15 @@ class RegisterSerializer(serializers.Serializer):
         # Players are approved immediately; owners require admin approval
         user.is_approved = (role == UserRole.PLAYER)
         user.save()
+
+        if role == UserRole.OWNER:
+            Tenant.objects.get_or_create(
+                owner=user,
+                defaults={
+                    "name": f"{user.username}'s Business",
+                    "is_active": True,
+                    "is_approved": False,
+                },
+            )
+
         return user
