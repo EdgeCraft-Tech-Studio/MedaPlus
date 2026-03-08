@@ -12,6 +12,11 @@ export type Pitch = {
   opening_time_label: string;
   closing_time_label: string;
 
+  min_hours: number;
+  allow_hourly: boolean;
+  allow_weekly: boolean;
+  allow_monthly: boolean;
+
   hourly_price: string;
   weekly_price: string;
   monthly_price: string;
@@ -53,10 +58,23 @@ export type MonthlyWeek = {
   days: AvailabilityDay[];
 };
 
+export type ExistingBooking = {
+  id: string;
+  start_iso: string;
+  end_iso: string;
+  label: string;
+  status: string;
+  booking_code: string;
+  total_price: string;
+  booked_by: string;
+  notes: string;
+};
+
 export type PitchDetailResponse = {
   pitch: Pitch;
   daily_weekly_days: AvailabilityDay[];
   monthly_weeks: MonthlyWeek[];
+  existing_bookings: ExistingBooking[];
 };
 
 export async function listPitches() {
@@ -78,11 +96,22 @@ export async function createPitch(payload: FormData) {
   return res.data.pitch as Pitch;
 }
 
+export async function updatePitch(pitchId: string, payload: FormData) {
+  const res = await api.patch(`/pitches/${pitchId}/`, payload, {
+    headers: {
+      "Content-Type": "multipart/form-data",
+    },
+  });
+  return res.data.pitch as Pitch;
+}
+
 export async function createBooking(payload: {
   pitch_id: string;
   booking_type: "HOURLY" | "WEEKLY" | "MONTHLY";
   selections: { start_iso: string; end_iso: string }[];
   notes?: string;
+  manual_cash?: boolean;
+  booked_for_name?: string;
 }) {
   const res = await api.post("/bookings/", payload);
   return res.data;
@@ -111,13 +140,4 @@ export async function listOwners() {
 export async function approveOwner(ownerId: string) {
   const res = await api.post(`/admin/owners/${ownerId}/approve/`);
   return res.data;
-}
-
-export async function updatePitch(pitchId: string, payload: FormData) {
-  const res = await api.patch(`/pitches/${pitchId}/`, payload, {
-    headers: {
-      "Content-Type": "multipart/form-data",
-    },
-  });
-  return res.data.pitch as Pitch;
 }

@@ -15,6 +15,8 @@ from .serializers import PitchSerializer, PitchCreateSerializer, PitchUpdateSeri
 
 from collections import defaultdict
 from django.shortcuts import get_object_or_404
+from bookings.models import Booking, Slot, SlotStatus
+from decimal import Decimal
 
 User = get_user_model()
 
@@ -25,6 +27,37 @@ def is_admin(u) -> bool:
 
 def is_owner(u) -> bool:
     return u.is_authenticated and u.role == UserRole.OWNER
+
+def _serialize_existing_bookings(pitch: Pitch, user):
+    if not (is_admin(user) or (is_owner(user) and hasattr(user, "tenant") and pitch.tenant_id == user.tenant.id)):
+        return []
+
+    today = timezone.localdate()
+    from_dt = timezone.make_aware(datetime.combine(today, time.min), timezone.get_current_timezone())
+    to_dt = from_dt + timedelta(days=28)
+
+    qs = Booking.objects.filter(
+        pitch=pitch,
+        start_dt__gte=from_dt,
+        start_dt__lt=to_dt,
+    ).order_by("start_dt")
+
+    items = []
+    for b in qs:
+        items.append(
+            {
+                "id": str(b.id),
+                "start_iso": b.start_dt.isoformat(),
+                "end_iso": b.end_dt.isoformat(),
+                "label": f"{timezone.localtime(b.start_dt).strftime('%a %d %b, %I:%M %p')} - {timezone.localtime(b.end_dt).strftime('%I:%M %p')}",
+                "status": b.status,
+                "booking_code": b.booking_code,
+                "total_price": str(b.total_price),
+                "booked_by": getattr(b.player, "username", "") if b.player_id else "",
+                "notes": b.notes or "",
+            }
+        )
+    return items
 
 def _can_view_pitch(user, pitch: Pitch) -> bool:
     if is_admin(user):
@@ -61,7 +94,7 @@ def _build_day_slots(pitch: Pitch, day_date):
         slot_map[s.start_dt] = s
 
     slots = []
-    for hour in range(start_hour, end_hour):
+    for hour in  range(start_hour, end_hour):
         start_dt = timezone.make_aware(datetime.combine(day_date, time(hour=hour)), tz)
         end_dt = start_dt + timedelta(hours=1)
 
@@ -284,6 +317,73 @@ def pitch_detail(request, pitch_id: str):
         if not _can_view_pitch(request.user, pitch):
             return Response({"detail": "Pitch not found."}, status=404)
 
+        return Response(
+            {
+                "pitch": PitchSerializer(pitch, context={"request": request}).data,
+                "daily_weekly_days": _build_next_7_days(pitch),
+                "monthly_weeks": _build_monthly_weeks(pitch),
+                "existing_bookings": _serialize_existing_bookings(pitch, request.user),
+            }
+        )
+
+    if not _can_edit_pitch(request.user, pitch):
+        return Response({"detail": "Forbidden"}, status=403)
+
+    serializer = PitchUpdateSerializer(data=request.data, partial=True)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=400)
+
+    data = serializer.validated_data
+
+    for field in [
+        "name",
+        "address",
+        "latitude",
+        "longitude",
+        "opening_time",
+        "closing_time",
+        "min_hours",
+        "allow_hourly",
+        "allow_weekly",
+        "allow_monthly",
+        "hourly_price",
+        "weekly_price",
+        "monthly_price",
+        "has_dressing_room",
+        "has_showers",
+        "has_parking",
+        "has_lighting",
+        "other_services",
+    ]:
+        if field in data:
+            setattr(pitch, field, data[field])
+
+    pitch.save()
+
+    new_images = request.FILES.getlist("images")
+    if new_images:
+        pitch.images.all().delete()
+        for uploaded_file in new_images:
+            PitchImage.objects.create(pitch=pitch, image=uploaded_file)
+
+    return Response(
+        {
+            "pitch": PitchSerializer(pitch, context={"request": request}).data,
+            "message": "Pitch updated successfully.",
+        }
+    )
+
+"""
+@api_view(["GET", "PATCH"])
+@permission_classes([IsAuthenticated])
+@parser_classes([MultiPartParser, FormParser, JSONParser])
+def pitch_detail(request, pitch_id: str):
+    pitch = get_object_or_404(Pitch, id=pitch_id)
+
+    if request.method == "GET":
+        if not _can_view_pitch(request.user, pitch):
+            return Response({"detail": "Pitch not found."}, status=404)
+
         return Response({
             "pitch": PitchSerializer(pitch, context={"request": request}).data,
             "daily_weekly_days": _build_next_7_days(pitch),
@@ -335,22 +435,8 @@ def pitch_detail(request, pitch_id: str):
         "pitch": PitchSerializer(pitch, context={"request": request}).data,
         "message": "Pitch updated successfully.",
     })
-
 """
-@api_view(["GET"])
-@permission_classes([IsAuthenticated])
-def pitch_detail(request, pitch_id: str):
-    pitch = get_object_or_404(Pitch, id=pitch_id)
 
-    if not _can_view_pitch(request.user, pitch):
-        return Response({"detail": "Pitch not found."}, status=404)
-
-    return Response({
-        "pitch": PitchSerializer(pitch).data,
-        "daily_weekly_days": _build_next_7_days(pitch),
-        "monthly_weeks": _build_monthly_weeks(pitch),
-    })
-"""
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])

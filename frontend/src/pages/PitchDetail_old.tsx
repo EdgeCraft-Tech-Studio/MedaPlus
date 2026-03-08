@@ -1,16 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { me } from "../lib/auth";
 import { createBooking, getPitchDetail } from "../lib/pitches";
-import type {
-  AvailabilityDay,
-  AvailabilitySlot,
-  ExistingBooking,
-  MonthlyWeek,
-  Pitch,
-} from "../lib/pitches";
+import type { AvailabilityDay, AvailabilitySlot, MonthlyWeek, Pitch } from "../lib/pitches";
 
 type BookingMode = "daily" | "weekly" | "monthly";
+
 type SelectedMap = Record<string, AvailabilitySlot>;
 
 function priceForMode(pitch: Pitch, mode: BookingMode) {
@@ -20,18 +14,6 @@ function priceForMode(pitch: Pitch, mode: BookingMode) {
 }
 
 function slotButtonStyle(slot: AvailabilitySlot, selected: boolean) {
-  if (slot.status === "BOOKED") {
-    return {
-      padding: "10px 8px",
-      borderRadius: 10,
-      background: "#ffe8e8",
-      color: "#b00020",
-      border: "1px solid #f2c6c6",
-      cursor: "not-allowed",
-      fontSize: 12,
-    };
-  }
-
   if (!slot.is_available) {
     return {
       padding: "10px 8px",
@@ -69,39 +51,24 @@ function slotButtonStyle(slot: AvailabilitySlot, selected: boolean) {
 
 export default function PitchDetail() {
   const { pitchId } = useParams();
-
-  const [user, setUser] = useState<any>(null);
   const [pitch, setPitch] = useState<Pitch | null>(null);
   const [days, setDays] = useState<AvailabilityDay[]>([]);
   const [monthlyWeeks, setMonthlyWeeks] = useState<MonthlyWeek[]>([]);
-  const [existingBookings, setExistingBookings] = useState<ExistingBooking[]>([]);
   const [mode, setMode] = useState<BookingMode>("daily");
   const [selected, setSelected] = useState<SelectedMap>({});
   const [loading, setLoading] = useState(true);
   const [bookingMsg, setBookingMsg] = useState("");
   const [monthlyWeekIndex, setMonthlyWeekIndex] = useState(0);
-  const [bookedForName, setBookedForName] = useState("");
-  const [notes, setNotes] = useState("");
-
-  const role = user?.role;
-  const isManager = role === "OWNER" || role === "ADMIN";
 
   useEffect(() => {
-    async function load() {
-      if (!pitchId) return;
-      try {
-        const [u, data] = await Promise.all([me(), getPitchDetail(pitchId)]);
-        setUser(u);
+    if (!pitchId) return;
+    getPitchDetail(pitchId)
+      .then((data) => {
         setPitch(data.pitch);
         setDays(data.daily_weekly_days);
         setMonthlyWeeks(data.monthly_weeks);
-        setExistingBookings(data.existing_bookings || []);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    load();
+      })
+      .finally(() => setLoading(false));
   }, [pitchId]);
 
   const selectedList = useMemo(() => {
@@ -126,9 +93,6 @@ export default function PitchDetail() {
 
   function clearSelection() {
     setSelected({});
-    setBookedForName("");
-    setNotes("");
-    setBookingMsg("");
   }
 
   function applyWeek1ToAllWeeks() {
@@ -198,25 +162,10 @@ export default function PitchDetail() {
           start_iso: s.start_iso,
           end_iso: s.end_iso,
         })),
-        notes,
-        manual_cash: isManager,
-        booked_for_name: isManager ? bookedForName : "",
       });
 
-      setBookingMsg(
-        isManager
-          ? `Slot occupied successfully. Booking code: ${res.booking_code}`
-          : `Booking created successfully. Booking code: ${res.booking_code}`
-      );
-
-      const refreshed = await getPitchDetail(pitchId);
-      setPitch(refreshed.pitch);
-      setDays(refreshed.daily_weekly_days);
-      setMonthlyWeeks(refreshed.monthly_weeks);
-      setExistingBookings(refreshed.existing_bookings || []);
+      setBookingMsg(`Booking created successfully. Code: ${res.booking_code}`);
       setSelected({});
-      setBookedForName("");
-      setNotes("");
     } catch (e: any) {
       setBookingMsg(e?.response?.data?.detail || "Booking failed.");
     }
@@ -231,12 +180,10 @@ export default function PitchDetail() {
   return (
     <div style={{ minHeight: "100vh", background: "#f6f7f9", padding: 18 }}>
       <div style={{ marginBottom: 12 }}>
-        <Link to={role === "OWNER" ? "/owner" : role === "ADMIN" ? "/admin" : "/app"}>
-          ← Back
-        </Link>
+        <Link to="/app">← Back to dashboard</Link>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 360px", gap: 18 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 340px", gap: 18 }}>
         <div
           style={{
             background: "#fff",
@@ -250,15 +197,7 @@ export default function PitchDetail() {
         >
           <div style={{ display: "grid", gridTemplateColumns: "38% 62%", minHeight: 240 }}>
             <div style={{ background: "#e9ecef", display: "grid", placeItems: "center" }}>
-              {pitch.cover_image_url ? (
-                <img
-                  src={pitch.cover_image_url}
-                  alt={pitch.name}
-                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                />
-              ) : (
-                <div style={{ color: "#666" }}>Pitch image</div>
-              )}
+              <div style={{ color: "#666" }}>Pitch image/gallery goes here</div>
             </div>
 
             <div style={{ padding: 18, display: "grid", gap: 8, alignContent: "start" }}>
@@ -271,7 +210,8 @@ export default function PitchDetail() {
                 Hourly: <b>{pitch.hourly_price}</b> birr | Weekly: <b>{pitch.weekly_price}</b> birr | Monthly: <b>{pitch.monthly_price}</b> birr
               </div>
               <div style={{ color: "#333" }}>
-                Amenities:{" "}
+                Amenities:
+                {" "}
                 {[
                   pitch.has_dressing_room ? "Dressing room" : null,
                   pitch.has_showers ? "Showers" : null,
@@ -335,12 +275,6 @@ export default function PitchDetail() {
               )}
             </div>
 
-            <div style={{ display: "flex", gap: 16, marginBottom: 14, fontSize: 13 }}>
-              <div><span style={{ display: "inline-block", width: 14, height: 14, background: "#fff", border: "1px solid #ddd", marginRight: 6 }} /> Available</div>
-              <div><span style={{ display: "inline-block", width: 14, height: 14, background: "#111", marginRight: 6 }} /> Selected</div>
-              <div><span style={{ display: "inline-block", width: 14, height: 14, background: "#ffe8e8", border: "1px solid #f2c6c6", marginRight: 6 }} /> Occupied</div>
-            </div>
-
             <div
               style={{
                 display: "grid",
@@ -386,146 +320,71 @@ export default function PitchDetail() {
             alignSelf: "start",
             position: "sticky",
             top: 18,
-            display: "grid",
-            gap: 18,
           }}
         >
-          <div>
-            <div style={{ fontSize: 22, fontWeight: 800, marginBottom: 12 }}>
-              {isManager ? "Slot Control" : "Selected Hours"}
-            </div>
-            <div style={{ color: "#555", marginBottom: 10 }}>
-              Mode: <b>{mode}</b>
-            </div>
-
-            {selectedList.length === 0 ? (
-              <div style={{ color: "#777" }}>No hours selected yet. Total starts at 0 birr.</div>
-            ) : (
-              <div style={{ display: "grid", gap: 10, marginBottom: 14 }}>
-                {selectedList.map((slot) => (
-                  <div
-                    key={slot.key}
-                    style={{
-                      border: "1px solid #eee",
-                      borderRadius: 12,
-                      padding: 10,
-                      background: "#fafafa",
-                    }}
-                  >
-                    <div style={{ fontWeight: 600 }}>{new Date(slot.start_iso).toLocaleDateString()}</div>
-                    <div style={{ fontSize: 13, color: "#555" }}>{slot.label}</div>
-                    <div style={{ marginTop: 6 }}>{priceForMode(pitch, mode)} birr</div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {isManager && (
-              <div style={{ display: "grid", gap: 10, marginBottom: 14 }}>
-                <div style={{ display: "grid", gap: 6 }}>
-                  <label style={{ fontWeight: 600 }}>Booked for</label>
-                  <input
-                    value={bookedForName}
-                    onChange={(e) => setBookedForName(e.target.value)}
-                    placeholder="Customer name (optional)"
-                    style={{ padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
-                  />
-                </div>
-                <div style={{ display: "grid", gap: 6 }}>
-                  <label style={{ fontWeight: 600 }}>Notes</label>
-                  <textarea
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    placeholder="Optional note"
-                    rows={3}
-                    style={{ padding: 10, borderRadius: 10, border: "1px solid #ddd", resize: "vertical" }}
-                  />
-                </div>
-              </div>
-            )}
-
-            <div style={{ borderTop: "1px solid #eee", paddingTop: 12, marginTop: 12 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-                <span>Hours selected</span>
-                <b>{selectedList.length}</b>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16 }}>
-                <span>Total</span>
-                <b>{total} birr</b>
-              </div>
-
-              <div style={{ display: "flex", gap: 10 }}>
-                <button onClick={clearSelection}>Clear</button>
-                <button
-                  onClick={handleBook}
-                  disabled={selectedList.length === 0}
-                  style={{
-                    flex: 1,
-                    padding: "10px 12px",
-                    borderRadius: 10,
-                    border: "none",
-                    background: "#111",
-                    color: "#fff",
-                  }}
-                >
-                  {isManager ? "Occupy / Cash Booking" : "Create Booking"}
-                </button>
-              </div>
-
-              {bookingMsg && (
-                <div style={{ marginTop: 12, fontSize: 14, color: "#0a7a34" }}>
-                  {bookingMsg}
-                </div>
-              )}
-            </div>
+          <div style={{ fontSize: 22, fontWeight: 800, marginBottom: 12 }}>Selected Hours</div>
+          <div style={{ color: "#555", marginBottom: 10 }}>
+            Mode: <b>{mode}</b>
           </div>
 
-          {isManager && (
-            <div style={{ borderTop: "1px solid #eee", paddingTop: 14 }}>
-              <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 12 }}>
-                Existing Bookings
-              </div>
-
-              {existingBookings.length === 0 ? (
-                <div style={{ color: "#777" }}>No bookings yet for the coming weeks.</div>
-              ) : (
-                <div style={{ display: "grid", gap: 10, maxHeight: 360, overflowY: "auto" }}>
-                  {existingBookings.map((b) => (
-                    <div
-                      key={b.id}
-                      style={{
-                        border: "1px solid #eee",
-                        borderRadius: 12,
-                        padding: 10,
-                        background: "#fafafa",
-                      }}
-                    >
-                      <div style={{ fontWeight: 600 }}>{b.label}</div>
-                      <div style={{ fontSize: 13, color: "#555", marginTop: 4 }}>
-                        Code: {b.booking_code}
-                      </div>
-                      <div style={{ fontSize: 13, color: "#555", marginTop: 4 }}>
-                        Status: {b.status}
-                      </div>
-                      <div style={{ fontSize: 13, color: "#555", marginTop: 4 }}>
-                        Price: {b.total_price} birr
-                      </div>
-                      {b.booked_by ? (
-                        <div style={{ fontSize: 13, color: "#555", marginTop: 4 }}>
-                          By: {b.booked_by}
-                        </div>
-                      ) : null}
-                      {b.notes ? (
-                        <div style={{ fontSize: 13, color: "#555", marginTop: 6, whiteSpace: "pre-wrap" }}>
-                          {b.notes}
-                        </div>
-                      ) : null}
-                    </div>
-                  ))}
+          {selectedList.length === 0 ? (
+            <div style={{ color: "#777" }}>No hours selected yet. Total starts at 0 birr.</div>
+          ) : (
+            <div style={{ display: "grid", gap: 10, marginBottom: 14 }}>
+              {selectedList.map((slot) => (
+                <div
+                  key={slot.key}
+                  style={{
+                    border: "1px solid #eee",
+                    borderRadius: 12,
+                    padding: 10,
+                    background: "#fafafa",
+                  }}
+                >
+                  <div style={{ fontWeight: 600 }}>{new Date(slot.start_iso).toLocaleDateString()}</div>
+                  <div style={{ fontSize: 13, color: "#555" }}>{slot.label}</div>
+                  <div style={{ marginTop: 6 }}>
+                    {priceForMode(pitch, mode)} birr
+                  </div>
                 </div>
-              )}
+              ))}
             </div>
           )}
+
+          <div style={{ borderTop: "1px solid #eee", paddingTop: 12, marginTop: 12 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+              <span>Hours selected</span>
+              <b>{selectedList.length}</b>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16 }}>
+              <span>Total</span>
+              <b>{total} birr</b>
+            </div>
+
+            <div style={{ display: "flex", gap: 10 }}>
+              <button onClick={clearSelection}>Clear</button>
+              <button
+                onClick={handleBook}
+                disabled={selectedList.length === 0}
+                style={{
+                  flex: 1,
+                  padding: "10px 12px",
+                  borderRadius: 10,
+                  border: "none",
+                  background: "#111",
+                  color: "#fff",
+                }}
+              >
+                Confirm Booking
+              </button>
+            </div>
+
+            {bookingMsg && (
+              <div style={{ marginTop: 12, fontSize: 14, color: "#0a7a34" }}>
+                {bookingMsg}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

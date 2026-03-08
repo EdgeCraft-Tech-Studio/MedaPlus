@@ -12,3 +12,5 @@ class BookingCreateSerializer(serializers.Serializer):
     booking_type = serializers.ChoiceField(choices=BookingType.choices)
     selections = BookingSelectionSerializer(many=True)
     notes = serializers.CharField(required=False, allow_blank=True, default="")
+    manual_cash = serializers.BooleanField(required=False, default=False)
+    booked_for_name = serializers.CharField(required=False, allow_blank=True, default="")

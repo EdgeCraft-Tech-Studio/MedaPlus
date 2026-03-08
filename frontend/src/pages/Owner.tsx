@@ -1,29 +1,32 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { me } from "../lib/auth";
 import type { Pitch } from "../lib/pitches";
-import { createPitch, listPitches, updatePitch } from "../lib/pitches";
+import { createPitch, listPitches } from "../lib/pitches";
 import AddButton from "../components/AddButton";
 import PitchWizardModal from "../components/PitchWizardModal";
 
 export default function Owner() {
+  const navigate = useNavigate();
+
   const [user, setUser] = useState<any>(null);
   const [pitches, setPitches] = useState<Pitch[]>([]);
   const [msg, setMsg] = useState("");
   const [openAdd, setOpenAdd] = useState(false);
-  const [editingPitch, setEditingPitch] = useState<Pitch | null>(null);
+  const [loading, setLoading] = useState(true);
 
   async function refresh() {
     try {
+      setLoading(true);
       setMsg("");
       const u = await me();
       setUser(u);
-
-      // Backend already filters by role:
-      // OWNER sees only their own pitches
       const data = await listPitches();
       setPitches(data);
     } catch {
       setMsg("Failed to load owner data. Check API / token.");
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -81,46 +84,8 @@ export default function Owner() {
         onClose={() => setOpenAdd(false)}
         onSubmit={async (payload) => {
           await createPitch(payload);
-          setMsg("Pitch created successfully. It is pending admin approval.");
+          setMsg("Pitch created (pending admin approval).");
           setOpenAdd(false);
-          await refresh();
-        }}
-      />
-
-      <PitchWizardModal
-        open={!!editingPitch}
-        onClose={() => setEditingPitch(null)}
-        mode="edit"
-        initialData={
-          editingPitch
-            ? {
-                id: editingPitch.id,
-                name: editingPitch.name,
-                address: editingPitch.address,
-                latitude: editingPitch.latitude,
-                longitude: editingPitch.longitude,
-                opening_time: editingPitch.opening_time,
-                closing_time: editingPitch.closing_time,
-                hourly_price: editingPitch.hourly_price,
-                weekly_price: editingPitch.weekly_price,
-                monthly_price: editingPitch.monthly_price,
-                min_hours: editingPitch.min_hours,
-                allow_hourly: editingPitch.allow_hourly,
-                allow_weekly: editingPitch.allow_weekly,
-                allow_monthly: editingPitch.allow_monthly,
-                has_dressing_room: editingPitch.has_dressing_room,
-                has_showers: editingPitch.has_showers,
-                has_parking: editingPitch.has_parking,
-                has_lighting: editingPitch.has_lighting,
-                other_services: editingPitch.other_services,
-              }
-            : undefined
-        }
-        onSubmit={async (payload) => {
-          if (!editingPitch?.id) return;
-          await updatePitch(editingPitch.id, payload);
-          setMsg("Pitch updated successfully.");
-          setEditingPitch(null);
           await refresh();
         }}
       />
@@ -128,16 +93,20 @@ export default function Owner() {
       <hr style={{ margin: "18px 0" }} />
 
       <h3>My Pitches</h3>
-      {pitches.length === 0 ? <p>No pitches yet.</p> : null}
 
-      <div style={{ display: "grid", gap: 12, maxWidth: 860 }}>
+      {loading ? <p>Loading pitches...</p> : null}
+      {!loading && pitches.length === 0 ? <p>No pitches yet.</p> : null}
+
+      <div style={{ display: "grid", gap: 12, maxWidth: 760 }}>
         {pitches.map((p) => (
           <div
             key={p.id}
+            onClick={() => navigate(`/app/pitches/${p.id}`)}
             style={{
               border: "1px solid #ddd",
               borderRadius: 12,
               padding: 12,
+              cursor: "pointer",
               background: "#fff",
             }}
           >
@@ -149,47 +118,16 @@ export default function Owner() {
                 alignItems: "flex-start",
               }}
             >
+              <div style={{ fontWeight: 700, fontSize: 18 }}>{p.name}</div>
               <div>
-                <div style={{ fontWeight: 700, fontSize: 18 }}>{p.name}</div>
-                <div style={{ color: "#555", marginTop: 6 }}>
-                  {p.address || "—"}
-                </div>
-              </div>
-
-              <div style={{ textAlign: "right" }}>
-                <div>
-                  Status:{" "}
-                  <b style={{ color: p.is_approved ? "green" : "#b00020" }}>
-                    {p.is_approved ? "Approved" : "Pending"}
-                  </b>
-                </div>
-
-                <button
-                  onClick={() => {
-                    setMsg("");
-                    setEditingPitch(p);
-                  }}
-                  style={{
-                    marginTop: 10,
-                    padding: "8px 12px",
-                    borderRadius: 10,
-                    border: "1px solid #ddd",
-                    background: "#fff",
-                    cursor: "pointer",
-                    fontWeight: 600,
-                  }}
-                >
-                  Edit
-                </button>
+                Status:{" "}
+                <b style={{ color: p.is_approved ? "green" : "#b00020" }}>
+                  {p.is_approved ? "Approved" : "Pending"}
+                </b>
               </div>
             </div>
 
-            <div style={{ marginTop: 10, fontSize: 14 }}>
-              Working hours:{" "}
-              {p.opening_time_label && p.closing_time_label
-                ? `${p.opening_time_label} - ${p.closing_time_label}`
-                : `${p.opening_time} - ${p.closing_time}`}
-            </div>
+            <div style={{ color: "#555", marginTop: 6 }}>{p.address || "—"}</div>
 
             <div style={{ marginTop: 8, fontSize: 14 }}>
               Hourly: {p.hourly_price} | Weekly: {p.weekly_price} | Monthly:{" "}
@@ -197,13 +135,7 @@ export default function Owner() {
             </div>
 
             <div style={{ marginTop: 6, fontSize: 14 }}>
-              Minimum hours: {p.min_hours}
-            </div>
-
-            <div style={{ marginTop: 6, fontSize: 14 }}>
-              Booking modes: Hourly {p.allow_hourly ? "Yes" : "No"} | Weekly{" "}
-              {p.allow_weekly ? "Yes" : "No"} | Monthly{" "}
-              {p.allow_monthly ? "Yes" : "No"}
+              Working hours: {p.opening_time_label} - {p.closing_time_label}
             </div>
 
             <div style={{ marginTop: 6, fontSize: 14 }}>
@@ -215,10 +147,6 @@ export default function Owner() {
 
             <div style={{ marginTop: 6, fontSize: 14 }}>
               Other services: {p.other_services || "—"}
-            </div>
-
-            <div style={{ marginTop: 6, fontSize: 13, color: "#666" }}>
-              Location: {p.latitude}, {p.longitude}
             </div>
 
             {p.cover_image_url ? (
@@ -238,6 +166,10 @@ export default function Owner() {
                 />
               </div>
             ) : null}
+
+            <div style={{ marginTop: 8, fontSize: 13, color: "#666" }}>
+              Click card to open slot table and manage bookings.
+            </div>
           </div>
         ))}
       </div>

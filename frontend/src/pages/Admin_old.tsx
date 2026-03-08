@@ -9,28 +9,43 @@ import {
   listOwners,
   listPendingOwners,
   listPendingPitches,
+  listPitches,
+  updatePitch,
 } from "../lib/pitches";
 
-type OwnerRow = { id: string; username: string; email: string; is_approved: boolean };
+type OwnerRow = {
+  id: string;
+  username: string;
+  email: string;
+  is_approved: boolean;
+};
 
 export default function Admin() {
-  const [pendingOwners, setPendingOwners] = useState<Array<{ id: string; username: string; email: string }>>([]);
+  const [pendingOwners, setPendingOwners] = useState<
+    Array<{ id: string; username: string; email: string }>
+  >([]);
   const [owners, setOwners] = useState<OwnerRow[]>([]);
   const [pendingPitches, setPendingPitches] = useState<Pitch[]>([]);
+  const [allPitches, setAllPitches] = useState<Pitch[]>([]);
   const [msg, setMsg] = useState("");
   const [openAdd, setOpenAdd] = useState(false);
+  const [editingPitch, setEditingPitch] = useState<Pitch | null>(null);
 
   async function refresh() {
     try {
-      const [po, o, pp] = await Promise.all([
+      setMsg("");
+      const [po, o, pp, ap] = await Promise.all([
         listPendingOwners(),
         listOwners(),
         listPendingPitches(),
+        listPitches(), // admin sees all pitches
       ]);
+
       setPendingOwners(po);
       setOwners(o);
       setPendingPitches(pp);
-    } catch (e) {
+      setAllPitches(ap);
+    } catch {
       setMsg("Failed to load admin data. Check API / token.");
     }
   }
@@ -63,33 +78,75 @@ export default function Admin() {
 
   return (
     <div style={{ padding: 24 }}>
-      {/* Top bar */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12,
+        }}
+      >
         <h2 style={{ margin: 0 }}>Admin</h2>
         <AddButton onClick={() => setOpenAdd(true)} />
       </div>
 
       {msg && <p style={{ marginTop: 12 }}>{msg}</p>}
 
-      {/* Add Pitch Wizard */}
       <PitchWizardModal
         open={openAdd}
         onClose={() => setOpenAdd(false)}
         isAdmin={true}
         owners={owners}
         onSubmit={async (payload) => {
-          // IMPORTANT:
-          // Wizard sets payload.owner_id by default.
-          // If your backend expects tenant_id instead, change it in PitchWizardModal or here.
           await createPitch(payload);
           setMsg("Pitch created (pending approval).");
+          setOpenAdd(false);
+          await refresh();
+        }}
+      />
+
+      <PitchWizardModal
+        open={!!editingPitch}
+        onClose={() => setEditingPitch(null)}
+        isAdmin={true}
+        owners={owners}
+        mode="edit"
+        initialData={
+          editingPitch
+            ? {
+                id: editingPitch.id,
+                name: editingPitch.name,
+                address: editingPitch.address,
+                latitude: editingPitch.latitude,
+                longitude: editingPitch.longitude,
+                opening_time: editingPitch.opening_time,
+                closing_time: editingPitch.closing_time,
+                hourly_price: editingPitch.hourly_price,
+                weekly_price: editingPitch.weekly_price,
+                monthly_price: editingPitch.monthly_price,
+                min_hours: editingPitch.min_hours,
+                allow_hourly: editingPitch.allow_hourly,
+                allow_weekly: editingPitch.allow_weekly,
+                allow_monthly: editingPitch.allow_monthly,
+                has_dressing_room: editingPitch.has_dressing_room,
+                has_showers: editingPitch.has_showers,
+                has_parking: editingPitch.has_parking,
+                has_lighting: editingPitch.has_lighting,
+                other_services: editingPitch.other_services,
+              }
+            : undefined
+        }
+        onSubmit={async (payload) => {
+          if (!editingPitch?.id) return;
+          await updatePitch(editingPitch.id, payload);
+          setMsg("Pitch updated successfully.");
+          setEditingPitch(null);
           await refresh();
         }}
       />
 
       <hr style={{ margin: "18px 0" }} />
 
-      {/* Pending Owners */}
       <h3>Pending Owners</h3>
       {pendingOwners.length === 0 ? <p>None</p> : null}
       <ul>
@@ -103,17 +160,230 @@ export default function Admin() {
 
       <hr style={{ margin: "18px 0" }} />
 
-      {/* Pending Pitches */}
       <h3>Pending Pitches</h3>
       {pendingPitches.length === 0 ? <p>None</p> : null}
-      <ul>
+
+      <div style={{ display: "grid", gap: 12, maxWidth: 860 }}>
         {pendingPitches.map((p) => (
-          <li key={p.id} style={{ marginBottom: 8 }}>
-            <b>{p.name}</b> — Approved: {p.is_approved ? "Yes" : "No"}{" "}
-            <button onClick={() => onApprovePitch(p.id)}>Approve</button>
-          </li>
+          <div
+            key={p.id}
+            style={{
+              border: "1px solid #ddd",
+              borderRadius: 12,
+              padding: 12,
+              background: "#fff",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                gap: 12,
+                alignItems: "flex-start",
+              }}
+            >
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 18 }}>{p.name}</div>
+                <div style={{ color: "#555", marginTop: 6 }}>
+                  {p.address || "—"}
+                </div>
+              </div>
+
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={() => onApprovePitch(p.id)}>Approve</button>
+                <button
+                  onClick={() => {
+                    setMsg("");
+                    setEditingPitch(p);
+                  }}
+                  style={{
+                    padding: "8px 12px",
+                    borderRadius: 10,
+                    border: "1px solid #ddd",
+                    background: "#fff",
+                    cursor: "pointer",
+                    fontWeight: 600,
+                  }}
+                >
+                  Edit
+                </button>
+              </div>
+            </div>
+
+            <div style={{ marginTop: 10, fontSize: 14 }}>
+              Working hours:{" "}
+              {p.opening_time_label && p.closing_time_label
+                ? `${p.opening_time_label} - ${p.closing_time_label}`
+                : `${p.opening_time} - ${p.closing_time}`}
+            </div>
+
+            <div style={{ marginTop: 8, fontSize: 14 }}>
+              Hourly: {p.hourly_price} | Weekly: {p.weekly_price} | Monthly:{" "}
+              {p.monthly_price}
+            </div>
+
+            <div style={{ marginTop: 6, fontSize: 14 }}>
+              Minimum hours: {p.min_hours}
+            </div>
+
+            <div style={{ marginTop: 6, fontSize: 14 }}>
+              Booking modes: Hourly {p.allow_hourly ? "Yes" : "No"} | Weekly{" "}
+              {p.allow_weekly ? "Yes" : "No"} | Monthly{" "}
+              {p.allow_monthly ? "Yes" : "No"}
+            </div>
+
+            <div style={{ marginTop: 6, fontSize: 14 }}>
+              Dressing room: {p.has_dressing_room ? "Yes" : "No"} | Showers:{" "}
+              {p.has_showers ? "Yes" : "No"} | Parking:{" "}
+              {p.has_parking ? "Yes" : "No"} | Lighting:{" "}
+              {p.has_lighting ? "Yes" : "No"}
+            </div>
+
+            <div style={{ marginTop: 6, fontSize: 14 }}>
+              Other services: {p.other_services || "—"}
+            </div>
+
+            <div style={{ marginTop: 6, fontSize: 13, color: "#666" }}>
+              Location: {p.latitude}, {p.longitude}
+            </div>
+
+            {p.cover_image_url ? (
+              <div style={{ marginTop: 12 }}>
+                <img
+                  src={p.cover_image_url}
+                  alt={p.name}
+                  style={{
+                    width: 220,
+                    maxWidth: "100%",
+                    height: 140,
+                    objectFit: "cover",
+                    borderRadius: 12,
+                    border: "1px solid #eee",
+                    display: "block",
+                  }}
+                />
+              </div>
+            ) : null}
+          </div>
         ))}
-      </ul>
+      </div>
+
+      <hr style={{ margin: "18px 0" }} />
+
+      <h3>All Pitches</h3>
+      {allPitches.length === 0 ? <p>None</p> : null}
+
+      <div style={{ display: "grid", gap: 12, maxWidth: 860 }}>
+        {allPitches.map((p) => (
+          <div
+            key={p.id}
+            style={{
+              border: "1px solid #ddd",
+              borderRadius: 12,
+              padding: 12,
+              background: "#fff",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                gap: 12,
+                alignItems: "flex-start",
+              }}
+            >
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 18 }}>{p.name}</div>
+                <div style={{ color: "#555", marginTop: 6 }}>
+                  {p.address || "—"}
+                </div>
+              </div>
+
+              <div style={{ textAlign: "right" }}>
+                <div>
+                  Status:{" "}
+                  <b style={{ color: p.is_approved ? "green" : "#b00020" }}>
+                    {p.is_approved ? "Approved" : "Pending"}
+                  </b>
+                </div>
+
+                <button
+                  onClick={() => {
+                    setMsg("");
+                    setEditingPitch(p);
+                  }}
+                  style={{
+                    marginTop: 10,
+                    padding: "8px 12px",
+                    borderRadius: 10,
+                    border: "1px solid #ddd",
+                    background: "#fff",
+                    cursor: "pointer",
+                    fontWeight: 600,
+                  }}
+                >
+                  Edit
+                </button>
+              </div>
+            </div>
+
+            <div style={{ marginTop: 10, fontSize: 14 }}>
+              Working hours:{" "}
+              {p.opening_time_label && p.closing_time_label
+                ? `${p.opening_time_label} - ${p.closing_time_label}`
+                : `${p.opening_time} - ${p.closing_time}`}
+            </div>
+
+            <div style={{ marginTop: 8, fontSize: 14 }}>
+              Hourly: {p.hourly_price} | Weekly: {p.weekly_price} | Monthly:{" "}
+              {p.monthly_price}
+            </div>
+
+            <div style={{ marginTop: 6, fontSize: 14 }}>
+              Minimum hours: {p.min_hours}
+            </div>
+
+            <div style={{ marginTop: 6, fontSize: 14 }}>
+              Booking modes: Hourly {p.allow_hourly ? "Yes" : "No"} | Weekly{" "}
+              {p.allow_weekly ? "Yes" : "No"} | Monthly{" "}
+              {p.allow_monthly ? "Yes" : "No"}
+            </div>
+
+            <div style={{ marginTop: 6, fontSize: 14 }}>
+              Dressing room: {p.has_dressing_room ? "Yes" : "No"} | Showers:{" "}
+              {p.has_showers ? "Yes" : "No"} | Parking:{" "}
+              {p.has_parking ? "Yes" : "No"} | Lighting:{" "}
+              {p.has_lighting ? "Yes" : "No"}
+            </div>
+
+            <div style={{ marginTop: 6, fontSize: 14 }}>
+              Other services: {p.other_services || "—"}
+            </div>
+
+            <div style={{ marginTop: 6, fontSize: 13, color: "#666" }}>
+              Location: {p.latitude}, {p.longitude}
+            </div>
+
+            {p.cover_image_url ? (
+              <div style={{ marginTop: 12 }}>
+                <img
+                  src={p.cover_image_url}
+                  alt={p.name}
+                  style={{
+                    width: 220,
+                    maxWidth: "100%",
+                    height: 140,
+                    objectFit: "cover",
+                    borderRadius: 12,
+                    border: "1px solid #eee",
+                    display: "block",
+                  }}
+                />
+              </div>
+            ) : null}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
