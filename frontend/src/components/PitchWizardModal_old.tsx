@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Modal from "./Modal";
 import { MapContainer, TileLayer, Marker, useMapEvents } from "react-leaflet";
 
@@ -8,37 +8,12 @@ type OwnerOption = {
   is_approved?: boolean;
 };
 
-type InitialPitchData = {
-  id?: string;
-  owner_id?: string;
-  name?: string;
-  address?: string;
-  latitude?: number;
-  longitude?: number;
-  opening_time?: string;
-  closing_time?: string;
-  hourly_price?: string;
-  weekly_price?: string;
-  monthly_price?: string;
-  min_hours?: number;
-  allow_hourly?: boolean;
-  allow_weekly?: boolean;
-  allow_monthly?: boolean;
-  has_dressing_room?: boolean;
-  has_showers?: boolean;
-  has_parking?: boolean;
-  has_lighting?: boolean;
-  other_services?: string;
-};
-
 type Props = {
   open: boolean;
   onClose: () => void;
   isAdmin?: boolean;
   owners?: OwnerOption[];
   onSubmit: (payload: FormData) => Promise<void> | void;
-  mode?: "create" | "edit";
-  initialData?: InitialPitchData | null;
 };
 
 const ADDIS_ABABA = { lat: 8.9806, lng: 38.7578 };
@@ -52,11 +27,6 @@ const TIME_OPTIONS = Array.from({ length: 24 }, (_, h) => {
     label: `${hour12}:00 ${suffix}`,
   };
 });
-
-function normalizeTime(value?: string) {
-  if (!value) return "";
-  return value.slice(0, 5);
-}
 
 function LocationPicker({
   lat,
@@ -94,8 +64,6 @@ export default function PitchWizardModal({
   onSubmit,
   isAdmin = false,
   owners = [],
-  mode = "create",
-  initialData = null,
 }: Props) {
   const [step, setStep] = useState<1 | 2>(1);
   const [error, setError] = useState("");
@@ -134,7 +102,7 @@ export default function PitchWizardModal({
     return owners.filter((o) => o.is_approved !== false);
   }, [owners]);
 
-  function applyCreateDefaults() {
+  function resetAll() {
     setStep(1);
     setError("");
     setOwnerId("");
@@ -161,51 +129,15 @@ export default function PitchWizardModal({
     setLng(ADDIS_ABABA.lng);
   }
 
-  function applyInitialData(data?: InitialPitchData | null) {
-    setStep(1);
-    setError("");
-    setOwnerId(data?.owner_id || "");
-    setName(data?.name || "");
-    setAddress(data?.address || "");
-    setOpeningTime(normalizeTime(data?.opening_time) || "08:00");
-    setClosingTime(normalizeTime(data?.closing_time) || "22:00");
-    setHourly(data?.hourly_price ?? "0");
-    setWeekly(data?.weekly_price ?? "0");
-    setMonthly(data?.monthly_price ?? "0");
-    setMinHours(String(data?.min_hours ?? 1));
-    setAllowHourly(data?.allow_hourly ?? true);
-    setAllowWeekly(data?.allow_weekly ?? false);
-    setAllowMonthly(data?.allow_monthly ?? false);
-    setDressing(data?.has_dressing_room ?? false);
-    setShowers(data?.has_showers ?? false);
-    setParking(data?.has_parking ?? false);
-    setLighting(data?.has_lighting ?? false);
-    setServices(data?.other_services || "");
-    setSlotDate("");
-    setSlotHours("8,9,10,11");
-    setImages([]);
-    setLat(data?.latitude ?? ADDIS_ABABA.lat);
-    setLng(data?.longitude ?? ADDIS_ABABA.lng);
-  }
-
-  useEffect(() => {
-    if (!open) return;
-    if (mode === "edit") {
-      applyInitialData(initialData);
-    } else {
-      applyCreateDefaults();
-    }
-  }, [open, mode, initialData]);
-
   function handleClose() {
     onClose();
-    applyCreateDefaults();
+    resetAll();
   }
 
   function validateStep1() {
     setError("");
 
-    if (mode === "create" && isAdmin && !ownerId) {
+    if (isAdmin && !ownerId) {
       setError("Please select an owner.");
       return false;
     }
@@ -215,7 +147,7 @@ export default function PitchWizardModal({
       return false;
     }
 
-    if (mode === "create" && images.length < 1) {
+    if (images.length < 1) {
       setError("At least one pitch image is required.");
       return false;
     }
@@ -246,17 +178,14 @@ export default function PitchWizardModal({
   async function finish() {
     setError("");
 
-    const parsedHours =
-      mode === "create"
-        ? slotHours
-            .split(",")
-            .map((x) => parseInt(x.trim(), 10))
-            .filter((n) => !Number.isNaN(n) && n >= 0 && n <= 23)
-        : [];
+    const parsedHours = slotHours
+      .split(",")
+      .map((x) => parseInt(x.trim(), 10))
+      .filter((n) => !Number.isNaN(n) && n >= 0 && n <= 23);
 
     const formData = new FormData();
 
-    if (mode === "create" && isAdmin) {
+    if (isAdmin) {
       formData.append("owner_id", ownerId);
     }
 
@@ -282,14 +211,12 @@ export default function PitchWizardModal({
     formData.append("has_lighting", String(lighting));
     formData.append("other_services", services);
 
-    if (mode === "create" && slotDate) {
+    if (slotDate) {
       formData.append("slot_date", slotDate);
     }
 
-    if (mode === "create") {
-      for (const hour of parsedHours) {
-        formData.append("slot_hours", String(hour));
-      }
+    for (const hour of parsedHours) {
+      formData.append("slot_hours", String(hour));
     }
 
     for (const image of images) {
@@ -303,23 +230,17 @@ export default function PitchWizardModal({
       const detail =
         e?.response?.data?.detail ||
         e?.response?.data?.images?.[0] ||
-        e?.response?.data?.closing_time?.[0] ||
-        "Failed to save pitch.";
+        "Failed to create pitch.";
       setError(detail);
     }
   }
 
-  const modalTitle =
-    step === 1
-      ? mode === "edit"
-        ? "Edit Pitch Details"
-        : "Add Pitch Details"
-      : mode === "edit"
-        ? "Update Pitch Location"
-        : "Pick Pitch Location";
-
   return (
-    <Modal open={open} onClose={handleClose} title={modalTitle}>
+    <Modal
+      open={open}
+      onClose={handleClose}
+      title={step === 1 ? "Add Pitch Details" : "Pick Pitch Location"}
+    >
       {error && (
         <div
           style={{
@@ -368,7 +289,7 @@ export default function PitchWizardModal({
           }}
           style={{ display: "grid", gap: 10 }}
         >
-          {isAdmin && mode === "create" && (
+          {isAdmin && (
             <div style={{ display: "grid", gap: 6 }}>
               <label style={{ fontWeight: 600 }}>Owner</label>
               <select
@@ -437,9 +358,7 @@ export default function PitchWizardModal({
           </div>
 
           <div style={{ display: "grid", gap: 6 }}>
-            <label style={{ fontWeight: 600 }}>
-              {mode === "edit" ? "Replace pitch images" : "Pitch images"}
-            </label>
+            <label style={{ fontWeight: 600 }}>Pitch images</label>
             <input
               type="file"
               accept="image/*"
@@ -448,9 +367,7 @@ export default function PitchWizardModal({
               style={{ padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
             />
             <div style={{ fontSize: 12, color: "#666" }}>
-              {mode === "create"
-                ? "At least one image is required."
-                : "Upload new images only if you want to replace the current ones."}
+              At least one image is required.
             </div>
             {images.length > 0 && (
               <div style={{ fontSize: 13, color: "#333" }}>
@@ -496,45 +413,26 @@ export default function PitchWizardModal({
               />
             </div>
 
-            {mode === "create" ? (
-              <div style={{ display: "grid", gap: 6 }}>
-                <label style={{ fontWeight: 600 }}>Initial slots (optional, one day)</label>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                  <input
-                    type="date"
-                    value={slotDate}
-                    onChange={(e) => setSlotDate(e.target.value)}
-                    style={{ padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
-                  />
-                  <input
-                    value={slotHours}
-                    onChange={(e) => setSlotHours(e.target.value)}
-                    placeholder="8,9,10,11"
-                    style={{ padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
-                  />
-                </div>
-                <div style={{ fontSize: 12, color: "#666" }}>
-                  Hours: comma separated, 0 to 23
-                </div>
+            <div style={{ display: "grid", gap: 6 }}>
+              <label style={{ fontWeight: 600 }}>Initial slots (optional, one day)</label>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                <input
+                  type="date"
+                  value={slotDate}
+                  onChange={(e) => setSlotDate(e.target.value)}
+                  style={{ padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
+                />
+                <input
+                  value={slotHours}
+                  onChange={(e) => setSlotHours(e.target.value)}
+                  placeholder="8,9,10,11"
+                  style={{ padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
+                />
               </div>
-            ) : (
-              <div style={{ display: "grid", gap: 6 }}>
-                <label style={{ fontWeight: 600 }}>Edit mode</label>
-                <div
-                  style={{
-                    padding: 10,
-                    borderRadius: 10,
-                    border: "1px solid #ddd",
-                    background: "#fafafa",
-                    color: "#555",
-                    fontSize: 13,
-                  }}
-                >
-                  Slot creation is not changed here. This modal edits pitch details, prices,
-                  location, amenities, and images.
-                </div>
+              <div style={{ fontSize: 12, color: "#666" }}>
+                Hours: comma separated, 0 to 23
               </div>
-            )}
+            </div>
           </div>
 
           <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
@@ -659,7 +557,7 @@ export default function PitchWizardModal({
               Back
             </button>
             <button type="button" onClick={finish}>
-              {mode === "edit" ? "Save Changes" : "Create Pitch"}
+              Create Pitch
             </button>
           </div>
         </div>

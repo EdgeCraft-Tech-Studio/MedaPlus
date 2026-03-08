@@ -11,7 +11,10 @@ from rest_framework.response import Response
 from accounts.models import UserRole
 from bookings.models import Slot, SlotStatus
 from .models import Tenant, Pitch, PitchImage
-from .serializers import PitchSerializer, PitchCreateSerializer
+from .serializers import PitchSerializer, PitchCreateSerializer, PitchUpdateSerializer
+
+from collections import defaultdict
+from django.shortcuts import get_object_or_404
 
 User = get_user_model()
 
@@ -23,6 +26,89 @@ def is_admin(u) -> bool:
 def is_owner(u) -> bool:
     return u.is_authenticated and u.role == UserRole.OWNER
 
+def _can_view_pitch(user, pitch: Pitch) -> bool:
+    if is_admin(user):
+        return True
+    if is_owner(user) and hasattr(user, "tenant") and pitch.tenant_id == user.tenant.id:
+        return True
+    return pitch.is_active and pitch.is_approved and pitch.tenant.is_active and pitch.tenant.is_approved
+
+def _can_edit_pitch(user, pitch: Pitch) -> bool:
+    if is_admin(user):
+        return True
+    if is_owner(user) and hasattr(user, "tenant") and pitch.tenant_id == user.tenant.id:
+        return True
+    return False
+
+def _build_day_slots(pitch: Pitch, day_date):
+    tz = timezone.get_current_timezone()
+    now_local = timezone.localtime()
+
+    start_hour = pitch.opening_time.hour
+    end_hour = pitch.closing_time.hour
+
+    day_start = timezone.make_aware(datetime.combine(day_date, time(hour=start_hour)), tz)
+    day_end = timezone.make_aware(datetime.combine(day_date, time(hour=end_hour)), tz)
+
+    existing_slots = Slot.objects.filter(
+        pitch=pitch,
+        start_dt__gte=day_start,
+        start_dt__lt=day_end,
+    ).order_by("start_dt")
+
+    slot_map = {}
+    for s in existing_slots:
+        slot_map[s.start_dt] = s
+
+    slots = []
+    for hour in range(start_hour, end_hour):
+        start_dt = timezone.make_aware(datetime.combine(day_date, time(hour=hour)), tz)
+        end_dt = start_dt + timedelta(hours=1)
+
+        existing = slot_map.get(start_dt)
+        status_value = SlotStatus.AVAILABLE
+        if existing:
+            status_value = existing.status
+
+        is_past = start_dt <= now_local
+        is_available = (status_value == SlotStatus.AVAILABLE) and not is_past
+
+        slots.append({
+            "key": start_dt.isoformat(),
+            "slot_id": str(existing.id) if existing else None,
+            "start_iso": start_dt.isoformat(),
+            "end_iso": end_dt.isoformat(),
+            "label": f"{start_dt.strftime('%I:%M %p')} - {end_dt.strftime('%I:%M %p')}",
+            "hour": hour,
+            "status": "PAST" if is_past else status_value,
+            "is_available": is_available,
+        })
+
+    return {
+        "date": day_date.isoformat(),
+        "weekday": day_date.strftime("%A"),
+        "weekday_short": day_date.strftime("%a"),
+        "display_date": day_date.strftime("%d %b"),
+        "slots": slots,
+    }
+
+
+def _build_next_7_days(pitch: Pitch):
+    today = timezone.localdate()
+    return [_build_day_slots(pitch, today + timedelta(days=i)) for i in range(7)]
+
+
+def _build_monthly_weeks(pitch: Pitch):
+    today = timezone.localdate()
+    weeks = []
+    for week_index in range(4):
+        start_date = today + timedelta(days=week_index * 7)
+        week_days = [_build_day_slots(pitch, start_date + timedelta(days=i)) for i in range(7)]
+        weeks.append({
+            "week_index": week_index + 1,
+            "days": week_days,
+        })
+    return weeks
 
 @api_view(["GET"])
 @permission_classes([AllowAny])
@@ -154,6 +240,8 @@ def pitches_list_create(request):
         has_parking=data.get("has_parking", False),
         has_lighting=data.get("has_lighting", False),
         other_services=data.get("other_services", ""),
+        opening_time=data["opening_time"],
+        closing_time=data["closing_time"],
         is_approved=False,
         is_active=True,
     )
@@ -186,6 +274,83 @@ def pitches_list_create(request):
         status=status.HTTP_201_CREATED,
     )
 
+@api_view(["GET", "PATCH"])
+@permission_classes([IsAuthenticated])
+@parser_classes([MultiPartParser, FormParser, JSONParser])
+def pitch_detail(request, pitch_id: str):
+    pitch = get_object_or_404(Pitch, id=pitch_id)
+
+    if request.method == "GET":
+        if not _can_view_pitch(request.user, pitch):
+            return Response({"detail": "Pitch not found."}, status=404)
+
+        return Response({
+            "pitch": PitchSerializer(pitch, context={"request": request}).data,
+            "daily_weekly_days": _build_next_7_days(pitch),
+            "monthly_weeks": _build_monthly_weeks(pitch),
+        })
+
+    # PATCH
+    if not _can_edit_pitch(request.user, pitch):
+        return Response({"detail": "Forbidden"}, status=403)
+
+    serializer = PitchUpdateSerializer(data=request.data, partial=True)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=400)
+
+    data = serializer.validated_data
+
+    for field in [
+        "name",
+        "address",
+        "latitude",
+        "longitude",
+        "opening_time",
+        "closing_time",
+        "min_hours",
+        "allow_hourly",
+        "allow_weekly",
+        "allow_monthly",
+        "hourly_price",
+        "weekly_price",
+        "monthly_price",
+        "has_dressing_room",
+        "has_showers",
+        "has_parking",
+        "has_lighting",
+        "other_services",
+    ]:
+        if field in data:
+            setattr(pitch, field, data[field])
+
+    pitch.save()
+
+    new_images = request.FILES.getlist("images")
+    if new_images:
+        pitch.images.all().delete()
+        for uploaded_file in new_images:
+            PitchImage.objects.create(pitch=pitch, image=uploaded_file)
+
+    return Response({
+        "pitch": PitchSerializer(pitch, context={"request": request}).data,
+        "message": "Pitch updated successfully.",
+    })
+
+"""
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def pitch_detail(request, pitch_id: str):
+    pitch = get_object_or_404(Pitch, id=pitch_id)
+
+    if not _can_view_pitch(request.user, pitch):
+        return Response({"detail": "Pitch not found."}, status=404)
+
+    return Response({
+        "pitch": PitchSerializer(pitch).data,
+        "daily_weekly_days": _build_next_7_days(pitch),
+        "monthly_weeks": _build_monthly_weeks(pitch),
+    })
+"""
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])

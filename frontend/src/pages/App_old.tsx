@@ -39,13 +39,7 @@ function scorePitch(pitch: Pitch) {
   return score;
 }
 
-function PitchCard({
-  pitch,
-  onClick,
-}: {
-  pitch: Pitch;
-  onClick: () => void;
-}) {
+function PitchCard({ pitch, onClick }: { pitch: Pitch; onClick: () => void }) {
   return (
     <div
       onClick={onClick}
@@ -56,7 +50,6 @@ function PitchCard({
         cursor: "pointer",
         background: "#fff",
         boxShadow: "0 4px 14px rgba(0,0,0,0.05)",
-        transition: "transform 0.15s ease",
       }}
     >
       <div style={{ height: 180, background: "#f1f3f5" }}>
@@ -64,12 +57,7 @@ function PitchCard({
           <img
             src={pitch.cover_image_url}
             alt={pitch.name}
-            style={{
-              width: "100%",
-              height: "100%",
-              objectFit: "cover",
-              display: "block",
-            }}
+            style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
           />
         ) : (
           <div
@@ -90,7 +78,7 @@ function PitchCard({
       <div style={{ padding: 14, display: "grid", gap: 8 }}>
         <div style={{ fontSize: 18, fontWeight: 700 }}>{pitch.name}</div>
         <div style={{ color: "#555" }}>{pitch.address || "No address provided"}</div>
-        <div style={{ fontSize: 14, color: "#222", lineHeight: 1.5 }}>
+        <div style={{ fontSize: 14, color: "#222" }}>
           Hourly: {pitch.hourly_price} | Weekly: {pitch.weekly_price} | Monthly: {pitch.monthly_price}
         </div>
       </div>
@@ -103,26 +91,10 @@ export default function App() {
 
   const [tab, setTab] = useState<TabKey>("map");
   const [pitches, setPitches] = useState<Pitch[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number }>(ADDIS_ABABA);
 
   useEffect(() => {
-    async function load() {
-      try {
-        setLoading(true);
-        setError("");
-        const data = await listPitches();
-        setPitches(data);
-      } catch (err) {
-        setPitches([]);
-        setError("Failed to load pitches.");
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    load();
+    listPitches().then(setPitches).catch(() => setPitches([]));
   }, []);
 
   useEffect(() => {
@@ -153,10 +125,9 @@ export default function App() {
     return [...pitches].sort((a, b) => scorePitch(b) - scorePitch(a));
   }, [pitches]);
 
-  const mapCenter =
-    nearbyPitches.length > 0
-      ? { lat: nearbyPitches[0].latitude, lng: nearbyPitches[0].longitude }
-      : userLocation;
+  const mapCenter = nearbyPitches[0]
+    ? { lat: nearbyPitches[0].latitude, lng: nearbyPitches[0].longitude }
+    : userLocation;
 
   function goToPitch(pitchId: string) {
     navigate(`/app/pitches/${pitchId}`);
@@ -203,80 +174,65 @@ export default function App() {
           </div>
 
           <div style={{ padding: 14, overflowY: "auto", maxHeight: "calc(100vh - 150px)" }}>
-            {loading ? (
-              <div style={{ color: "#666" }}>Loading pitches...</div>
-            ) : error ? (
-              <div style={{ color: "#b00020" }}>{error}</div>
-            ) : (
+            {tab === "map" && (
               <>
-                {tab === "map" && (
-                  <>
-                    <div
-                      style={{
-                        height: 560,
-                        borderRadius: 16,
-                        overflow: "hidden",
-                        border: "1px solid #ddd",
-                      }}
-                    >
-                      <MapContainer
-                        center={[mapCenter.lat, mapCenter.lng]}
-                        zoom={13}
-                        style={{ width: "100%", height: "100%" }}
-                      >
-                        <TileLayer
-                          attribution="&copy; OpenStreetMap contributors"
-                          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                        />
-                        {pitches.map((pitch) => (
-                          <Marker
-                            key={pitch.id}
-                            position={[pitch.latitude, pitch.longitude]}
-                            eventHandlers={{
-                              click: () => goToPitch(pitch.id),
-                            }}
-                          />
-                        ))}
-                      </MapContainer>
-                    </div>
-                    <div style={{ marginTop: 10, fontSize: 13, color: "#666" }}>
-                      Click any map marker to open the pitch detail page.
-                    </div>
-                  </>
-                )}
-
-                {tab === "nearby" && (
-                  <div style={{ display: "grid", gap: 14 }}>
-                    {nearbyPitches.length === 0 ? (
-                      <p>No approved pitches yet.</p>
-                    ) : (
-                      nearbyPitches.map((pitch) => (
-                        <PitchCard
-                          key={pitch.id}
-                          pitch={pitch}
-                          onClick={() => goToPitch(pitch.id)}
-                        />
-                      ))
-                    )}
-                  </div>
-                )}
-
-                {tab === "best" && (
-                  <div style={{ display: "grid", gap: 14 }}>
-                    {bestPitches.length === 0 ? (
-                      <p>No approved pitches yet.</p>
-                    ) : (
-                      bestPitches.map((pitch) => (
-                        <PitchCard
-                          key={pitch.id}
-                          pitch={pitch}
-                          onClick={() => goToPitch(pitch.id)}
-                        />
-                      ))
-                    )}
-                  </div>
-                )}
+                <div style={{ height: 560, borderRadius: 16, overflow: "hidden", border: "1px solid #ddd" }}>
+                  <MapContainer
+                    center={[mapCenter.lat, mapCenter.lng]}
+                    zoom={13}
+                    style={{ width: "100%", height: "100%" }}
+                  >
+                    <TileLayer
+                      attribution='&copy; OpenStreetMap contributors'
+                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                    />
+                    {pitches.map((pitch) => (
+                      <Marker
+                        key={pitch.id}
+                        position={[pitch.latitude, pitch.longitude]}
+                        eventHandlers={{
+                          click: () => goToPitch(pitch.id),
+                        }}
+                      />
+                    ))}
+                  </MapContainer>
+                </div>
+                <div style={{ marginTop: 10, fontSize: 13, color: "#666" }}>
+                  Click any map marker to open the pitch detail page.
+                </div>
               </>
+            )}
+
+            {tab === "nearby" && (
+              <div style={{ display: "grid", gap: 14 }}>
+                {nearbyPitches.length === 0 ? (
+                  <p>No approved pitches yet.</p>
+                ) : (
+                  nearbyPitches.map((pitch) => (
+                    <PitchCard
+                      key={pitch.id}
+                      pitch={pitch}
+                      onClick={() => goToPitch(pitch.id)}
+                    />
+                  ))
+                )}
+              </div>
+            )}
+
+            {tab === "best" && (
+              <div style={{ display: "grid", gap: 14 }}>
+                {bestPitches.length === 0 ? (
+                  <p>No approved pitches yet.</p>
+                ) : (
+                  bestPitches.map((pitch) => (
+                    <PitchCard
+                      key={pitch.id}
+                      pitch={pitch}
+                      onClick={() => goToPitch(pitch.id)}
+                    />
+                  ))
+                )}
+              </div>
             )}
           </div>
         </div>

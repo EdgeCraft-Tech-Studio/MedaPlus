@@ -2,13 +2,15 @@ import { api } from "./api";
 
 export type Pitch = {
   id: string;
-  tenant_id?: string | null;
-  tenant_name?: string | null;
-
   name: string;
   address: string;
   latitude: number;
   longitude: number;
+
+  opening_time: string;
+  closing_time: string;
+  opening_time_label: string;
+  closing_time_label: string;
 
   hourly_price: string;
   weekly_price: string;
@@ -27,9 +29,44 @@ export type Pitch = {
   is_active: boolean;
 };
 
+export type AvailabilitySlot = {
+  key: string;
+  slot_id: string | null;
+  start_iso: string;
+  end_iso: string;
+  label: string;
+  hour: number;
+  status: string;
+  is_available: boolean;
+};
+
+export type AvailabilityDay = {
+  date: string;
+  weekday: string;
+  weekday_short: string;
+  display_date: string;
+  slots: AvailabilitySlot[];
+};
+
+export type MonthlyWeek = {
+  week_index: number;
+  days: AvailabilityDay[];
+};
+
+export type PitchDetailResponse = {
+  pitch: Pitch;
+  daily_weekly_days: AvailabilityDay[];
+  monthly_weeks: MonthlyWeek[];
+};
+
 export async function listPitches() {
   const res = await api.get("/pitches/");
   return res.data.pitches as Pitch[];
+}
+
+export async function getPitchDetail(pitchId: string) {
+  const res = await api.get(`/pitches/${pitchId}/`);
+  return res.data as PitchDetailResponse;
 }
 
 export async function createPitch(payload: FormData) {
@@ -39,6 +76,16 @@ export async function createPitch(payload: FormData) {
     },
   });
   return res.data.pitch as Pitch;
+}
+
+export async function createBooking(payload: {
+  pitch_id: string;
+  booking_type: "HOURLY" | "WEEKLY" | "MONTHLY";
+  selections: { start_iso: string; end_iso: string }[];
+  notes?: string;
+}) {
+  const res = await api.post("/bookings/", payload);
+  return res.data;
 }
 
 export async function listPendingPitches() {
@@ -64,4 +111,13 @@ export async function listOwners() {
 export async function approveOwner(ownerId: string) {
   const res = await api.post(`/admin/owners/${ownerId}/approve/`);
   return res.data;
+}
+
+export async function updatePitch(pitchId: string, payload: FormData) {
+  const res = await api.patch(`/pitches/${pitchId}/`, payload, {
+    headers: {
+      "Content-Type": "multipart/form-data",
+    },
+  });
+  return res.data.pitch as Pitch;
 }

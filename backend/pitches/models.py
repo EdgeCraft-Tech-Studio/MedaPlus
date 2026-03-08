@@ -1,6 +1,6 @@
 from django.db import models
 from django.conf import settings
-
+from datetime import time
 
 class Tenant(models.Model):
     """
@@ -50,6 +50,10 @@ class Pitch(models.Model):
     hourly_price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     weekly_price = models.DecimalField(max_digits=10, decimal_places=2, default=0)   # once per week
     monthly_price = models.DecimalField(max_digits=10, decimal_places=2, default=0)  # 4x per month (once per week)
+
+    # Opening/Closing Time
+    opening_time = models.TimeField(default=time(8, 0))
+    closing_time = models.TimeField(default=time(22, 0))
 
     # Amenities / services
     has_dressing_room = models.BooleanField(default=False)
