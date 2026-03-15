@@ -1,10 +1,49 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { me } from "../lib/auth";
 import type { Pitch } from "../lib/pitches";
 import { createPitch, listPitches } from "../lib/pitches";
 import AddButton from "../components/AddButton";
 import PitchWizardModal from "../components/PitchWizardModal";
+
+function matchesSearch(p: Pitch, search: string) {
+  const q = search.trim().toLowerCase();
+  if (!q) return true;
+  return (
+    p.name.toLowerCase().includes(q) ||
+    (p.address || "").toLowerCase().includes(q)
+  );
+}
+
+function matchesPrice(p: Pitch, maxPrice: string) {
+  if (!maxPrice.trim()) return true;
+  const max = Number(maxPrice);
+  if (Number.isNaN(max)) return true;
+
+  const prices = [
+    Number(p.hourly_price || 0),
+    Number(p.weekly_price || 0),
+    Number(p.monthly_price || 0),
+  ].filter((v) => !Number.isNaN(v));
+
+  return prices.some((price) => price <= max);
+}
+
+function matchesAmenities(
+  p: Pitch,
+  amenities: {
+    dressing: boolean;
+    showers: boolean;
+    parking: boolean;
+    lighting: boolean;
+  }
+) {
+  if (amenities.dressing && !p.has_dressing_room) return false;
+  if (amenities.showers && !p.has_showers) return false;
+  if (amenities.parking && !p.has_parking) return false;
+  if (amenities.lighting && !p.has_lighting) return false;
+  return true;
+}
 
 export default function Owner() {
   const navigate = useNavigate();
@@ -14,6 +53,15 @@ export default function Owner() {
   const [msg, setMsg] = useState("");
   const [openAdd, setOpenAdd] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  const [search, setSearch] = useState("");
+  const [maxPrice, setMaxPrice] = useState("");
+  const [amenities, setAmenities] = useState({
+    dressing: false,
+    showers: false,
+    parking: false,
+    lighting: false,
+  });
 
   async function refresh() {
     try {
@@ -35,6 +83,15 @@ export default function Owner() {
   }, []);
 
   const isApproved = !!user?.is_approved;
+
+  const filteredPitches = useMemo(() => {
+    return pitches.filter(
+      (p) =>
+        matchesSearch(p, search) &&
+        matchesPrice(p, maxPrice) &&
+        matchesAmenities(p, amenities)
+    );
+  }, [pitches, search, maxPrice, amenities]);
 
   return (
     <div style={{ padding: 24 }}>
@@ -92,13 +149,105 @@ export default function Owner() {
 
       <hr style={{ margin: "18px 0" }} />
 
+      <h3>Pitch Filters</h3>
+      <div
+        style={{
+          display: "grid",
+          gap: 12,
+          gridTemplateColumns: "2fr 1fr 1fr",
+          maxWidth: 820,
+          marginBottom: 18,
+        }}
+      >
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search by pitch name or address"
+          style={{ padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
+        />
+
+        <input
+          value={maxPrice}
+          onChange={(e) => setMaxPrice(e.target.value)}
+          placeholder="Max price"
+          style={{ padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
+        />
+
+        <button
+          onClick={() => {
+            setSearch("");
+            setMaxPrice("");
+            setAmenities({
+              dressing: false,
+              showers: false,
+              parking: false,
+              lighting: false,
+            });
+          }}
+          style={{
+            padding: "10px 14px",
+            borderRadius: 10,
+            border: "1px solid #ddd",
+            background: "#fff",
+            cursor: "pointer",
+          }}
+        >
+          Clear filters
+        </button>
+      </div>
+
+      <div style={{ display: "flex", gap: 18, flexWrap: "wrap", marginBottom: 18 }}>
+        <label>
+          <input
+            type="checkbox"
+            checked={amenities.dressing}
+            onChange={(e) =>
+              setAmenities((prev) => ({ ...prev, dressing: e.target.checked }))
+            }
+          />{" "}
+          Dressing room
+        </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={amenities.showers}
+            onChange={(e) =>
+              setAmenities((prev) => ({ ...prev, showers: e.target.checked }))
+            }
+          />{" "}
+          Showers
+        </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={amenities.parking}
+            onChange={(e) =>
+              setAmenities((prev) => ({ ...prev, parking: e.target.checked }))
+            }
+          />{" "}
+          Parking
+        </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={amenities.lighting}
+            onChange={(e) =>
+              setAmenities((prev) => ({ ...prev, lighting: e.target.checked }))
+            }
+          />{" "}
+          Lighting
+        </label>
+      </div>
+
+      <hr style={{ margin: "18px 0" }} />
+
       <h3>My Pitches</h3>
 
       {loading ? <p>Loading pitches...</p> : null}
-      {!loading && pitches.length === 0 ? <p>No pitches yet.</p> : null}
+      {!loading && filteredPitches.length === 0 ? <p>No pitches yet.</p> : null}
 
       <div style={{ display: "grid", gap: 12, maxWidth: 760 }}>
-        {pitches.map((p) => (
+        {filteredPitches.map((p) => (
           <div
             key={p.id}
             onClick={() => navigate(`/app/pitches/${p.id}`)}

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { Pitch } from "../lib/pitches";
 import AddButton from "../components/AddButton";
@@ -21,6 +21,53 @@ type OwnerRow = {
   is_approved: boolean;
 };
 
+type ApprovalFilter = "all" | "approved" | "not_approved";
+
+function matchesSearch(p: Pitch, search: string) {
+  const q = search.trim().toLowerCase();
+  if (!q) return true;
+  return (
+    p.name.toLowerCase().includes(q) ||
+    (p.address || "").toLowerCase().includes(q)
+  );
+}
+
+function matchesPrice(p: Pitch, maxPrice: string) {
+  if (!maxPrice.trim()) return true;
+  const max = Number(maxPrice);
+  if (Number.isNaN(max)) return true;
+
+  const prices = [
+    Number(p.hourly_price || 0),
+    Number(p.weekly_price || 0),
+    Number(p.monthly_price || 0),
+  ].filter((v) => !Number.isNaN(v));
+
+  return prices.some((price) => price <= max);
+}
+
+function matchesAmenities(
+  p: Pitch,
+  amenities: {
+    dressing: boolean;
+    showers: boolean;
+    parking: boolean;
+    lighting: boolean;
+  }
+) {
+  if (amenities.dressing && !p.has_dressing_room) return false;
+  if (amenities.showers && !p.has_showers) return false;
+  if (amenities.parking && !p.has_parking) return false;
+  if (amenities.lighting && !p.has_lighting) return false;
+  return true;
+}
+
+function matchesApproval(p: Pitch, approval: ApprovalFilter) {
+  if (approval === "all") return true;
+  if (approval === "approved") return p.is_approved;
+  return !p.is_approved;
+}
+
 export default function Admin() {
   const navigate = useNavigate();
 
@@ -35,6 +82,16 @@ export default function Admin() {
   const [editingPitch, setEditingPitch] = useState<Pitch | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const [search, setSearch] = useState("");
+  const [approvalFilter, setApprovalFilter] = useState<ApprovalFilter>("all");
+  const [maxPrice, setMaxPrice] = useState("");
+  const [amenities, setAmenities] = useState({
+    dressing: false,
+    showers: false,
+    parking: false,
+    lighting: false,
+  });
+
   async function refresh() {
     try {
       setLoading(true);
@@ -44,7 +101,7 @@ export default function Admin() {
         listPendingOwners(),
         listOwners(),
         listPendingPitches(),
-        listPitches(), // admin sees all pitches
+        listPitches(),
       ]);
 
       setPendingOwners(po);
@@ -87,6 +144,26 @@ export default function Admin() {
   function goToPitch(pitchId: string) {
     navigate(`/app/pitches/${pitchId}`);
   }
+
+  const filteredPendingPitches = useMemo(() => {
+    return pendingPitches.filter(
+      (p) =>
+        matchesSearch(p, search) &&
+        matchesPrice(p, maxPrice) &&
+        matchesAmenities(p, amenities) &&
+        matchesApproval(p, approvalFilter)
+    );
+  }, [pendingPitches, search, maxPrice, amenities, approvalFilter]);
+
+  const filteredAllPitches = useMemo(() => {
+    return allPitches.filter(
+      (p) =>
+        matchesSearch(p, search) &&
+        matchesPrice(p, maxPrice) &&
+        matchesAmenities(p, amenities) &&
+        matchesApproval(p, approvalFilter)
+    );
+  }, [allPitches, search, maxPrice, amenities, approvalFilter]);
 
   return (
     <div style={{ padding: 24 }}>
@@ -159,6 +236,109 @@ export default function Admin() {
 
       <hr style={{ margin: "18px 0" }} />
 
+      <h3>Pitch Filters</h3>
+      <div
+        style={{
+          display: "grid",
+          gap: 12,
+          gridTemplateColumns: "2fr 1fr 1fr 1fr",
+          maxWidth: 980,
+          marginBottom: 18,
+        }}
+      >
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search by pitch name or address"
+          style={{ padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
+        />
+
+        <select
+          value={approvalFilter}
+          onChange={(e) => setApprovalFilter(e.target.value as ApprovalFilter)}
+          style={{ padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
+        >
+          <option value="all">All statuses</option>
+          <option value="approved">Approved</option>
+          <option value="not_approved">Not approved</option>
+        </select>
+
+        <input
+          value={maxPrice}
+          onChange={(e) => setMaxPrice(e.target.value)}
+          placeholder="Max price"
+          style={{ padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
+        />
+
+        <button
+          onClick={() => {
+            setSearch("");
+            setApprovalFilter("all");
+            setMaxPrice("");
+            setAmenities({
+              dressing: false,
+              showers: false,
+              parking: false,
+              lighting: false,
+            });
+          }}
+          style={{
+            padding: "10px 14px",
+            borderRadius: 10,
+            border: "1px solid #ddd",
+            background: "#fff",
+            cursor: "pointer",
+          }}
+        >
+          Clear filters
+        </button>
+      </div>
+
+      <div style={{ display: "flex", gap: 18, flexWrap: "wrap", marginBottom: 18 }}>
+        <label>
+          <input
+            type="checkbox"
+            checked={amenities.dressing}
+            onChange={(e) =>
+              setAmenities((prev) => ({ ...prev, dressing: e.target.checked }))
+            }
+          />{" "}
+          Dressing room
+        </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={amenities.showers}
+            onChange={(e) =>
+              setAmenities((prev) => ({ ...prev, showers: e.target.checked }))
+            }
+          />{" "}
+          Showers
+        </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={amenities.parking}
+            onChange={(e) =>
+              setAmenities((prev) => ({ ...prev, parking: e.target.checked }))
+            }
+          />{" "}
+          Parking
+        </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={amenities.lighting}
+            onChange={(e) =>
+              setAmenities((prev) => ({ ...prev, lighting: e.target.checked }))
+            }
+          />{" "}
+          Lighting
+        </label>
+      </div>
+
+      <hr style={{ margin: "18px 0" }} />
+
       <h3>Pending Owners</h3>
       {loading ? <p>Loading...</p> : null}
       {!loading && pendingOwners.length === 0 ? <p>None</p> : null}
@@ -175,10 +355,10 @@ export default function Admin() {
       <hr style={{ margin: "18px 0" }} />
 
       <h3>Pending Pitches</h3>
-      {!loading && pendingPitches.length === 0 ? <p>None</p> : null}
+      {!loading && filteredPendingPitches.length === 0 ? <p>None</p> : null}
 
       <div style={{ display: "grid", gap: 12, maxWidth: 860 }}>
-        {pendingPitches.map((p) => (
+        {filteredPendingPitches.map((p) => (
           <div
             key={p.id}
             onClick={() => goToPitch(p.id)}
@@ -246,53 +426,6 @@ export default function Admin() {
               Hourly: {p.hourly_price} | Weekly: {p.weekly_price} | Monthly:{" "}
               {p.monthly_price}
             </div>
-
-            <div style={{ marginTop: 6, fontSize: 14 }}>
-              Minimum hours: {p.min_hours}
-            </div>
-
-            <div style={{ marginTop: 6, fontSize: 14 }}>
-              Booking modes: Hourly {p.allow_hourly ? "Yes" : "No"} | Weekly{" "}
-              {p.allow_weekly ? "Yes" : "No"} | Monthly{" "}
-              {p.allow_monthly ? "Yes" : "No"}
-            </div>
-
-            <div style={{ marginTop: 6, fontSize: 14 }}>
-              Dressing room: {p.has_dressing_room ? "Yes" : "No"} | Showers:{" "}
-              {p.has_showers ? "Yes" : "No"} | Parking:{" "}
-              {p.has_parking ? "Yes" : "No"} | Lighting:{" "}
-              {p.has_lighting ? "Yes" : "No"}
-            </div>
-
-            <div style={{ marginTop: 6, fontSize: 14 }}>
-              Other services: {p.other_services || "—"}
-            </div>
-
-            <div style={{ marginTop: 6, fontSize: 13, color: "#666" }}>
-              Location: {p.latitude}, {p.longitude}
-            </div>
-
-            {p.cover_image_url ? (
-              <div style={{ marginTop: 12 }}>
-                <img
-                  src={p.cover_image_url}
-                  alt={p.name}
-                  style={{
-                    width: 220,
-                    maxWidth: "100%",
-                    height: 140,
-                    objectFit: "cover",
-                    borderRadius: 12,
-                    border: "1px solid #eee",
-                    display: "block",
-                  }}
-                />
-              </div>
-            ) : null}
-
-            <div style={{ marginTop: 8, fontSize: 13, color: "#666" }}>
-              Click card to open slot table / manage occupancy.
-            </div>
           </div>
         ))}
       </div>
@@ -300,10 +433,10 @@ export default function Admin() {
       <hr style={{ margin: "18px 0" }} />
 
       <h3>All Pitches</h3>
-      {!loading && allPitches.length === 0 ? <p>None</p> : null}
+      {!loading && filteredAllPitches.length === 0 ? <p>None</p> : null}
 
       <div style={{ display: "grid", gap: 12, maxWidth: 860 }}>
-        {allPitches.map((p) => (
+        {filteredAllPitches.map((p) => (
           <div
             key={p.id}
             onClick={() => goToPitch(p.id)}
@@ -372,50 +505,10 @@ export default function Admin() {
             </div>
 
             <div style={{ marginTop: 6, fontSize: 14 }}>
-              Minimum hours: {p.min_hours}
-            </div>
-
-            <div style={{ marginTop: 6, fontSize: 14 }}>
-              Booking modes: Hourly {p.allow_hourly ? "Yes" : "No"} | Weekly{" "}
-              {p.allow_weekly ? "Yes" : "No"} | Monthly{" "}
-              {p.allow_monthly ? "Yes" : "No"}
-            </div>
-
-            <div style={{ marginTop: 6, fontSize: 14 }}>
               Dressing room: {p.has_dressing_room ? "Yes" : "No"} | Showers:{" "}
               {p.has_showers ? "Yes" : "No"} | Parking:{" "}
               {p.has_parking ? "Yes" : "No"} | Lighting:{" "}
               {p.has_lighting ? "Yes" : "No"}
-            </div>
-
-            <div style={{ marginTop: 6, fontSize: 14 }}>
-              Other services: {p.other_services || "—"}
-            </div>
-
-            <div style={{ marginTop: 6, fontSize: 13, color: "#666" }}>
-              Location: {p.latitude}, {p.longitude}
-            </div>
-
-            {p.cover_image_url ? (
-              <div style={{ marginTop: 12 }}>
-                <img
-                  src={p.cover_image_url}
-                  alt={p.name}
-                  style={{
-                    width: 220,
-                    maxWidth: "100%",
-                    height: 140,
-                    objectFit: "cover",
-                    borderRadius: 12,
-                    border: "1px solid #eee",
-                    display: "block",
-                  }}
-                />
-              </div>
-            ) : null}
-
-            <div style={{ marginTop: 8, fontSize: 13, color: "#666" }}>
-              Click card to open slot table / manage occupancy.
             </div>
           </div>
         ))}

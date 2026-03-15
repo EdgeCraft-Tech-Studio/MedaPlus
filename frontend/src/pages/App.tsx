@@ -39,6 +39,45 @@ function scorePitch(pitch: Pitch) {
   return score;
 }
 
+function matchesSearch(p: Pitch, search: string) {
+  const q = search.trim().toLowerCase();
+  if (!q) return true;
+  return (
+    p.name.toLowerCase().includes(q) ||
+    (p.address || "").toLowerCase().includes(q)
+  );
+}
+
+function matchesPrice(p: Pitch, maxPrice: string) {
+  if (!maxPrice.trim()) return true;
+  const max = Number(maxPrice);
+  if (Number.isNaN(max)) return true;
+
+  const prices = [
+    Number(p.hourly_price || 0),
+    Number(p.weekly_price || 0),
+    Number(p.monthly_price || 0),
+  ].filter((v) => !Number.isNaN(v));
+
+  return prices.some((price) => price <= max);
+}
+
+function matchesAmenities(
+  p: Pitch,
+  amenities: {
+    dressing: boolean;
+    showers: boolean;
+    parking: boolean;
+    lighting: boolean;
+  }
+) {
+  if (amenities.dressing && !p.has_dressing_room) return false;
+  if (amenities.showers && !p.has_showers) return false;
+  if (amenities.parking && !p.has_parking) return false;
+  if (amenities.lighting && !p.has_lighting) return false;
+  return true;
+}
+
 function PitchCard({
   pitch,
   onClick,
@@ -91,7 +130,8 @@ function PitchCard({
         <div style={{ fontSize: 18, fontWeight: 700 }}>{pitch.name}</div>
         <div style={{ color: "#555" }}>{pitch.address || "No address provided"}</div>
         <div style={{ fontSize: 14, color: "#222", lineHeight: 1.5 }}>
-          Hourly: {pitch.hourly_price} | Weekly: {pitch.weekly_price} | Monthly: {pitch.monthly_price}
+          Hourly: {pitch.hourly_price} | Weekly: {pitch.weekly_price} | Monthly:{" "}
+          {pitch.monthly_price}
         </div>
       </div>
     </div>
@@ -105,7 +145,18 @@ export default function App() {
   const [pitches, setPitches] = useState<Pitch[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number }>(ADDIS_ABABA);
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number }>(
+    ADDIS_ABABA
+  );
+
+  const [search, setSearch] = useState("");
+  const [maxPrice, setMaxPrice] = useState("");
+  const [amenities, setAmenities] = useState({
+    dressing: false,
+    showers: false,
+    parking: false,
+    lighting: false,
+  });
 
   useEffect(() => {
     async function load() {
@@ -114,7 +165,7 @@ export default function App() {
         setError("");
         const data = await listPitches();
         setPitches(data);
-      } catch (err) {
+      } catch {
         setPitches([]);
         setError("Failed to load pitches.");
       } finally {
@@ -141,17 +192,26 @@ export default function App() {
     );
   }, []);
 
+  const filteredPitches = useMemo(() => {
+    return pitches.filter(
+      (p) =>
+        matchesSearch(p, search) &&
+        matchesPrice(p, maxPrice) &&
+        matchesAmenities(p, amenities)
+    );
+  }, [pitches, search, maxPrice, amenities]);
+
   const nearbyPitches = useMemo(() => {
-    return [...pitches].sort((a, b) => {
+    return [...filteredPitches].sort((a, b) => {
       const da = distanceKm(userLocation.lat, userLocation.lng, a.latitude, a.longitude);
       const db = distanceKm(userLocation.lat, userLocation.lng, b.latitude, b.longitude);
       return da - db;
     });
-  }, [pitches, userLocation]);
+  }, [filteredPitches, userLocation]);
 
   const bestPitches = useMemo(() => {
-    return [...pitches].sort((a, b) => scorePitch(b) - scorePitch(a));
-  }, [pitches]);
+    return [...filteredPitches].sort((a, b) => scorePitch(b) - scorePitch(a));
+  }, [filteredPitches]);
 
   const mapCenter =
     nearbyPitches.length > 0
@@ -182,24 +242,106 @@ export default function App() {
             <div style={{ color: "#666", marginTop: 4 }}>Find available football pitches</div>
           </div>
 
-          <div style={{ display: "flex", gap: 8, padding: 12, borderBottom: "1px solid #eee" }}>
-            {(["map", "nearby", "best"] as TabKey[]).map((key) => (
+          <div style={{ padding: 12, borderBottom: "1px solid #eee", display: "grid", gap: 10 }}>
+            <div style={{ display: "flex", gap: 8 }}>
+              {(["map", "nearby", "best"] as TabKey[]).map((key) => (
+                <button
+                  key={key}
+                  onClick={() => setTab(key)}
+                  style={{
+                    padding: "10px 14px",
+                    borderRadius: 999,
+                    border: "1px solid #ddd",
+                    background: tab === key ? "#111" : "#fff",
+                    color: tab === key ? "#fff" : "#222",
+                    cursor: "pointer",
+                    fontWeight: 600,
+                  }}
+                >
+                  {key === "map" ? "Map" : key === "nearby" ? "Nearby" : "Best"}
+                </button>
+              ))}
+            </div>
+
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by pitch name or address"
+              style={{ padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
+            />
+
+            <div style={{ display: "flex", gap: 8 }}>
+              <input
+                value={maxPrice}
+                onChange={(e) => setMaxPrice(e.target.value)}
+                placeholder="Max price"
+                style={{ flex: 1, padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
+              />
               <button
-                key={key}
-                onClick={() => setTab(key)}
+                onClick={() => {
+                  setSearch("");
+                  setMaxPrice("");
+                  setAmenities({
+                    dressing: false,
+                    showers: false,
+                    parking: false,
+                    lighting: false,
+                  });
+                }}
                 style={{
                   padding: "10px 14px",
-                  borderRadius: 999,
+                  borderRadius: 10,
                   border: "1px solid #ddd",
-                  background: tab === key ? "#111" : "#fff",
-                  color: tab === key ? "#fff" : "#222",
+                  background: "#fff",
                   cursor: "pointer",
-                  fontWeight: 600,
                 }}
               >
-                {key === "map" ? "Map" : key === "nearby" ? "Nearby" : "Best"}
+                Clear
               </button>
-            ))}
+            </div>
+
+            <div style={{ display: "flex", gap: 14, flexWrap: "wrap", fontSize: 14 }}>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={amenities.dressing}
+                  onChange={(e) =>
+                    setAmenities((prev) => ({ ...prev, dressing: e.target.checked }))
+                  }
+                />{" "}
+                Dressing room
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={amenities.showers}
+                  onChange={(e) =>
+                    setAmenities((prev) => ({ ...prev, showers: e.target.checked }))
+                  }
+                />{" "}
+                Showers
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={amenities.parking}
+                  onChange={(e) =>
+                    setAmenities((prev) => ({ ...prev, parking: e.target.checked }))
+                  }
+                />{" "}
+                Parking
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={amenities.lighting}
+                  onChange={(e) =>
+                    setAmenities((prev) => ({ ...prev, lighting: e.target.checked }))
+                  }
+                />{" "}
+                Lighting
+              </label>
+            </div>
           </div>
 
           <div style={{ padding: 14, overflowY: "auto", maxHeight: "calc(100vh - 150px)" }}>
@@ -228,7 +370,7 @@ export default function App() {
                           attribution="&copy; OpenStreetMap contributors"
                           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                         />
-                        {pitches.map((pitch) => (
+                        {filteredPitches.map((pitch) => (
                           <Marker
                             key={pitch.id}
                             position={[pitch.latitude, pitch.longitude]}
@@ -248,7 +390,7 @@ export default function App() {
                 {tab === "nearby" && (
                   <div style={{ display: "grid", gap: 14 }}>
                     {nearbyPitches.length === 0 ? (
-                      <p>No approved pitches yet.</p>
+                      <p>No matching pitches found.</p>
                     ) : (
                       nearbyPitches.map((pitch) => (
                         <PitchCard
@@ -264,7 +406,7 @@ export default function App() {
                 {tab === "best" && (
                   <div style={{ display: "grid", gap: 14 }}>
                     {bestPitches.length === 0 ? (
-                      <p>No approved pitches yet.</p>
+                      <p>No matching pitches found.</p>
                     ) : (
                       bestPitches.map((pitch) => (
                         <PitchCard
@@ -295,13 +437,13 @@ export default function App() {
         >
           <div style={{ fontSize: 28, fontWeight: 800 }}>Explore pitches</div>
           <div style={{ color: "#555", maxWidth: 680, lineHeight: 1.6 }}>
-            Use the tabs on the left to explore all approved pitches. The Map tab shows all locations,
-            Nearby sorts pitches using your current location when available, and Best shows the strongest
-            options using a temporary score based on amenities and pricing until ratings are added later.
+            Use the filters on the left to narrow pitches by name, address, price, and amenities.
+            The Map tab shows matching locations, Nearby sorts by your location, and Best ranks by
+            temporary quality score until ratings are added later.
           </div>
 
           <div style={{ marginTop: 10, color: "#333", fontSize: 15 }}>
-            Total available pitches: <b>{pitches.length}</b>
+            Matching pitches: <b>{filteredPitches.length}</b>
           </div>
         </div>
       </div>

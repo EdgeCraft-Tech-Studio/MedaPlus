@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import type { Pitch } from "../lib/pitches";
 import AddButton from "../components/AddButton";
 import PitchWizardModal from "../components/PitchWizardModal";
@@ -21,6 +22,8 @@ type OwnerRow = {
 };
 
 export default function Admin() {
+  const navigate = useNavigate();
+
   const [pendingOwners, setPendingOwners] = useState<
     Array<{ id: string; username: string; email: string }>
   >([]);
@@ -30,10 +33,13 @@ export default function Admin() {
   const [msg, setMsg] = useState("");
   const [openAdd, setOpenAdd] = useState(false);
   const [editingPitch, setEditingPitch] = useState<Pitch | null>(null);
+  const [loading, setLoading] = useState(true);
 
   async function refresh() {
     try {
+      setLoading(true);
       setMsg("");
+
       const [po, o, pp, ap] = await Promise.all([
         listPendingOwners(),
         listOwners(),
@@ -47,6 +53,8 @@ export default function Admin() {
       setAllPitches(ap);
     } catch {
       setMsg("Failed to load admin data. Check API / token.");
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -74,6 +82,10 @@ export default function Admin() {
     } catch {
       setMsg("Failed to approve pitch.");
     }
+  }
+
+  function goToPitch(pitchId: string) {
+    navigate(`/app/pitches/${pitchId}`);
   }
 
   return (
@@ -148,7 +160,9 @@ export default function Admin() {
       <hr style={{ margin: "18px 0" }} />
 
       <h3>Pending Owners</h3>
-      {pendingOwners.length === 0 ? <p>None</p> : null}
+      {loading ? <p>Loading...</p> : null}
+      {!loading && pendingOwners.length === 0 ? <p>None</p> : null}
+
       <ul>
         {pendingOwners.map((o) => (
           <li key={o.id} style={{ marginBottom: 8 }}>
@@ -161,17 +175,19 @@ export default function Admin() {
       <hr style={{ margin: "18px 0" }} />
 
       <h3>Pending Pitches</h3>
-      {pendingPitches.length === 0 ? <p>None</p> : null}
+      {!loading && pendingPitches.length === 0 ? <p>None</p> : null}
 
       <div style={{ display: "grid", gap: 12, maxWidth: 860 }}>
         {pendingPitches.map((p) => (
           <div
             key={p.id}
+            onClick={() => goToPitch(p.id)}
             style={{
               border: "1px solid #ddd",
               borderRadius: 12,
               padding: 12,
               background: "#fff",
+              cursor: "pointer",
             }}
           >
             <div
@@ -190,9 +206,18 @@ export default function Admin() {
               </div>
 
               <div style={{ display: "flex", gap: 8 }}>
-                <button onClick={() => onApprovePitch(p.id)}>Approve</button>
                 <button
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onApprovePitch(p.id);
+                  }}
+                >
+                  Approve
+                </button>
+
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
                     setMsg("");
                     setEditingPitch(p);
                   }}
@@ -264,6 +289,10 @@ export default function Admin() {
                 />
               </div>
             ) : null}
+
+            <div style={{ marginTop: 8, fontSize: 13, color: "#666" }}>
+              Click card to open slot table / manage occupancy.
+            </div>
           </div>
         ))}
       </div>
@@ -271,17 +300,19 @@ export default function Admin() {
       <hr style={{ margin: "18px 0" }} />
 
       <h3>All Pitches</h3>
-      {allPitches.length === 0 ? <p>None</p> : null}
+      {!loading && allPitches.length === 0 ? <p>None</p> : null}
 
       <div style={{ display: "grid", gap: 12, maxWidth: 860 }}>
         {allPitches.map((p) => (
           <div
             key={p.id}
+            onClick={() => goToPitch(p.id)}
             style={{
               border: "1px solid #ddd",
               borderRadius: 12,
               padding: 12,
               background: "#fff",
+              cursor: "pointer",
             }}
           >
             <div
@@ -308,7 +339,8 @@ export default function Admin() {
                 </div>
 
                 <button
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.stopPropagation();
                     setMsg("");
                     setEditingPitch(p);
                   }}
@@ -381,6 +413,10 @@ export default function Admin() {
                 />
               </div>
             ) : null}
+
+            <div style={{ marginTop: 8, fontSize: 13, color: "#666" }}>
+              Click card to open slot table / manage occupancy.
+            </div>
           </div>
         ))}
       </div>
