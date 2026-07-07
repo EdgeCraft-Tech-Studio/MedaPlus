@@ -76,6 +76,7 @@ class Pitch(models.Model):
     def __str__(self):
         return f"{self.name} ({self.tenant.name})"
 
+
 class PitchImage(models.Model):
     pitch = models.ForeignKey(Pitch, on_delete=models.CASCADE, related_name="images")
     image = models.FileField(upload_to="pitch_images/")

@@ -5,6 +5,80 @@ import type { Pitch } from "../lib/pitches";
 import { createPitch, listPitches } from "../lib/pitches";
 import AddButton from "../components/AddButton";
 import PitchWizardModal from "../components/PitchWizardModal";
+import ToastContainer, { showToast } from "./Toast";
+import styles from "./css/Owner.module.css";
+import AppHeader from "./AppHeader";
+
+type IconName =
+  | "clock"
+  | "pin"
+  | "tag"
+  | "shirt"
+  | "droplet"
+  | "car"
+  | "bulb"
+  | "imageOff"
+  | "shield";
+
+function Icon({ name, size = 15 }: { name: IconName; size?: number }) {
+  const paths: Record<IconName, React.ReactNode> = {
+    clock: (
+      <>
+        <circle cx="12" cy="12" r="9" />
+        <polyline points="12 7 12 12 16 14" />
+      </>
+    ),
+    pin: (
+      <>
+        <path d="M12 21s-7-7.58-7-12a7 7 0 0 1 14 0c0 4.42-7 12-7 12z" />
+        <circle cx="12" cy="9" r="2.5" />
+      </>
+    ),
+    tag: (
+      <>
+        <path d="M20.59 13.41 12 22 2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
+        <circle cx="7" cy="7" r="1.4" />
+      </>
+    ),
+    shirt: <path d="M8 3 4 6v4l2-1v11h12V9l2 1V6l-4-3-2 2h-4L8 3z" />,
+    droplet: <path d="M12 2s6 7.5 6 12a6 6 0 0 1-12 0c0-4.5 6-12 6-12z" />,
+    car: (
+      <>
+        <path d="M3 13l1.2-3.6A2 2 0 0 1 6.1 8h11.8a2 2 0 0 1 1.9 1.4L21 13v5a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1v-1H6v1a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z" />
+        <circle cx="7" cy="17" r="1.4" />
+        <circle cx="17" cy="17" r="1.4" />
+      </>
+    ),
+    bulb: (
+      <path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.2 1 2.3h6c0-1.1.4-1.8 1-2.3A7 7 0 0 0 12 2z" />
+    ),
+    imageOff: (
+      <>
+        <rect x="3" y="3" width="18" height="18" rx="2" />
+        <circle cx="8.5" cy="8.5" r="1.4" />
+        <path d="M21 15l-5-5L5 21" />
+      </>
+    ),
+    shield: (
+      <path d="M12 2l8 3.5v5.3c0 5-3.4 8.9-8 11.2-4.6-2.3-8-6.2-8-11.2V5.5L12 2z" />
+    ),
+  };
+
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      {paths[name]}
+    </svg>
+  );
+}
 
 function matchesSearch(p: Pitch, search: string) {
   const q = search.trim().toLowerCase();
@@ -43,6 +117,72 @@ function matchesAmenities(
   if (amenities.parking && !p.has_parking) return false;
   if (amenities.lighting && !p.has_lighting) return false;
   return true;
+}
+
+function CardImage({ pitch }: { pitch: Pitch }) {
+  return (
+    <div className={styles.cardImage}>
+      {pitch.cover_image_url ? (
+        <img src={pitch.cover_image_url} alt={pitch.name} />
+      ) : (
+        <div className={styles.cardImagePlaceholder}>
+          <Icon name="imageOff" size={30} />
+          No photo yet
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PitchHours({ pitch }: { pitch: Pitch }) {
+  const hours =
+    pitch.opening_time_label && pitch.closing_time_label
+      ? `${pitch.opening_time_label} - ${pitch.closing_time_label}`
+      : `${pitch.opening_time} - ${pitch.closing_time}`;
+
+  return (
+    <div className={styles.metaGrid}>
+      <div className={styles.metaItem}>
+        <Icon name="clock" />
+        {hours}
+      </div>
+      <div className={styles.metaItem}>
+        <Icon name="tag" />
+        Hourly <b>{pitch.hourly_price}</b>
+      </div>
+      <div className={styles.metaItem}>
+        <Icon name="tag" />
+        Weekly <b>{pitch.weekly_price}</b>
+      </div>
+      <div className={styles.metaItem}>
+        <Icon name="tag" />
+        Monthly <b>{pitch.monthly_price}</b>
+      </div>
+    </div>
+  );
+}
+
+function AmenityTags({ pitch }: { pitch: Pitch }) {
+  const items: Array<{ label: string; on: boolean; icon: IconName }> = [
+    { label: "Dressing room", on: pitch.has_dressing_room, icon: "shirt" },
+    { label: "Showers", on: pitch.has_showers, icon: "droplet" },
+    { label: "Parking", on: pitch.has_parking, icon: "car" },
+    { label: "Lighting", on: pitch.has_lighting, icon: "bulb" },
+  ];
+
+  return (
+    <div className={styles.tagRow}>
+      {items.map((item) => (
+        <span
+          key={item.label}
+          className={`${styles.tag} ${item.on ? styles.tagYes : styles.tagNo}`}
+        >
+          <Icon name={item.icon} size={12} />
+          {item.label}
+        </span>
+      ))}
+    </div>
+  );
 }
 
 export default function Owner() {
@@ -94,234 +234,219 @@ export default function Owner() {
   }, [pitches, search, maxPrice, amenities]);
 
   return (
-    <div style={{ padding: 24 }}>
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 12,
-        }}
-      >
-        <h2 style={{ margin: 0 }}>Owner Dashboard</h2>
+    <div>
+      <AppHeader variant="logout" /> 
+    <div className={styles.page}>
+      <ToastContainer />
+      <div className={styles.container}>
+        <div className={styles.topBar}>
+          <div className={styles.titleGroup}>
+            <div className={styles.eyebrow}>My pitches</div>
+            <h2 className={styles.title}>Owner Dashboard</h2>
+          </div>
 
-        <div
-          style={{
-            opacity: isApproved ? 1 : 0.5,
-            pointerEvents: isApproved ? "auto" : "none",
-          }}
-        >
-          <AddButton
-            onClick={() => setOpenAdd(true)}
-            title={isApproved ? "Add Pitch" : "Waiting for admin approval"}
-          />
+          <div className={`${styles.addWrap} ${!isApproved ? styles.addWrapDisabled : ""}`}>
+            <AddButton
+              onClick={() => setOpenAdd(true)}
+              title={isApproved ? "Add Pitch" : "Waiting for admin approval"}
+            />
+          </div>
         </div>
-      </div>
 
-      {user && (
-        <p style={{ marginTop: 12 }}>
-          Account status:{" "}
-          <b style={{ color: isApproved ? "green" : "#b00020" }}>
-            {isApproved ? "Approved" : "Pending (admin approval required)"}
-          </b>
-        </p>
-      )}
+        {user && (
+          <div className={styles.statusBanner}>
+            <div className={styles.statusBannerLeft}>
+              <div className={styles.statusIconWrap}>
+                <Icon name="shield" size={18} />
+              </div>
+              <div className={styles.statusBannerText}>
+                Account status:{" "}
+                <b>{isApproved ? "Approved" : "Pending admin approval"}</b>
+                {!isApproved && (
+                  <div style={{ marginTop: 3 }}>
+                    You can log in, but your pitches won't appear to players until
+                    your account is approved.
+                  </div>
+                )}
+              </div>
+            </div>
 
-      {!isApproved && (
-        <p style={{ color: "#666", marginTop: 8 }}>
-          You can log in, but your pitches will not appear to players until the
-          admin approves your account and your pitches.
-        </p>
-      )}
+            <span
+              className={`${styles.statusPill} ${
+                isApproved ? styles.statusApproved : styles.statusPending
+              }`}
+            >
+              {isApproved ? "Approved" : "Pending"}
+            </span>
+          </div>
+        )}
 
-      {msg && <p style={{ marginTop: 12 }}>{msg}</p>}
+        {msg && <p className={styles.message}>{msg}</p>}
 
-      <PitchWizardModal
-        open={openAdd}
-        onClose={() => setOpenAdd(false)}
-        onSubmit={async (payload) => {
-          await createPitch(payload);
-          setMsg("Pitch created (pending admin approval).");
-          setOpenAdd(false);
-          await refresh();
-        }}
-      />
-
-      <hr style={{ margin: "18px 0" }} />
-
-      <h3>Pitch Filters</h3>
-      <div
-        style={{
-          display: "grid",
-          gap: 12,
-          gridTemplateColumns: "2fr 1fr 1fr",
-          maxWidth: 820,
-          marginBottom: 18,
-        }}
-      >
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by pitch name or address"
-          style={{ padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
+        <PitchWizardModal
+          open={openAdd}
+          onClose={() => setOpenAdd(false)}
+          onSubmit={async (payload) => {
+            await createPitch(payload);
+            setMsg("Pitch created (pending admin approval).");
+            showToast("Pitch created — pending approval.", "create");
+            setOpenAdd(false);
+            await refresh();
+          }}
         />
 
-        <input
-          value={maxPrice}
-          onChange={(e) => setMaxPrice(e.target.value)}
-          placeholder="Max price"
-          style={{ padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
-        />
+        <div className={styles.filtersCard}>
+          <div className={styles.filtersHeading}>Pitch filters</div>
+          <div className={styles.filtersGrid}>
+            <input
+              className={styles.input}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by pitch name or address"
+            />
 
-        <button
-          onClick={() => {
-            setSearch("");
-            setMaxPrice("");
-            setAmenities({
-              dressing: false,
-              showers: false,
-              parking: false,
-              lighting: false,
-            });
-          }}
-          style={{
-            padding: "10px 14px",
-            borderRadius: 10,
-            border: "1px solid #ddd",
-            background: "#fff",
-            cursor: "pointer",
-          }}
-        >
-          Clear filters
-        </button>
-      </div>
+            <input
+              className={styles.input}
+              value={maxPrice}
+              onChange={(e) => setMaxPrice(e.target.value)}
+              placeholder="Max price"
+            />
 
-      <div style={{ display: "flex", gap: 18, flexWrap: "wrap", marginBottom: 18 }}>
-        <label>
-          <input
-            type="checkbox"
-            checked={amenities.dressing}
-            onChange={(e) =>
-              setAmenities((prev) => ({ ...prev, dressing: e.target.checked }))
-            }
-          />{" "}
-          Dressing room
-        </label>
-        <label>
-          <input
-            type="checkbox"
-            checked={amenities.showers}
-            onChange={(e) =>
-              setAmenities((prev) => ({ ...prev, showers: e.target.checked }))
-            }
-          />{" "}
-          Showers
-        </label>
-        <label>
-          <input
-            type="checkbox"
-            checked={amenities.parking}
-            onChange={(e) =>
-              setAmenities((prev) => ({ ...prev, parking: e.target.checked }))
-            }
-          />{" "}
-          Parking
-        </label>
-        <label>
-          <input
-            type="checkbox"
-            checked={amenities.lighting}
-            onChange={(e) =>
-              setAmenities((prev) => ({ ...prev, lighting: e.target.checked }))
-            }
-          />{" "}
-          Lighting
-        </label>
-      </div>
-
-      <hr style={{ margin: "18px 0" }} />
-
-      <h3>My Pitches</h3>
-
-      {loading ? <p>Loading pitches...</p> : null}
-      {!loading && filteredPitches.length === 0 ? <p>No pitches yet.</p> : null}
-
-      <div style={{ display: "grid", gap: 12, maxWidth: 760 }}>
-        {filteredPitches.map((p) => (
-          <div
-            key={p.id}
-            onClick={() => navigate(`/app/pitches/${p.id}`)}
-            style={{
-              border: "1px solid #ddd",
-              borderRadius: 12,
-              padding: 12,
-              cursor: "pointer",
-              background: "#fff",
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                gap: 12,
-                alignItems: "flex-start",
+            <button
+              className={styles.clearBtn}
+              onClick={() => {
+                setSearch("");
+                setMaxPrice("");
+                setAmenities({
+                  dressing: false,
+                  showers: false,
+                  parking: false,
+                  lighting: false,
+                });
               }}
             >
-              <div style={{ fontWeight: 700, fontSize: 18 }}>{p.name}</div>
-              <div>
-                Status:{" "}
-                <b style={{ color: p.is_approved ? "green" : "#b00020" }}>
-                  {p.is_approved ? "Approved" : "Pending"}
-                </b>
-              </div>
-            </div>
-
-            <div style={{ color: "#555", marginTop: 6 }}>{p.address || "—"}</div>
-
-            <div style={{ marginTop: 8, fontSize: 14 }}>
-              Hourly: {p.hourly_price} | Weekly: {p.weekly_price} | Monthly:{" "}
-              {p.monthly_price}
-            </div>
-
-            <div style={{ marginTop: 6, fontSize: 14 }}>
-              Working hours: {p.opening_time_label} - {p.closing_time_label}
-            </div>
-
-            <div style={{ marginTop: 6, fontSize: 14 }}>
-              Dressing room: {p.has_dressing_room ? "Yes" : "No"} | Showers:{" "}
-              {p.has_showers ? "Yes" : "No"} | Parking:{" "}
-              {p.has_parking ? "Yes" : "No"} | Lighting:{" "}
-              {p.has_lighting ? "Yes" : "No"}
-            </div>
-
-            <div style={{ marginTop: 6, fontSize: 14 }}>
-              Other services: {p.other_services || "—"}
-            </div>
-
-            {p.cover_image_url ? (
-              <div style={{ marginTop: 12 }}>
-                <img
-                  src={p.cover_image_url}
-                  alt={p.name}
-                  style={{
-                    width: 220,
-                    maxWidth: "100%",
-                    height: 140,
-                    objectFit: "cover",
-                    borderRadius: 12,
-                    border: "1px solid #eee",
-                    display: "block",
-                  }}
-                />
-              </div>
-            ) : null}
-
-            <div style={{ marginTop: 8, fontSize: 13, color: "#666" }}>
-              Click card to open slot table and manage bookings.
-            </div>
+              Clear filters
+            </button>
           </div>
-        ))}
+
+          <div className={styles.amenityRow}>
+            <label className={styles.chip}>
+              <input
+                className={styles.checkbox}
+                type="checkbox"
+                checked={amenities.dressing}
+                onChange={(e) =>
+                  setAmenities((prev) => ({ ...prev, dressing: e.target.checked }))
+                }
+              />
+              <Icon name="shirt" size={13} />
+              Dressing room
+            </label>
+            <label className={styles.chip}>
+              <input
+                className={styles.checkbox}
+                type="checkbox"
+                checked={amenities.showers}
+                onChange={(e) =>
+                  setAmenities((prev) => ({ ...prev, showers: e.target.checked }))
+                }
+              />
+              <Icon name="droplet" size={13} />
+              Showers
+            </label>
+            <label className={styles.chip}>
+              <input
+                className={styles.checkbox}
+                type="checkbox"
+                checked={amenities.parking}
+                onChange={(e) =>
+                  setAmenities((prev) => ({ ...prev, parking: e.target.checked }))
+                }
+              />
+              <Icon name="car" size={13} />
+              Parking
+            </label>
+            <label className={styles.chip}>
+              <input
+                className={styles.checkbox}
+                type="checkbox"
+                checked={amenities.lighting}
+                onChange={(e) =>
+                  setAmenities((prev) => ({ ...prev, lighting: e.target.checked }))
+                }
+              />
+              <Icon name="bulb" size={13} />
+              Lighting
+            </label>
+          </div>
+        </div>
+
+        <hr className={styles.divider} />
+
+        <div className={styles.section}>
+          <div className={styles.sectionHeader}>
+            <div className={styles.sectionTitle}>My pitches</div>
+            {!loading && <span className={styles.countBadge}>{filteredPitches.length}</span>}
+          </div>
+
+          {loading ? (
+            <div className={styles.loadingSlot}>
+              <p className={styles.emptyText}>Loading pitches...</p>
+            </div>
+          ) : filteredPitches.length === 0 ? (
+            <p className={styles.emptyText}>No pitches yet.</p>
+          ) : (
+            <div className={styles.cardGrid}>
+              {filteredPitches.map((p, index) => (
+                <div
+                  key={p.id}
+                  onClick={() => navigate(`/app/pitches/${p.id}`)}
+                  className={styles.pitchCard}
+                  style={{ "--i": index } as React.CSSProperties}
+                >
+                  <CardImage pitch={p} />
+
+                  <div className={styles.cardBody}>
+                    <div className={styles.cardTitleRow}>
+                      <div>
+                        <div className={styles.pitchName}>{p.name}</div>
+                        <div className={styles.pitchAddress}>
+                          <Icon name="pin" size={13} />
+                          {p.address || "No address on file"}
+                        </div>
+                      </div>
+
+                      <span
+                        className={`${styles.statusPill} ${
+                          p.is_approved ? styles.statusApproved : styles.statusPending
+                        }`}
+                      >
+                        {p.is_approved ? "Approved" : "Pending"}
+                      </span>
+                    </div>
+
+                    <PitchHours pitch={p} />
+                    <AmenityTags pitch={p} />
+
+                    {p.other_services && (
+                      <div className={styles.otherServices}>
+                        <b>Other services:</b> {p.other_services}
+                      </div>
+                    )}
+
+                    <div className={styles.hintText}>
+                      <Icon name="tag" size={12} />
+                      Click card to open slot table and manage bookings
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
+    </div>
+    
   );
 }

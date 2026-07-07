@@ -6,6 +6,7 @@ from accounts.models import User, UserRole
 from .serializers import RegisterSerializer
 from pitches.models import Tenant
 
+''' check if it is admin '''
 def _require_admin(request):
     return request.user.is_authenticated and request.user.role == "ADMIN"
 

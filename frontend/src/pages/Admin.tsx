@@ -3,6 +3,10 @@ import { useNavigate } from "react-router-dom";
 import type { Pitch } from "../lib/pitches";
 import AddButton from "../components/AddButton";
 import PitchWizardModal from "../components/PitchWizardModal";
+import LoadingBall from "../pages/LoadingBall";
+import styles from "./css/Admin.module.css";
+import ToastContainer, { showToast } from "../pages/Toast";
+
 import {
   approveOwner,
   approvePitch,
@@ -13,6 +17,7 @@ import {
   listPitches,
   updatePitch,
 } from "../lib/pitches";
+import AppHeader from "./AppHeader";
 
 type OwnerRow = {
   id: string;
@@ -22,6 +27,80 @@ type OwnerRow = {
 };
 
 type ApprovalFilter = "all" | "approved" | "not_approved";
+
+type IconName =
+  | "clock"
+  | "pin"
+  | "tag"
+  | "shirt"
+  | "droplet"
+  | "car"
+  | "bulb"
+  | "imageOff"
+  | "mail";
+
+function Icon({ name, size = 15 }: { name: IconName; size?: number }) {
+  const paths: Record<IconName, React.ReactNode> = {
+    clock: (
+      <>
+        <circle cx="12" cy="12" r="9" />
+        <polyline points="12 7 12 12 16 14" />
+      </>
+    ),
+    pin: (
+      <>
+        <path d="M12 21s-7-7.58-7-12a7 7 0 0 1 14 0c0 4.42-7 12-7 12z" />
+        <circle cx="12" cy="9" r="2.5" />
+      </>
+    ),
+    tag: (
+      <>
+        <path d="M20.59 13.41 12 22 2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
+        <circle cx="7" cy="7" r="1.4" />
+      </>
+    ),
+    shirt: <path d="M8 3 4 6v4l2-1v11h12V9l2 1V6l-4-3-2 2h-4L8 3z" />,
+    droplet: <path d="M12 2s6 7.5 6 12a6 6 0 0 1-12 0c0-4.5 6-12 6-12z" />,
+    car: (
+      <>
+        <path d="M3 13l1.2-3.6A2 2 0 0 1 6.1 8h11.8a2 2 0 0 1 1.9 1.4L21 13v5a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1v-1H6v1a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z" />
+        <circle cx="7" cy="17" r="1.4" />
+        <circle cx="17" cy="17" r="1.4" />
+      </>
+    ),
+    bulb: (
+      <path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.2 1 2.3h6c0-1.1.4-1.8 1-2.3A7 7 0 0 0 12 2z" />
+    ),
+    imageOff: (
+      <>
+        <rect x="3" y="3" width="18" height="18" rx="2" />
+        <circle cx="8.5" cy="8.5" r="1.4" />
+        <path d="M21 15l-5-5L5 21" />
+      </>
+    ),
+    mail: (
+      <>
+        <rect x="3" y="5" width="18" height="14" rx="2" />
+        <path d="M3 7l9 6 9-6" />
+      </>
+    ),
+  };
+
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      {paths[name]}
+    </svg>
+  );
+}
 
 function matchesSearch(p: Pitch, search: string) {
   const q = search.trim().toLowerCase();
@@ -66,6 +145,72 @@ function matchesApproval(p: Pitch, approval: ApprovalFilter) {
   if (approval === "all") return true;
   if (approval === "approved") return p.is_approved;
   return !p.is_approved;
+}
+
+function CardImage({ pitch }: { pitch: Pitch }) {
+  return (
+    <div className={styles.cardImage}>
+      {pitch.cover_image_url ? (
+        <img src={pitch.cover_image_url} alt={pitch.name} />
+      ) : (
+        <div className={styles.cardImagePlaceholder}>
+          <Icon name="imageOff" size={30} />
+          No photo yet
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PitchHours({ pitch }: { pitch: Pitch }) {
+  const hours =
+    pitch.opening_time_label && pitch.closing_time_label
+      ? `${pitch.opening_time_label} - ${pitch.closing_time_label}`
+      : `${pitch.opening_time} - ${pitch.closing_time}`;
+
+  return (
+    <div className={styles.metaGrid}>
+      <div className={styles.metaItem}>
+        <Icon name="clock" />
+        {hours}
+      </div>
+      <div className={styles.metaItem}>
+        <Icon name="tag" />
+        Hourly <b>{pitch.hourly_price}</b>
+      </div>
+      <div className={styles.metaItem}>
+        <Icon name="tag" />
+        Weekly <b>{pitch.weekly_price}</b>
+      </div>
+      <div className={styles.metaItem}>
+        <Icon name="tag" />
+        Monthly <b>{pitch.monthly_price}</b>
+      </div>
+    </div>
+  );
+}
+
+function AmenityTags({ pitch }: { pitch: Pitch }) {
+  const items: Array<{ label: string; on: boolean; icon: IconName }> = [
+    { label: "Dressing room", on: pitch.has_dressing_room, icon: "shirt" },
+    { label: "Showers", on: pitch.has_showers, icon: "droplet" },
+    { label: "Parking", on: pitch.has_parking, icon: "car" },
+    { label: "Lighting", on: pitch.has_lighting, icon: "bulb" },
+  ];
+
+  return (
+    <div className={styles.tagRow}>
+      {items.map((item) => (
+        <span
+          key={item.label}
+          className={`${styles.tag} ${item.on ? styles.tagYes : styles.tagNo}`}
+        >
+          <Icon name={item.icon} size={12} />
+          {item.label}
+        </span>
+      ))}
+    </div>
+  );
 }
 
 export default function Admin() {
@@ -124,9 +269,11 @@ export default function Admin() {
     try {
       await approveOwner(id);
       setMsg("Owner approved.");
+      showToast("Owner approved.", "update");
       await refresh();
     } catch {
       setMsg("Failed to approve owner.");
+      showToast("Approve Failed.", "delete");
     }
   }
 
@@ -135,9 +282,11 @@ export default function Admin() {
     try {
       const res = await approvePitch(id);
       setMsg(res?.ok ? "Pitch approved." : "Could not approve pitch.");
+      showToast("Pitch approved.", "create");
       await refresh();
     } catch {
       setMsg("Failed to approve pitch.");
+      showToast("Pitch Approve Failed.", "delete");
     }
   }
 
@@ -166,353 +315,336 @@ export default function Admin() {
   }, [allPitches, search, maxPrice, amenities, approvalFilter]);
 
   return (
-    <div style={{ padding: 24 }}>
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 12,
-        }}
-      >
-        <h2 style={{ margin: 0 }}>Admin</h2>
-        <AddButton onClick={() => setOpenAdd(true)} />
-      </div>
+    <div>
+      <AppHeader variant="logout" /> 
+    <div className={styles.page}>
+      <ToastContainer />
+      <div className={styles.container}>
+        <div className={styles.topBar}>
+          <div className={styles.titleGroup}>
+            <div className={styles.eyebrow}>Control panel</div>
+            <h2 className={styles.title}>Admin</h2>
+          </div>
+          <AddButton onClick={() => setOpenAdd(true)} />
+        </div>
 
-      {msg && <p style={{ marginTop: 12 }}>{msg}</p>}
+        {msg && <p className={styles.message}>{msg}</p>}
 
-      <PitchWizardModal
-        open={openAdd}
-        onClose={() => setOpenAdd(false)}
-        isAdmin={true}
-        owners={owners}
-        onSubmit={async (payload) => {
-          await createPitch(payload);
-          setMsg("Pitch created (pending approval).");
-          setOpenAdd(false);
-          await refresh();
-        }}
-      />
-
-      <PitchWizardModal
-        open={!!editingPitch}
-        onClose={() => setEditingPitch(null)}
-        isAdmin={true}
-        owners={owners}
-        mode="edit"
-        initialData={
-          editingPitch
-            ? {
-                id: editingPitch.id,
-                name: editingPitch.name,
-                address: editingPitch.address,
-                latitude: editingPitch.latitude,
-                longitude: editingPitch.longitude,
-                opening_time: editingPitch.opening_time,
-                closing_time: editingPitch.closing_time,
-                hourly_price: editingPitch.hourly_price,
-                weekly_price: editingPitch.weekly_price,
-                monthly_price: editingPitch.monthly_price,
-                min_hours: editingPitch.min_hours,
-                allow_hourly: editingPitch.allow_hourly,
-                allow_weekly: editingPitch.allow_weekly,
-                allow_monthly: editingPitch.allow_monthly,
-                has_dressing_room: editingPitch.has_dressing_room,
-                has_showers: editingPitch.has_showers,
-                has_parking: editingPitch.has_parking,
-                has_lighting: editingPitch.has_lighting,
-                other_services: editingPitch.other_services,
-              }
-            : undefined
-        }
-        onSubmit={async (payload) => {
-          if (!editingPitch?.id) return;
-          await updatePitch(editingPitch.id, payload);
-          setMsg("Pitch updated successfully.");
-          setEditingPitch(null);
-          await refresh();
-        }}
-      />
-
-      <hr style={{ margin: "18px 0" }} />
-
-      <h3>Pitch Filters</h3>
-      <div
-        style={{
-          display: "grid",
-          gap: 12,
-          gridTemplateColumns: "2fr 1fr 1fr 1fr",
-          maxWidth: 980,
-          marginBottom: 18,
-        }}
-      >
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by pitch name or address"
-          style={{ padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
+        <PitchWizardModal
+          open={openAdd}
+          onClose={() => setOpenAdd(false)}
+          isAdmin={true}
+          owners={owners}
+          onSubmit={async (payload) => {
+            await createPitch(payload);
+            setMsg("Pitch created (pending approval).");
+            setOpenAdd(false);
+            await refresh();
+          }}
         />
 
-        <select
-          value={approvalFilter}
-          onChange={(e) => setApprovalFilter(e.target.value as ApprovalFilter)}
-          style={{ padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
-        >
-          <option value="all">All statuses</option>
-          <option value="approved">Approved</option>
-          <option value="not_approved">Not approved</option>
-        </select>
-
-        <input
-          value={maxPrice}
-          onChange={(e) => setMaxPrice(e.target.value)}
-          placeholder="Max price"
-          style={{ padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
+        <PitchWizardModal
+          open={!!editingPitch}
+          onClose={() => setEditingPitch(null)}
+          isAdmin={true}
+          owners={owners}
+          mode="edit"
+          initialData={
+            editingPitch
+              ? {
+                  id: editingPitch.id,
+                  name: editingPitch.name,
+                  address: editingPitch.address,
+                  latitude: editingPitch.latitude,
+                  longitude: editingPitch.longitude,
+                  opening_time: editingPitch.opening_time,
+                  closing_time: editingPitch.closing_time,
+                  hourly_price: editingPitch.hourly_price,
+                  weekly_price: editingPitch.weekly_price,
+                  monthly_price: editingPitch.monthly_price,
+                  min_hours: editingPitch.min_hours,
+                  allow_hourly: editingPitch.allow_hourly,
+                  allow_weekly: editingPitch.allow_weekly,
+                  allow_monthly: editingPitch.allow_monthly,
+                  has_dressing_room: editingPitch.has_dressing_room,
+                  has_showers: editingPitch.has_showers,
+                  has_parking: editingPitch.has_parking,
+                  has_lighting: editingPitch.has_lighting,
+                  other_services: editingPitch.other_services,
+                  image_urls: editingPitch.image_urls,
+                }
+              : undefined
+          }
+          onSubmit={async (payload) => {
+            if (!editingPitch?.id) return;
+            await updatePitch(editingPitch.id, payload);
+            setMsg("Pitch updated successfully.");
+            setEditingPitch(null);
+            await refresh();
+          }}
         />
 
-        <button
-          onClick={() => {
-            setSearch("");
-            setApprovalFilter("all");
-            setMaxPrice("");
-            setAmenities({
-              dressing: false,
-              showers: false,
-              parking: false,
-              lighting: false,
-            });
-          }}
-          style={{
-            padding: "10px 14px",
-            borderRadius: 10,
-            border: "1px solid #ddd",
-            background: "#fff",
-            cursor: "pointer",
-          }}
-        >
-          Clear filters
-        </button>
-      </div>
+        <div className={styles.filtersCard}>
+          <div className={styles.filtersHeading}>Pitch filters</div>
+          <div className={styles.filtersGrid}>
+            <input
+              className={styles.input}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by pitch name or address"
+            />
 
-      <div style={{ display: "flex", gap: 18, flexWrap: "wrap", marginBottom: 18 }}>
-        <label>
-          <input
-            type="checkbox"
-            checked={amenities.dressing}
-            onChange={(e) =>
-              setAmenities((prev) => ({ ...prev, dressing: e.target.checked }))
-            }
-          />{" "}
-          Dressing room
-        </label>
-        <label>
-          <input
-            type="checkbox"
-            checked={amenities.showers}
-            onChange={(e) =>
-              setAmenities((prev) => ({ ...prev, showers: e.target.checked }))
-            }
-          />{" "}
-          Showers
-        </label>
-        <label>
-          <input
-            type="checkbox"
-            checked={amenities.parking}
-            onChange={(e) =>
-              setAmenities((prev) => ({ ...prev, parking: e.target.checked }))
-            }
-          />{" "}
-          Parking
-        </label>
-        <label>
-          <input
-            type="checkbox"
-            checked={amenities.lighting}
-            onChange={(e) =>
-              setAmenities((prev) => ({ ...prev, lighting: e.target.checked }))
-            }
-          />{" "}
-          Lighting
-        </label>
-      </div>
+            <select
+              className={styles.select}
+              value={approvalFilter}
+              onChange={(e) => setApprovalFilter(e.target.value as ApprovalFilter)}
+            >
+              <option value="all">All statuses</option>
+              <option value="approved">Approved</option>
+              <option value="not_approved">Not approved</option>
+            </select>
 
-      <hr style={{ margin: "18px 0" }} />
+            <input
+              className={styles.input}
+              value={maxPrice}
+              onChange={(e) => setMaxPrice(e.target.value)}
+              placeholder="Max price"
+            />
 
-      <h3>Pending Owners</h3>
-      {loading ? <p>Loading...</p> : null}
-      {!loading && pendingOwners.length === 0 ? <p>None</p> : null}
-
-      <ul>
-        {pendingOwners.map((o) => (
-          <li key={o.id} style={{ marginBottom: 8 }}>
-            <b>{o.username}</b> ({o.email || "-"}){" "}
-            <button onClick={() => onApproveOwner(o.id)}>Approve</button>
-          </li>
-        ))}
-      </ul>
-
-      <hr style={{ margin: "18px 0" }} />
-
-      <h3>Pending Pitches</h3>
-      {!loading && filteredPendingPitches.length === 0 ? <p>None</p> : null}
-
-      <div style={{ display: "grid", gap: 12, maxWidth: 860 }}>
-        {filteredPendingPitches.map((p) => (
-          <div
-            key={p.id}
-            onClick={() => goToPitch(p.id)}
-            style={{
-              border: "1px solid #ddd",
-              borderRadius: 12,
-              padding: 12,
-              background: "#fff",
-              cursor: "pointer",
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                gap: 12,
-                alignItems: "flex-start",
+            <button
+              className={styles.clearBtn}
+              onClick={() => {
+                setSearch("");
+                setApprovalFilter("all");
+                setMaxPrice("");
+                setAmenities({
+                  dressing: false,
+                  showers: false,
+                  parking: false,
+                  lighting: false,
+                });
               }}
             >
-              <div>
-                <div style={{ fontWeight: 700, fontSize: 18 }}>{p.name}</div>
-                <div style={{ color: "#555", marginTop: 6 }}>
-                  {p.address || "—"}
-                </div>
-              </div>
-
-              <div style={{ display: "flex", gap: 8 }}>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onApprovePitch(p.id);
-                  }}
-                >
-                  Approve
-                </button>
-
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setMsg("");
-                    setEditingPitch(p);
-                  }}
-                  style={{
-                    padding: "8px 12px",
-                    borderRadius: 10,
-                    border: "1px solid #ddd",
-                    background: "#fff",
-                    cursor: "pointer",
-                    fontWeight: 600,
-                  }}
-                >
-                  Edit
-                </button>
-              </div>
-            </div>
-
-            <div style={{ marginTop: 10, fontSize: 14 }}>
-              Working hours:{" "}
-              {p.opening_time_label && p.closing_time_label
-                ? `${p.opening_time_label} - ${p.closing_time_label}`
-                : `${p.opening_time} - ${p.closing_time}`}
-            </div>
-
-            <div style={{ marginTop: 8, fontSize: 14 }}>
-              Hourly: {p.hourly_price} | Weekly: {p.weekly_price} | Monthly:{" "}
-              {p.monthly_price}
-            </div>
+              Clear filters
+            </button>
           </div>
-        ))}
-      </div>
 
-      <hr style={{ margin: "18px 0" }} />
-
-      <h3>All Pitches</h3>
-      {!loading && filteredAllPitches.length === 0 ? <p>None</p> : null}
-
-      <div style={{ display: "grid", gap: 12, maxWidth: 860 }}>
-        {filteredAllPitches.map((p) => (
-          <div
-            key={p.id}
-            onClick={() => goToPitch(p.id)}
-            style={{
-              border: "1px solid #ddd",
-              borderRadius: 12,
-              padding: 12,
-              background: "#fff",
-              cursor: "pointer",
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                gap: 12,
-                alignItems: "flex-start",
-              }}
-            >
-              <div>
-                <div style={{ fontWeight: 700, fontSize: 18 }}>{p.name}</div>
-                <div style={{ color: "#555", marginTop: 6 }}>
-                  {p.address || "—"}
-                </div>
-              </div>
-
-              <div style={{ textAlign: "right" }}>
-                <div>
-                  Status:{" "}
-                  <b style={{ color: p.is_approved ? "green" : "#b00020" }}>
-                    {p.is_approved ? "Approved" : "Pending"}
-                  </b>
-                </div>
-
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setMsg("");
-                    setEditingPitch(p);
-                  }}
-                  style={{
-                    marginTop: 10,
-                    padding: "8px 12px",
-                    borderRadius: 10,
-                    border: "1px solid #ddd",
-                    background: "#fff",
-                    cursor: "pointer",
-                    fontWeight: 600,
-                  }}
-                >
-                  Edit
-                </button>
-              </div>
-            </div>
-
-            <div style={{ marginTop: 10, fontSize: 14 }}>
-              Working hours:{" "}
-              {p.opening_time_label && p.closing_time_label
-                ? `${p.opening_time_label} - ${p.closing_time_label}`
-                : `${p.opening_time} - ${p.closing_time}`}
-            </div>
-
-            <div style={{ marginTop: 8, fontSize: 14 }}>
-              Hourly: {p.hourly_price} | Weekly: {p.weekly_price} | Monthly:{" "}
-              {p.monthly_price}
-            </div>
-
-            <div style={{ marginTop: 6, fontSize: 14 }}>
-              Dressing room: {p.has_dressing_room ? "Yes" : "No"} | Showers:{" "}
-              {p.has_showers ? "Yes" : "No"} | Parking:{" "}
-              {p.has_parking ? "Yes" : "No"} | Lighting:{" "}
-              {p.has_lighting ? "Yes" : "No"}
-            </div>
+          <div className={styles.amenityRow}>
+            <label className={styles.chip}>
+              <input
+                className={styles.checkbox}
+                type="checkbox"
+                checked={amenities.dressing}
+                onChange={(e) =>
+                  setAmenities((prev) => ({ ...prev, dressing: e.target.checked }))
+                }
+              />
+              <Icon name="shirt" size={13} />
+              Dressing room
+            </label>
+            <label className={styles.chip}>
+              <input
+                className={styles.checkbox}
+                type="checkbox"
+                checked={amenities.showers}
+                onChange={(e) =>
+                  setAmenities((prev) => ({ ...prev, showers: e.target.checked }))
+                }
+              />
+              <Icon name="droplet" size={13} />
+              Showers
+            </label>
+            <label className={styles.chip}>
+              <input
+                className={styles.checkbox}
+                type="checkbox"
+                checked={amenities.parking}
+                onChange={(e) =>
+                  setAmenities((prev) => ({ ...prev, parking: e.target.checked }))
+                }
+              />
+              <Icon name="car" size={13} />
+              Parking
+            </label>
+            <label className={styles.chip}>
+              <input
+                className={styles.checkbox}
+                type="checkbox"
+                checked={amenities.lighting}
+                onChange={(e) =>
+                  setAmenities((prev) => ({ ...prev, lighting: e.target.checked }))
+                }
+              />
+              <Icon name="bulb" size={13} />
+              Lighting
+            </label>
           </div>
-        ))}
+        </div>
+
+        <hr className={styles.divider} />
+
+        <div className={styles.section}>
+          <div className={styles.sectionHeader}>
+            <div className={styles.sectionTitle}>Pending owners</div>
+            {!loading && <span className={styles.countBadge}>{pendingOwners.length}</span>}
+          </div>
+
+          {loading ? (
+            <div className={styles.loadingSlot}>
+              <LoadingBall label="Loading admin data..." />
+            </div>
+          ) : (
+            <>
+              {pendingOwners.length === 0 ? (
+                <p className={styles.emptyText}>No pending owners.</p>
+              ) : (
+                <ul className={styles.ownerList}>
+                  {pendingOwners.map((o) => (
+                    <li key={o.id} className={styles.ownerRow}>
+                      <div className={styles.ownerInfo}>
+                        <span className={styles.ownerName}>{o.username}</span>
+                        <span className={styles.ownerEmail}>
+                          <Icon name="mail" size={12} />
+                          {o.email || "-"}
+                        </span>
+                      </div>
+                      <button className={styles.approveBtn} onClick={() => onApproveOwner(o.id)}>
+                        Approve
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </>
+          )}
+        </div>
+
+        <hr className={styles.divider} />
+
+        {!loading && (
+          <div className={styles.section}>
+            <div className={styles.sectionHeader}>
+              <div className={styles.sectionTitle}>Pending pitches</div>
+              <span className={styles.countBadge}>{filteredPendingPitches.length}</span>
+            </div>
+
+            {filteredPendingPitches.length === 0 ? (
+              <p className={styles.emptyText}>No pending pitches match these filters.</p>
+            ) : (
+              <div className={styles.cardGrid}>
+                {filteredPendingPitches.map((p, index) => (
+                  <div
+                    key={p.id}
+                    onClick={() => goToPitch(p.id)}
+                    className={styles.pitchCard}
+                    style={{ "--i": index } as React.CSSProperties}
+                  >
+                    <CardImage pitch={p} />
+
+                    <div className={styles.cardBody}>
+                      <div className={styles.cardTitleRow}>
+                        <div>
+                          <div className={styles.pitchName}>{p.name}</div>
+                          <div className={styles.pitchAddress}>
+                            <Icon name="pin" size={13} />
+                            {p.address || "No address on file"}
+                          </div>
+                        </div>
+
+                        <button
+                          className={styles.approvePillBtn}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onApprovePitch(p.id);
+                          }}
+                        >
+                          Approve
+                        </button>
+                      </div>
+
+                      <PitchHours pitch={p} />
+                    </div>
+
+                    <button
+                      className={styles.editCornerBtn}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setMsg("");
+                        setEditingPitch(p);
+                      }}
+                    >
+                      Edit
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        <hr className={styles.divider} />
+
+        {!loading && (
+          <div className={styles.section}>
+            <div className={styles.sectionHeader}>
+              <div className={styles.sectionTitle}>All pitches</div>
+              <span className={styles.countBadge}>{filteredAllPitches.length}</span>
+            </div>
+
+            {filteredAllPitches.length === 0 ? (
+              <p className={styles.emptyText}>No pitches match these filters.</p>
+            ) : (
+              <div className={styles.cardGrid}>
+                {filteredAllPitches.map((p, index) => (
+                  <div
+                    key={p.id}
+                    onClick={() => goToPitch(p.id)}
+                    className={styles.pitchCard}
+                    style={{ "--i": index } as React.CSSProperties}
+                  >
+                    <CardImage pitch={p} />
+
+                    <div className={styles.cardBody}>
+                      <div className={styles.cardTitleRow}>
+                        <div>
+                          <div className={styles.pitchName}>{p.name}</div>
+                          <div className={styles.pitchAddress}>
+                            <Icon name="pin" size={13} />
+                            {p.address || "No address on file"}
+                          </div>
+                        </div>
+
+                        <span
+                          className={`${styles.statusPill} ${
+                            p.is_approved ? styles.statusApproved : styles.statusPending
+                          }`}
+                        >
+                          {p.is_approved ? "Approved" : "Pending"}
+                        </span>
+                      </div>
+
+                      <PitchHours pitch={p} />
+                      <AmenityTags pitch={p} />
+                    </div>
+
+                    <button
+                      className={styles.editCornerBtn}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setMsg("");
+                        setEditingPitch(p);
+                      }}
+                    >
+                      Edit
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
-  );
+  </div> 
+ );
 }

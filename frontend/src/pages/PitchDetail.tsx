@@ -9,9 +9,20 @@ import type {
   MonthlyWeek,
   Pitch,
 } from "../lib/pitches";
+import styles from "./css/PitchDetail.module.css";
+import LoadingBall from "./LoadingBall";
+import { showToast } from "./Toast";
+import ToastContainer from "./Toast";
+import AppHeader from "./AppHeader";
 
 type BookingMode = "daily" | "weekly" | "monthly";
 type SelectedMap = Record<string, AvailabilitySlot>;
+
+// The pitch payload may include a gallery of images (in addition to the
+// single `cover_image_url`). Adjust the field name below if your API
+// returns something different, e.g. `pitch.photos` or `pitch.gallery`.
+type PitchImageEntry = string | { id?: string | number; image_url?: string; url?: string };
+type PitchWithGallery = Pitch & { image_urls?: PitchImageEntry[] };
 
 function priceForMode(pitch: Pitch, mode: BookingMode) {
   if (mode === "daily") return Number(pitch.hourly_price || 0);
@@ -19,59 +30,137 @@ function priceForMode(pitch: Pitch, mode: BookingMode) {
   return Number(pitch.monthly_price || 0);
 }
 
-function slotButtonStyle(slot: AvailabilitySlot, selected: boolean) {
-  if (slot.status === "BOOKED") {
-    return {
-      padding: "10px 8px",
-      borderRadius: 10,
-      background: "#ffe8e8",
-      color: "#b00020",
-      border: "1px solid #f2c6c6",
-      cursor: "not-allowed",
-      fontSize: 12,
-    };
-  }
+function slotClassName(slot: AvailabilitySlot, selected: boolean) {
+  if (slot.status === "BOOKED") return styles.slotBooked;
+  if (!slot.is_available) return styles.slotUnavailable;
+  if (selected) return styles.slotSelected;
+  return styles.slotDefault;
+}
 
-  if (!slot.is_available) {
-    return {
-      padding: "10px 8px",
-      borderRadius: 10,
-      background: "#efefef",
-      color: "#999",
-      border: "1px solid #ddd",
-      cursor: "not-allowed",
-      fontSize: 12,
-    };
-  }
+function resolveImageUrl(entry: PitchImageEntry): string {
+  if (typeof entry === "string") return entry;
+  return entry.image_url || entry.url || "";
+}
 
-  if (selected) {
-    return {
-      padding: "10px 8px",
-      borderRadius: 10,
-      background: "#111",
-      color: "#fff",
-      border: "1px solid #111",
-      cursor: "pointer",
-      fontSize: 12,
-    };
-  }
+/* ---------- small inline icons (purely presentational) ---------- */
 
-  return {
-    padding: "10px 8px",
-    borderRadius: 10,
-    background: "#fff",
-    color: "#222",
-    border: "1px solid #ddd",
-    cursor: "pointer",
-    fontSize: 12,
-  };
+function ArrowLeftIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" {...props}>
+      <path d="M19 12H5M11 18l-6-6 6-6" />
+    </svg>
+  );
+}
+
+function PinIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" {...props}>
+      <path d="M12 21s-6.5-5.7-6.5-11A6.5 6.5 0 1118.5 10c0 5.3-6.5 11-6.5 11z" />
+      <circle cx="12" cy="10" r="2.2" />
+    </svg>
+  );
+}
+
+function ClockIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" {...props}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3.5 2" />
+    </svg>
+  );
+}
+
+function ShirtIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" {...props}>
+      <path d="M8 4L4 6.5 5.5 10l2-1V20h9V9l2 1L20 6.5 16 4l-2 1.5h-4L8 4z" />
+    </svg>
+  );
+}
+
+function ShowerIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" {...props}>
+      <path d="M6 9h12M8 13v.01M12 13v.01M16 13v.01M8 17v.01M12 17v.01M16 17v.01" />
+      <path d="M17 6a5 5 0 00-10 0" />
+    </svg>
+  );
+}
+
+function ParkingIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" {...props}>
+      <rect x="4" y="3" width="16" height="18" rx="2" />
+      <path d="M9 17V7h3.5a2.75 2.75 0 010 5.5H9" />
+    </svg>
+  );
+}
+
+function LightIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" {...props}>
+      <path d="M9 18h6M10 21h4" />
+      <path d="M12 3a6 6 0 00-3.5 10.9c.5.4.8 1 .8 1.6h5.4c0-.6.3-1.2.8-1.6A6 6 0 0012 3z" />
+    </svg>
+  );
+}
+
+function InfoIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" {...props}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 8v.01M11 12h1v5h1" />
+    </svg>
+  );
+}
+
+function CheckIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" {...props}>
+      <path d="M20 6L9 17l-5-5" />
+    </svg>
+  );
+}
+
+function LockIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" {...props}>
+      <rect x="4" y="10" width="16" height="10" rx="2" />
+      <path d="M8 10V7a4 4 0 018 0v3" />
+    </svg>
+  );
+}
+
+function ChevronLeftIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" {...props}>
+      <path d="M15 18l-6-6 6-6" />
+    </svg>
+  );
+}
+
+function ChevronRightIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" {...props}>
+      <path d="M9 18l6-6-6-6" />
+    </svg>
+  );
+}
+
+function SearchOffIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" {...props}>
+      <circle cx="11" cy="11" r="7" />
+      <path d="M21 21l-4.3-4.3" />
+    </svg>
+  );
 }
 
 export default function PitchDetail() {
   const { pitchId } = useParams();
 
   const [user, setUser] = useState<any>(null);
-  const [pitch, setPitch] = useState<Pitch | null>(null);
+  const [pitch, setPitch] = useState<PitchWithGallery | null>(null);
   const [days, setDays] = useState<AvailabilityDay[]>([]);
   const [monthlyWeeks, setMonthlyWeeks] = useState<MonthlyWeek[]>([]);
   const [existingBookings, setExistingBookings] = useState<ExistingBooking[]>([]);
@@ -82,6 +171,7 @@ export default function PitchDetail() {
   const [monthlyWeekIndex, setMonthlyWeekIndex] = useState(0);
   const [bookedForName, setBookedForName] = useState("");
   const [notes, setNotes] = useState("");
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
 
   const role = user?.role;
   const isManager = role === "OWNER" || role === "ADMIN";
@@ -96,6 +186,7 @@ export default function PitchDetail() {
         setDays(data.daily_weekly_days);
         setMonthlyWeeks(data.monthly_weeks);
         setExistingBookings(data.existing_bookings || []);
+        setActiveImageIndex(0);
       } finally {
         setLoading(false);
       }
@@ -103,6 +194,26 @@ export default function PitchDetail() {
 
     load();
   }, [pitchId]);
+
+  const galleryImages = useMemo(() => {
+    if (!pitch) return [];
+    const fromGallery = (pitch.image_urls || [])
+      .map(resolveImageUrl)
+      .filter((url): url is string => Boolean(url));
+    if (fromGallery.length > 0) return fromGallery;
+    return pitch.cover_image_url ? [pitch.cover_image_url] : [];
+  }, [pitch]);
+
+  const hasMultipleImages = galleryImages.length > 1;
+  const activeImage = galleryImages[activeImageIndex] || galleryImages[0];
+
+  function goToPrevImage() {
+    setActiveImageIndex((i) => (i - 1 + galleryImages.length) % galleryImages.length);
+  }
+
+  function goToNextImage() {
+    setActiveImageIndex((i) => (i + 1) % galleryImages.length);
+  }
 
   const selectedList = useMemo(() => {
     return Object.values(selected).sort((a, b) => a.start_iso.localeCompare(b.start_iso));
@@ -208,6 +319,12 @@ export default function PitchDetail() {
           ? `Slot occupied successfully. Booking code: ${res.booking_code}`
           : `Booking created successfully. Booking code: ${res.booking_code}`
       );
+      showToast(
+        isManager
+          ? `Slot occupied. Booking code: ${res.booking_code}`
+          : `Booking created. Booking code: ${res.booking_code}`,
+        "create"
+      );
 
       const refreshed = await getPitchDetail(pitchId);
       setPitch(refreshed.pitch);
@@ -218,316 +335,380 @@ export default function PitchDetail() {
       setBookedForName("");
       setNotes("");
     } catch (e: any) {
-      setBookingMsg(e?.response?.data?.detail || "Booking failed.");
+      const errMsg = e?.response?.data?.detail || "Booking failed.";
+      setBookingMsg(errMsg);
+      showToast(errMsg, "delete");
     }
   }
 
-  if (loading) return <div style={{ padding: 24 }}>Loading...</div>;
-  if (!pitch) return <div style={{ padding: 24 }}>Pitch not found.</div>;
+  if (loading) {
+    return <LoadingBall fullscreen label="Loading pitch..." size="sm" />;
+  }
+
+  if (!pitch) {
+    return (
+      <div className={styles.page}>
+        <div className={styles.notFoundWrap}>
+          <div className={styles.notFoundCard}>
+            <SearchOffIcon className={styles.notFoundIcon} />
+            <div className={styles.notFoundTitle}>Pitch not found</div>
+            <div className={styles.notFoundText}>
+              It may have been removed or the link is incorrect.
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const displayedDays =
     mode === "monthly" ? monthlyWeeks[monthlyWeekIndex]?.days || [] : days;
 
+  const amenityEntries = [
+    { active: pitch.has_dressing_room, label: "Dressing room", Icon: ShirtIcon },
+    { active: pitch.has_showers, label: "Showers", Icon: ShowerIcon },
+    { active: pitch.has_parking, label: "Parking", Icon: ParkingIcon },
+    { active: pitch.has_lighting, label: "Lighting", Icon: LightIcon },
+  ].filter((a) => a.active);
+
   return (
-    <div style={{ minHeight: "100vh", background: "#f6f7f9", padding: 18 }}>
-      <div style={{ marginBottom: 12 }}>
-        <Link to={role === "OWNER" ? "/owner" : role === "ADMIN" ? "/admin" : "/app"}>
-          ← Back
-        </Link>
-      </div>
-
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 360px", gap: 18 }}>
-        <div
-          style={{
-            background: "#fff",
-            borderRadius: 20,
-            overflow: "hidden",
-            boxShadow: "0 6px 22px rgba(0,0,0,0.06)",
-            minHeight: "calc(100vh - 80px)",
-            display: "grid",
-            gridTemplateRows: "25% 75%",
-          }}
+    <div>
+    <AppHeader variant="logout" /> 
+    <div className={styles.page}>
+      <ToastContainer />
+      <div className={styles.shell}>
+        <Link
+          className={styles.backLink}
+          to={role === "OWNER" ? "/owner" : role === "ADMIN" ? "/admin" : "/app"}
         >
-          <div style={{ display: "grid", gridTemplateColumns: "38% 62%", minHeight: 240 }}>
-            <div style={{ background: "#e9ecef", display: "grid", placeItems: "center" }}>
-              {pitch.cover_image_url ? (
-                <img
-                  src={pitch.cover_image_url}
-                  alt={pitch.name}
-                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                />
-              ) : (
-                <div style={{ color: "#666" }}>Pitch image</div>
-              )}
-            </div>
+          <ArrowLeftIcon className={styles.backIcon} />
+          Back
+        </Link>
 
-            <div style={{ padding: 18, display: "grid", gap: 8, alignContent: "start" }}>
-              <div style={{ fontSize: 28, fontWeight: 800 }}>{pitch.name}</div>
-              <div style={{ color: "#555" }}>{pitch.address}</div>
-              <div style={{ color: "#333" }}>
-                Working hours: <b>{pitch.opening_time_label}</b> - <b>{pitch.closing_time_label}</b>
-              </div>
-              <div style={{ color: "#333" }}>
-                Hourly: <b>{pitch.hourly_price}</b> birr | Weekly: <b>{pitch.weekly_price}</b> birr | Monthly: <b>{pitch.monthly_price}</b> birr
-              </div>
-              <div style={{ color: "#333" }}>
-                Amenities:{" "}
-                {[
-                  pitch.has_dressing_room ? "Dressing room" : null,
-                  pitch.has_showers ? "Showers" : null,
-                  pitch.has_parking ? "Parking" : null,
-                  pitch.has_lighting ? "Lighting" : null,
-                ].filter(Boolean).join(", ") || "None"}
-              </div>
-              {pitch.other_services ? (
-                <div style={{ color: "#333" }}>Other services: {pitch.other_services}</div>
-              ) : null}
-            </div>
-          </div>
+        <div className={styles.layout}>
+          <div className={styles.mainCard}>
+            {/* ---------- gallery: big image + scrollable thumbnail changer ---------- */}
+            <div className={styles.gallery}>
+              <div className={styles.galleryFrame}>
+                <div className={styles.mainImageWrap}>
+                  {activeImage ? (
+                    <img key={activeImage} src={activeImage} alt={pitch.name} />
+                  ) : (
+                    <div className={styles.mainImagePlaceholder}>No photo yet</div>
+                  )}
 
-          <div style={{ padding: 16, overflow: "auto" }}>
-            <div style={{ display: "flex", gap: 10, marginBottom: 14, alignItems: "center" }}>
-              {(["daily", "weekly", "monthly"] as BookingMode[]).map((m) => (
-                <button
-                  key={m}
-                  onClick={() => {
-                    setMode(m);
-                    setSelected({});
-                    setBookingMsg("");
-                    if (m !== "monthly") setMonthlyWeekIndex(0);
-                  }}
-                  style={{
-                    padding: "10px 14px",
-                    borderRadius: 999,
-                    border: "1px solid #ddd",
-                    background: mode === m ? "#111" : "#fff",
-                    color: mode === m ? "#fff" : "#222",
-                    cursor: "pointer",
-                    fontWeight: 600,
-                  }}
-                >
-                  {m[0].toUpperCase() + m.slice(1)}
-                </button>
-              ))}
-
-              {mode === "monthly" && (
-                <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
-                  <button
-                    onClick={() => setMonthlyWeekIndex((v) => Math.max(0, v - 1))}
-                    disabled={monthlyWeekIndex === 0}
-                  >
-                    Prev
-                  </button>
-                  <div>Week {monthlyWeekIndex + 1}</div>
-                  <button
-                    onClick={() => setMonthlyWeekIndex((v) => Math.min(3, v + 1))}
-                    disabled={monthlyWeekIndex === 3}
-                  >
-                    Next
-                  </button>
-
-                  {canApplyWeek1ToAll && (
-                    <button onClick={applyWeek1ToAllWeeks}>
-                      Apply week 1 to all weeks
-                    </button>
+                  {hasMultipleImages && (
+                    <>
+                      <button
+                        type="button"
+                        className={`${styles.navBtn} ${styles.navBtnLeft}`}
+                        aria-label="Previous photo"
+                        onClick={goToPrevImage}
+                      >
+                        <ChevronLeftIcon />
+                      </button>
+                      <button
+                        type="button"
+                        className={`${styles.navBtn} ${styles.navBtnRight}`}
+                        aria-label="Next photo"
+                        onClick={goToNextImage}
+                      >
+                        <ChevronRightIcon />
+                      </button>
+                      <div className={styles.imageCounter}>
+                        {activeImageIndex + 1} / {galleryImages.length}
+                      </div>
+                    </>
                   )}
                 </div>
-              )}
-            </div>
 
-            <div style={{ display: "flex", gap: 16, marginBottom: 14, fontSize: 13 }}>
-              <div><span style={{ display: "inline-block", width: 14, height: 14, background: "#fff", border: "1px solid #ddd", marginRight: 6 }} /> Available</div>
-              <div><span style={{ display: "inline-block", width: 14, height: 14, background: "#111", marginRight: 6 }} /> Selected</div>
-              <div><span style={{ display: "inline-block", width: 14, height: 14, background: "#ffe8e8", border: "1px solid #f2c6c6", marginRight: 6 }} /> Occupied</div>
-            </div>
-
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: `repeat(${displayedDays.length}, minmax(160px, 1fr))`,
-                gap: 12,
-              }}
-            >
-              {displayedDays.map((day) => (
-                <div key={day.date} style={{ border: "1px solid #eee", borderRadius: 16, overflow: "hidden" }}>
-                  <div style={{ padding: 12, background: "#fafafa", borderBottom: "1px solid #eee" }}>
-                    <div style={{ fontWeight: 700 }}>{day.weekday}</div>
-                    <div style={{ fontSize: 13, color: "#666" }}>{day.display_date}</div>
+                {hasMultipleImages && (
+                  <div className={styles.thumbStrip}>
+                    {galleryImages.map((url, index) => (
+                      <button
+                        key={`${url}-${index}`}
+                        type="button"
+                        className={`${styles.thumbBtn} ${
+                          index === activeImageIndex ? styles.thumbBtnActive : ""
+                        }`}
+                        onClick={() => setActiveImageIndex(index)}
+                        aria-label={`View photo ${index + 1}`}
+                      >
+                        <img src={url} alt={`${pitch.name} ${index + 1}`} />
+                      </button>
+                    ))}
                   </div>
+                )}
+              </div>
+            </div>
 
-                  <div style={{ padding: 10, display: "grid", gap: 8 }}>
-                    {day.slots.map((slot) => {
-                      const isSelected = !!selected[slot.key];
-                      return (
-                        <button
-                          key={slot.key}
-                          type="button"
-                          onClick={() => toggleSlot(slot)}
-                          disabled={!slot.is_available}
-                          style={slotButtonStyle(slot, isSelected)}
-                        >
-                          {slot.label}
-                        </button>
-                      );
-                    })}
+            {/* ---------- details: name, location, hours, prices, amenities ---------- */}
+            <div className={styles.detailsSection}>
+              <div className={styles.detailsHeader}>
+                <div className={styles.detailsHeaderMain}>
+                  <div className={styles.heroTitle}>{pitch.name}</div>
+                  <div className={styles.heroAddress}>
+                    <PinIcon className={styles.heroAddressIcon} />
+                    <span>{pitch.address}</span>
                   </div>
                 </div>
-              ))}
-            </div>
-          </div>
-        </div>
 
-        <div
-          style={{
-            background: "#fff",
-            borderRadius: 20,
-            padding: 18,
-            boxShadow: "0 6px 22px rgba(0,0,0,0.06)",
-            alignSelf: "start",
-            position: "sticky",
-            top: 18,
-            display: "grid",
-            gap: 18,
-          }}
-        >
-          <div>
-            <div style={{ fontSize: 22, fontWeight: 800, marginBottom: 12 }}>
-              {isManager ? "Slot Control" : "Selected Hours"}
-            </div>
-            <div style={{ color: "#555", marginBottom: 10 }}>
-              Mode: <b>{mode}</b>
+                <div className={styles.heroHours}>
+                  <ClockIcon className={styles.heroHoursIcon} />
+                  {pitch.opening_time_label} – {pitch.closing_time_label}
+                </div>
+              </div>
+
+              <div className={styles.priceStrip}>
+                <div className={styles.priceCard}>
+                  <span className={styles.priceCardLabel}>Hourly</span>
+                  <span className={styles.priceCardValue}>{pitch.hourly_price} Br</span>
+                </div>
+                <div className={styles.priceCard}>
+                  <span className={styles.priceCardLabel}>Weekly</span>
+                  <span className={styles.priceCardValue}>{pitch.weekly_price} Br</span>
+                </div>
+                <div className={styles.priceCard}>
+                  <span className={styles.priceCardLabel}>Monthly</span>
+                  <span className={styles.priceCardValue}>{pitch.monthly_price} Br</span>
+                </div>
+              </div>
+
+              <div className={styles.amenityRow}>
+                {amenityEntries.length === 0 ? (
+                  <span className={styles.amenityEmpty}>No amenities listed</span>
+                ) : (
+                  amenityEntries.map(({ label, Icon }) => (
+                    <span key={label} className={styles.amenityChip}>
+                      <Icon className={styles.amenityChipIcon} />
+                      {label}
+                    </span>
+                  ))
+                )}
+              </div>
+
+              {pitch.other_services ? (
+                <div className={styles.otherServices}>
+                  <InfoIcon className={styles.otherServicesIcon} />
+                  <span>{pitch.other_services}</span>
+                </div>
+              ) : null}
             </div>
 
-            {selectedList.length === 0 ? (
-              <div style={{ color: "#777" }}>No hours selected yet. Total starts at 0 birr.</div>
-            ) : (
-              <div style={{ display: "grid", gap: 10, marginBottom: 14 }}>
-                {selectedList.map((slot) => (
-                  <div
-                    key={slot.key}
-                    style={{
-                      border: "1px solid #eee",
-                      borderRadius: 12,
-                      padding: 10,
-                      background: "#fafafa",
-                    }}
-                  >
-                    <div style={{ fontWeight: 600 }}>{new Date(slot.start_iso).toLocaleDateString()}</div>
-                    <div style={{ fontSize: 13, color: "#555" }}>{slot.label}</div>
-                    <div style={{ marginTop: 6 }}>{priceForMode(pitch, mode)} birr</div>
+            <div className={styles.bookingSection}>
+              <div className={styles.modeRow}>
+                <div className={styles.modeTabs}>
+                  {(["daily", "weekly", "monthly"] as BookingMode[]).map((m) => (
+                    <button
+                      key={m}
+                      onClick={() => {
+                        setMode(m);
+                        setSelected({});
+                        setBookingMsg("");
+                        if (m !== "monthly") setMonthlyWeekIndex(0);
+                      }}
+                      className={`${styles.modeTab} ${mode === m ? styles.modeTabActive : ""}`}
+                    >
+                      {m[0].toUpperCase() + m.slice(1)}
+                    </button>
+                  ))}
+                </div>
+
+                {mode === "monthly" && (
+                  <div className={styles.weekNav}>
+                    <button
+                      className={styles.weekNavBtn}
+                      onClick={() => setMonthlyWeekIndex((v) => Math.max(0, v - 1))}
+                      disabled={monthlyWeekIndex === 0}
+                    >
+                      <ChevronLeftIcon />
+                    </button>
+                    <div className={styles.weekLabel}>Week {monthlyWeekIndex + 1}</div>
+                    <button
+                      className={styles.weekNavBtn}
+                      onClick={() => setMonthlyWeekIndex((v) => Math.min(3, v + 1))}
+                      disabled={monthlyWeekIndex === 3}
+                    >
+                      <ChevronRightIcon />
+                    </button>
+
+                    {canApplyWeek1ToAll && (
+                      <button className={styles.applyWeekBtn} onClick={applyWeek1ToAllWeeks}>
+                        Apply week 1 to all weeks
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className={styles.legend}>
+                <div className={styles.legendItem}>
+                  <span className={`${styles.legendSwatch} ${styles.legendSwatchAvailable}`} />
+                  Available
+                </div>
+                <div className={styles.legendItem}>
+                  <span className={`${styles.legendSwatch} ${styles.legendSwatchSelected}`} />
+                  Selected
+                </div>
+                <div className={styles.legendItem}>
+                  <span className={`${styles.legendSwatch} ${styles.legendSwatchBooked}`} />
+                  Occupied
+                </div>
+              </div>
+
+              <div className={styles.daysGrid}>
+                {displayedDays.map((day) => (
+                  <div key={day.date} className={styles.dayColumn}>
+                    <div className={styles.dayHeader}>
+                      <div className={styles.dayWeekday}>{day.weekday}</div>
+                      <div className={styles.dayDate}>{day.display_date}</div>
+                    </div>
+
+                    <div className={styles.slotList}>
+                      {day.slots.map((slot) => {
+                        const isSelected = !!selected[slot.key];
+                        return (
+                          <button
+                            key={slot.key}
+                            type="button"
+                            onClick={() => toggleSlot(slot)}
+                            disabled={!slot.is_available}
+                            className={`${styles.slotBtn} ${slotClassName(slot, isSelected)}`}
+                          >
+                            {slot.status === "BOOKED" && <LockIcon />}
+                            {isSelected && slot.status !== "BOOKED" && <CheckIcon />}
+                            {slot.label}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
                 ))}
               </div>
-            )}
-
-            {isManager && (
-              <div style={{ display: "grid", gap: 10, marginBottom: 14 }}>
-                <div style={{ display: "grid", gap: 6 }}>
-                  <label style={{ fontWeight: 600 }}>Booked for</label>
-                  <input
-                    value={bookedForName}
-                    onChange={(e) => setBookedForName(e.target.value)}
-                    placeholder="Customer name (optional)"
-                    style={{ padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
-                  />
-                </div>
-                <div style={{ display: "grid", gap: 6 }}>
-                  <label style={{ fontWeight: 600 }}>Notes</label>
-                  <textarea
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    placeholder="Optional note"
-                    rows={3}
-                    style={{ padding: 10, borderRadius: 10, border: "1px solid #ddd", resize: "vertical" }}
-                  />
-                </div>
-              </div>
-            )}
-
-            <div style={{ borderTop: "1px solid #eee", paddingTop: 12, marginTop: 12 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-                <span>Hours selected</span>
-                <b>{selectedList.length}</b>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16 }}>
-                <span>Total</span>
-                <b>{total} birr</b>
-              </div>
-
-              <div style={{ display: "flex", gap: 10 }}>
-                <button onClick={clearSelection}>Clear</button>
-                <button
-                  onClick={handleBook}
-                  disabled={selectedList.length === 0}
-                  style={{
-                    flex: 1,
-                    padding: "10px 12px",
-                    borderRadius: 10,
-                    border: "none",
-                    background: "#111",
-                    color: "#fff",
-                  }}
-                >
-                  {isManager ? "Occupy / Cash Booking" : "Create Booking"}
-                </button>
-              </div>
-
-              {bookingMsg && (
-                <div style={{ marginTop: 12, fontSize: 14, color: "#0a7a34" }}>
-                  {bookingMsg}
-                </div>
-              )}
             </div>
           </div>
 
-          {isManager && (
-            <div style={{ borderTop: "1px solid #eee", paddingTop: 14 }}>
-              <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 12 }}>
-                Existing Bookings
+          <div className={styles.sidebar}>
+            <div className={styles.sidebarCard}>
+              <div className={styles.sidebarHead}>
+                <div className={styles.sidebarTitle}>
+                  {isManager ? "Slot Control" : "Selected Hours"}
+                </div>
+                <span className={styles.modeBadge}>{mode}</span>
               </div>
 
-              {existingBookings.length === 0 ? (
-                <div style={{ color: "#777" }}>No bookings yet for the coming weeks.</div>
+              {selectedList.length === 0 ? (
+                <div className={styles.emptySelection}>
+                  No hours selected yet. Total starts at 0 birr.
+                </div>
               ) : (
-                <div style={{ display: "grid", gap: 10, maxHeight: 360, overflowY: "auto" }}>
-                  {existingBookings.map((b) => (
-                    <div
-                      key={b.id}
-                      style={{
-                        border: "1px solid #eee",
-                        borderRadius: 12,
-                        padding: 10,
-                        background: "#fafafa",
-                      }}
-                    >
-                      <div style={{ fontWeight: 600 }}>{b.label}</div>
-                      <div style={{ fontSize: 13, color: "#555", marginTop: 4 }}>
-                        Code: {b.booking_code}
-                      </div>
-                      <div style={{ fontSize: 13, color: "#555", marginTop: 4 }}>
-                        Status: {b.status}
-                      </div>
-                      <div style={{ fontSize: 13, color: "#555", marginTop: 4 }}>
-                        Price: {b.total_price} birr
-                      </div>
-                      {b.booked_by ? (
-                        <div style={{ fontSize: 13, color: "#555", marginTop: 4 }}>
-                          By: {b.booked_by}
+                <div className={styles.selectedList}>
+                  {selectedList.map((slot) => (
+                    <div key={slot.key} className={styles.selectedItem}>
+                      <div className={styles.selectedItemText}>
+                        <div className={styles.selectedDate}>
+                          {new Date(slot.start_iso).toLocaleDateString()}
                         </div>
-                      ) : null}
-                      {b.notes ? (
-                        <div style={{ fontSize: 13, color: "#555", marginTop: 6, whiteSpace: "pre-wrap" }}>
-                          {b.notes}
-                        </div>
-                      ) : null}
+                        <div className={styles.selectedLabel}>{slot.label}</div>
+                      </div>
+                      <div className={styles.selectedPrice}>
+                        {priceForMode(pitch, mode)} Br
+                      </div>
                     </div>
                   ))}
                 </div>
               )}
+
+              {isManager && (
+                <>
+                  <div className={styles.fieldGroup}>
+                    <label className={styles.fieldLabel}>Booked for</label>
+                    <input
+                      className={styles.textInput}
+                      value={bookedForName}
+                      onChange={(e) => setBookedForName(e.target.value)}
+                      placeholder="Customer name (optional)"
+                    />
+                  </div>
+                  <div className={styles.fieldGroup}>
+                    <label className={styles.fieldLabel}>Notes</label>
+                    <textarea
+                      className={styles.textArea}
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
+                      placeholder="Optional note"
+                      rows={3}
+                    />
+                  </div>
+                </>
+              )}
+
+              <div className={styles.summaryBlock}>
+                <div className={styles.summaryRow}>
+                  <span>Hours selected</span>
+                  <b>{selectedList.length}</b>
+                </div>
+                <div className={styles.summaryTotalRow}>
+                  <span>Total</span>
+                  <span className={styles.summaryTotalValue}>{total} Br</span>
+                </div>
+
+                <div className={styles.actionRow}>
+                  <button className={styles.clearBtn} onClick={clearSelection}>
+                    Clear
+                  </button>
+                  <button
+                    className={styles.bookBtn}
+                    onClick={handleBook}
+                    disabled={selectedList.length === 0}
+                  >
+                    {isManager ? "Occupy / Cash Booking" : "Create Booking"}
+                  </button>
+                </div>
+
+                {bookingMsg && (
+                  <div className={styles.bookingMsg}>
+                    <CheckIcon className={styles.bookingMsgIcon} />
+                    <span>{bookingMsg}</span>
+                  </div>
+                )}
+              </div>
             </div>
-          )}
+
+            {isManager && (
+              <div className={styles.sidebarCard}>
+                <div className={styles.existingHead}>Existing Bookings</div>
+
+                {existingBookings.length === 0 ? (
+                  <div className={styles.existingEmpty}>
+                    No bookings yet for the coming weeks.
+                  </div>
+                ) : (
+                  <div className={styles.existingList}>
+                    {existingBookings.map((b) => (
+                      <div key={b.id} className={styles.existingCard}>
+                        <div className={styles.existingLabel}>{b.label}</div>
+                        <div className={styles.existingMetaRow}>
+                          <span className={styles.existingCode}>{b.booking_code}</span>
+                          <span className={styles.existingStatus}>{b.status}</span>
+                          <span className={styles.existingPrice}>{b.total_price} Br</span>
+                        </div>
+                        {b.booked_by ? (
+                          <div className={styles.existingBy}>By: {b.booked_by}</div>
+                        ) : null}
+                        {b.notes ? (
+                          <div className={styles.existingNotes}>{b.notes}</div>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
+    </div>
     </div>
   );
 }

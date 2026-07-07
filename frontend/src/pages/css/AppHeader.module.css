@@ -1,0 +1,87 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800&display=swap');
+
+.nav {
+  --green-900: #0e2f24;
+  --green-700: #16513f;
+  --grass: #3fae7f;
+  --ink: #14201a;
+  --line: #e6e9e3;
+  --danger: #c0392b;
+  --danger-soft: #fdeeec;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px clamp(20px, 4vw, 56px);
+  background: rgba(251, 251, 248, 0.92);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--line);
+  font-family: 'Inter', -apple-system, sans-serif;
+  position: sticky;
+  top: 0;
+  z-index: 30;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  color: var(--ink);
+}
+
+.brandMark {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: linear-gradient(135deg, var(--green-700), var(--grass));
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(22, 81, 63, 0.28);
+}
+
+.brandMark svg {
+  width: 17px;
+  height: 17px;
+  color: #fff;
+}
+
+.brandName {
+  font-size: 16.5px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.logoutBtn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: #6b7a72;
+  font-family: inherit;
+  font-weight: 600;
+  font-size: 13.5px;
+  padding: 8px 15px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.logoutBtn svg {
+  width: 15px;
+  height: 15px;
+}
+
+.logoutBtn:hover {
+  border-color: #f0c6c0;
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.logoutBtn:active {
+  transform: scale(0.97);
+}
