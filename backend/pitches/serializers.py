@@ -1,5 +1,25 @@
 from rest_framework import serializers
-from .models import Pitch
+from .models import Pitch, PitchImage
+
+
+class PitchImageSerializer(serializers.ModelSerializer):
+    id = serializers.SerializerMethodField()
+    url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = PitchImage
+        fields = ["id", "url"]
+
+    def get_id(self, obj):
+        return str(obj.id)
+
+    def get_url(self, obj):
+        if not obj.image:
+            return None
+        request = self.context.get("request")
+        if request:
+            return request.build_absolute_uri(obj.image.url)
+        return obj.image.url
 
 
 class PitchSerializer(serializers.ModelSerializer):
@@ -10,6 +30,7 @@ class PitchSerializer(serializers.ModelSerializer):
     closing_time_label = serializers.SerializerMethodField()
     cover_image_url = serializers.SerializerMethodField()
     image_urls = serializers.SerializerMethodField()
+    images = serializers.SerializerMethodField()
 
     class Meta:
         model = Pitch
@@ -39,6 +60,7 @@ class PitchSerializer(serializers.ModelSerializer):
             "other_services",
             "cover_image_url",
             "image_urls",
+            "images",
             "is_approved",
             "is_active",
             "created_at",
@@ -75,11 +97,18 @@ class PitchSerializer(serializers.ModelSerializer):
         return self._absolute_url(first_image.image.url)
 
     def get_image_urls(self, obj):
+        # Kept for backward compatibility with any code still reading plain
+        # URL strings. New code (the edit form) should use "images" instead,
+        # since these ids are required to delete a single photo precisely.
         urls = []
         for image in obj.images.order_by("created_at"):
             if image.image:
                 urls.append(self._absolute_url(image.image.url))
         return urls
+
+    def get_images(self, obj):
+        qs = obj.images.order_by("created_at")
+        return PitchImageSerializer(qs, many=True, context=self.context).data
 
 
 class PitchCreateSerializer(serializers.Serializer):

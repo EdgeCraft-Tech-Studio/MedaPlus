@@ -22,7 +22,18 @@ export async function register(payload: {
   return res.data as { id: string; username: string; role: "OWNER" | "PLAYER" };
 }
 
-export function logout() {
-  localStorage.removeItem("access");
-  localStorage.removeItem("refresh");
+// export function logout() {
+//   localStorage.removeItem("access");
+//   localStorage.removeItem("refresh");
+// }
+
+
+
+export async function logout() {
+  try {
+    await api.post("/auth/logout/");
+  } finally {
+    localStorage.removeItem("access");
+    localStorage.removeItem("refresh");
+  }
 }

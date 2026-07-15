@@ -31,9 +31,9 @@ type InitialPitchData = {
   has_parking?: boolean;
   has_lighting?: boolean;
   other_services?: string;
-  // The pitch's already-uploaded photos, as returned by the API
-  // (same field the pitch-detail page reads: pitch.image_urls).
-  image_urls?: string[];
+  // The pitch's already-uploaded photos, each tagged with its PitchImage id
+  // so we can tell the backend exactly which one to delete on edit.
+  images?: { id: string; url: string }[];
 };
 
 type Props = {
@@ -47,11 +47,12 @@ type Props = {
 };
 
 // "new" = a File the user just picked, not uploaded yet (gets sent on submit).
-// "existing" = a photo that's already saved on the pitch (edit mode only,
-// nothing to upload — shown so the user can see/zoom what's already there).
+// "existing" = a photo that's already saved on the pitch (edit mode only).
+// imageId is the PitchImage.id on the server - if the user removes one of
+// these, we record its imageId so the backend can delete just that row.
 type ImageItem =
   | { id: string; kind: "new"; file: File; url: string }
-  | { id: string; kind: "existing"; url: string };
+  | { id: string; kind: "existing"; imageId: string; url: string };
 
 type PersistedImage = {
   name: string;
@@ -84,6 +85,8 @@ type DraftShape = {
   lat: number;
   lng: number;
   images: PersistedImage[];
+  // ids of existing (already-saved) photos the user removed while editing
+  removedImageIds: string[];
 };
 
 const ADDIS_ABABA = { lat: 8.9806, lng: 38.7578 };
@@ -104,15 +107,21 @@ function draftKey(mode: "create" | "edit", initialData?: InitialPitchData | null
   return `pitchWizardDraft:${mode}:${initialData?.id ?? "new"}`;
 }
 
-// Turns the pitch's already-saved photo URLs into displayable ImageItems.
-function buildExistingImages(data?: InitialPitchData | null): ImageItem[] {
-  const urls = data?.image_urls || [];
-  return urls
-    .filter((url): url is string => Boolean(url))
-    .map((url, index) => ({
-      id: `existing-${index}-${url}`,
+// Turns the pitch's already-saved photos into displayable ImageItems,
+// optionally excluding ones the user already marked for removal (used when
+// restoring a draft so a previously-removed photo doesn't reappear).
+function buildExistingImages(
+  data?: InitialPitchData | null,
+  excludeIds: string[] = []
+): ImageItem[] {
+  const imgs = data?.images || [];
+  return imgs
+    .filter((img) => Boolean(img?.url) && !excludeIds.includes(img.id))
+    .map((img) => ({
+      id: `existing-${img.id}`,
       kind: "existing" as const,
-      url,
+      imageId: img.id,
+      url: img.url,
     }));
 }
 
@@ -207,6 +216,9 @@ export default function PitchWizardModal({
   const [slotHours, setSlotHours] = useState("8,9,10,11");
 
   const [images, setImages] = useState<ImageItem[]>([]);
+  // ids of existing (already-saved) photos the user removed - sent to the
+  // backend on save so it deletes exactly those rows and nothing else.
+  const [removedImageIds, setRemovedImageIds] = useState<string[]>([]);
   const [lightboxId, setLightboxId] = useState<string | null>(null);
 
   const [lat, setLat] = useState(ADDIS_ABABA.lat);
@@ -251,6 +263,7 @@ export default function PitchWizardModal({
     setSlotHours("8,9,10,11");
     revokeAllPreviews();
     setImages([]);
+    setRemovedImageIds([]);
     setLat(ADDIS_ABABA.lat);
     setLng(ADDIS_ABABA.lng);
   }
@@ -282,6 +295,7 @@ export default function PitchWizardModal({
     revokeAllPreviews();
     // Show the pitch's already-saved photos so edit mode isn't blank.
     setImages(buildExistingImages(data));
+    setRemovedImageIds([]);
     setLat(data?.latitude ?? ADDIS_ABABA.lat);
     setLng(data?.longitude ?? ADDIS_ABABA.lng);
   }
@@ -310,6 +324,7 @@ export default function PitchWizardModal({
     setSlotHours(draft.slotHours ?? "8,9,10,11");
     setLat(draft.lat ?? ADDIS_ABABA.lat);
     setLng(draft.lng ?? ADDIS_ABABA.lng);
+    setRemovedImageIds(draft.removedImageIds ?? []);
     revokeAllPreviews();
     objectUrlsRef.current = restoredImages
       .filter((i): i is Extract<ImageItem, { kind: "new" }> => i.kind === "new")
@@ -339,8 +354,11 @@ export default function PitchWizardModal({
             (draft.images || []).map((img) => dataUrlToFile(img))
           );
           // The pitch's existing photos always come from the live pitch data,
-          // not from the draft — the draft only ever stores newly picked files.
-          const existingImages = buildExistingImages(initialData);
+          // not from the draft, minus anything the draft says was removed.
+          const existingImages = buildExistingImages(
+            initialData,
+            draft.removedImageIds || []
+          );
           if (!cancelled) {
             applyDraft(draft, [...existingImages, ...restoredNewImages]);
             setDraftRestored(true);
@@ -379,7 +397,7 @@ export default function PitchWizardModal({
 
     saveTimer.current = setTimeout(async () => {
       try {
-        // Only newly picked files need to be persisted — existing pitch
+        // Only newly picked files need to be persisted - existing pitch
         // photos are re-derived from initialData on load, not from the draft.
         const newImages = images.filter(
           (img): img is Extract<ImageItem, { kind: "new" }> => img.kind === "new"
@@ -418,12 +436,13 @@ export default function PitchWizardModal({
           lat,
           lng,
           images: persistedImages,
+          removedImageIds,
         };
 
         try {
           localStorage.setItem(draftKey(mode, initialData), JSON.stringify(draft));
         } catch {
-          // Likely quota exceeded because of large images — retry without images
+          // Likely quota exceeded because of large images - retry without images
           // so text fields are still protected against refresh.
           try {
             localStorage.setItem(
@@ -468,6 +487,7 @@ export default function PitchWizardModal({
     lat,
     lng,
     images,
+    removedImageIds,
   ]);
 
   useEffect(() => {
@@ -520,10 +540,22 @@ export default function PitchWizardModal({
   function removeImage(id: string) {
     setImages((prev) => {
       const target = prev.find((i) => i.id === id);
+
       if (target && target.kind === "new") {
         URL.revokeObjectURL(target.url);
         objectUrlsRef.current = objectUrlsRef.current.filter((u) => u !== target.url);
       }
+
+      // Removing an already-saved photo doesn't delete it from the server
+      // right away - it just marks it so the backend removes that exact
+      // row when the form is saved. Everything else on the pitch is
+      // untouched.
+      if (target && target.kind === "existing") {
+        setRemovedImageIds((prevIds) =>
+          prevIds.includes(target.imageId) ? prevIds : [...prevIds, target.imageId]
+        );
+      }
+
       return prev.filter((i) => i.id !== id);
     });
     setLightboxId((cur) => (cur === id ? null : cur));
@@ -555,7 +587,10 @@ export default function PitchWizardModal({
       return false;
     }
 
-    if (mode === "create" && images.length < 1) {
+    // Applies to both create and edit: the pitch must end up with at least
+    // one photo. In edit mode "images" already reflects removals, so this
+    // naturally checks the post-save state.
+    if (images.length < 1) {
       setError("At least one pitch image is required.");
       return false;
     }
@@ -633,12 +668,18 @@ export default function PitchWizardModal({
       }
     }
 
-    // Only newly picked files get uploaded. "existing" images are already on
-    // the server — nothing to send for those unless your API supports
-    // per-image delete, in which case you'd also send the removed URLs here.
+    // Only newly picked files get uploaded under "images".
     for (const image of images) {
       if (image.kind === "new") {
         formData.append("images", image.file);
+      }
+    }
+
+    // Tell the backend exactly which existing photos to delete. Anything
+    // not in this list, and not re-sent as a new file, is left alone.
+    if (mode === "edit") {
+      for (const removedId of removedImageIds) {
+        formData.append("removed_image_ids", removedId);
       }
     }
 
@@ -789,9 +830,7 @@ export default function PitchWizardModal({
                 <div className={styles.sectionTitle}>Photos</div>
 
                 <div className={styles.field}>
-                  <label className={styles.label}>
-                    {mode === "edit" ? "Pitch images" : "Pitch images"}
-                  </label>
+                  <label className={styles.label}>Pitch images</label>
 
                   <label className={styles.dropZone}>
                     <input
@@ -810,7 +849,7 @@ export default function PitchWizardModal({
                     <div className={styles.dropZoneSub}>
                       {mode === "create"
                         ? "At least one image is required. You can select several at once."
-                        : "These are the current photos. Add new ones only if you want to add to or replace them."}
+                        : "Remove the ones you don't want and add new ones — everything else stays untouched."}
                     </div>
                   </label>
 

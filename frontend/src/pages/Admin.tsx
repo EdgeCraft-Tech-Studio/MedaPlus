@@ -350,31 +350,31 @@ export default function Admin() {
           owners={owners}
           mode="edit"
           initialData={
-            editingPitch
-              ? {
-                  id: editingPitch.id,
-                  name: editingPitch.name,
-                  address: editingPitch.address,
-                  latitude: editingPitch.latitude,
-                  longitude: editingPitch.longitude,
-                  opening_time: editingPitch.opening_time,
-                  closing_time: editingPitch.closing_time,
-                  hourly_price: editingPitch.hourly_price,
-                  weekly_price: editingPitch.weekly_price,
-                  monthly_price: editingPitch.monthly_price,
-                  min_hours: editingPitch.min_hours,
-                  allow_hourly: editingPitch.allow_hourly,
-                  allow_weekly: editingPitch.allow_weekly,
-                  allow_monthly: editingPitch.allow_monthly,
-                  has_dressing_room: editingPitch.has_dressing_room,
-                  has_showers: editingPitch.has_showers,
-                  has_parking: editingPitch.has_parking,
-                  has_lighting: editingPitch.has_lighting,
-                  other_services: editingPitch.other_services,
-                  image_urls: editingPitch.image_urls,
-                }
-              : undefined
-          }
+  editingPitch
+    ? {
+        id: editingPitch.id,
+        name: editingPitch.name,
+        address: editingPitch.address,
+        latitude: editingPitch.latitude,
+        longitude: editingPitch.longitude,
+        opening_time: editingPitch.opening_time,
+        closing_time: editingPitch.closing_time,
+        hourly_price: editingPitch.hourly_price,
+        weekly_price: editingPitch.weekly_price,
+        monthly_price: editingPitch.monthly_price,
+        min_hours: editingPitch.min_hours,
+        allow_hourly: editingPitch.allow_hourly,
+        allow_weekly: editingPitch.allow_weekly,
+        allow_monthly: editingPitch.allow_monthly,
+        has_dressing_room: editingPitch.has_dressing_room,
+        has_showers: editingPitch.has_showers,
+        has_parking: editingPitch.has_parking,
+        has_lighting: editingPitch.has_lighting,
+        other_services: editingPitch.other_services,
+        images: editingPitch.images,
+      }
+    : undefined
+}
           onSubmit={async (payload) => {
             if (!editingPitch?.id) return;
             await updatePitch(editingPitch.id, payload);

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { me } from "../lib/auth";
 import type { Pitch } from "../lib/pitches";
-import { createPitch, listPitches } from "../lib/pitches";
+import { createPitch, listPitches, updatePitch } from "../lib/pitches";
 import AddButton from "../components/AddButton";
 import PitchWizardModal from "../components/PitchWizardModal";
 import ToastContainer, { showToast } from "./Toast";
@@ -192,6 +192,7 @@ export default function Owner() {
   const [pitches, setPitches] = useState<Pitch[]>([]);
   const [msg, setMsg] = useState("");
   const [openAdd, setOpenAdd] = useState(false);
+  const [editingPitch, setEditingPitch] = useState<Pitch | null>(null);
   const [loading, setLoading] = useState(true);
 
   const [search, setSearch] = useState("");
@@ -291,6 +292,45 @@ export default function Owner() {
             setMsg("Pitch created (pending admin approval).");
             showToast("Pitch created — pending approval.", "create");
             setOpenAdd(false);
+            await refresh();
+          }}
+        />
+
+        <PitchWizardModal
+          open={!!editingPitch}
+          onClose={() => setEditingPitch(null)}
+          mode="edit"
+          initialData={
+  editingPitch
+    ? {
+        id: editingPitch.id,
+        name: editingPitch.name,
+        address: editingPitch.address,
+        latitude: editingPitch.latitude,
+        longitude: editingPitch.longitude,
+        opening_time: editingPitch.opening_time,
+        closing_time: editingPitch.closing_time,
+        hourly_price: editingPitch.hourly_price,
+        weekly_price: editingPitch.weekly_price,
+        monthly_price: editingPitch.monthly_price,
+        min_hours: editingPitch.min_hours,
+        allow_hourly: editingPitch.allow_hourly,
+        allow_weekly: editingPitch.allow_weekly,
+        allow_monthly: editingPitch.allow_monthly,
+        has_dressing_room: editingPitch.has_dressing_room,
+        has_showers: editingPitch.has_showers,
+        has_parking: editingPitch.has_parking,
+        has_lighting: editingPitch.has_lighting,
+        other_services: editingPitch.other_services,
+        images: editingPitch.images,
+      }
+    : undefined
+}
+          onSubmit={async (payload) => {
+            if (!editingPitch?.id) return;
+            await updatePitch(editingPitch.id, payload);
+            setMsg("Pitch updated successfully.");
+            setEditingPitch(null);
             await refresh();
           }}
         />
@@ -436,9 +476,20 @@ export default function Owner() {
 
                     <div className={styles.hintText}>
                       <Icon name="tag" size={12} />
-                      Click card to open slot table and manage bookings
+                      Click card to manage
                     </div>
                   </div>
+
+                  <button
+                    className={styles.editCornerBtn}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setMsg("");
+                      setEditingPitch(p);
+                    }}
+                  >
+                    Edit
+                  </button>
                 </div>
               ))}
             </div>

@@ -79,6 +79,35 @@
 
 /* ---------- account status banner ---------- */
 
+.editCornerBtn {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  padding: 12px 20px;
+  border: none;
+  background: var(--color-primary);
+  color: #ffffff;
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  border-top-left-radius: 16px;
+  border-bottom-right-radius: var(--radius-lg);
+  transition: filter 0.2s ease, padding-left 0.2s ease;
+  z-index: 2;
+}
+
+.editCornerBtn:hover {
+  filter: brightness(1.18);
+  padding-left: 26px;
+}
+
+.editCornerBtn:active {
+  filter: brightness(0.95);
+}
+
+
+
 .statusBanner {
   display: flex;
   align-items: center;

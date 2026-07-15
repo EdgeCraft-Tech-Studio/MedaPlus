@@ -151,7 +151,6 @@ export default function Admin() {
         onSubmit={async (payload) => {
           if (!editingPitch?.id) return;
           await updatePitch(editingPitch.id, payload);
-          setMsg("Pitch updated successfully.");
           setEditingPitch(null);
           await refresh();
         }}

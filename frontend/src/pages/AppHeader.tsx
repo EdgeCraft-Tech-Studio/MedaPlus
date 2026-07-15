@@ -36,7 +36,7 @@ export default function AppHeader({ variant = "none", homeHref = "/" }: Props) {
     try {
       await logout();
     } finally {
-      navigate("/login");
+      navigate("/login", { replace: true });
     }
   }
 

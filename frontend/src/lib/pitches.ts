@@ -1,5 +1,10 @@
 import { api } from "./api";
 
+export type PitchImageItem = {
+  id: string;
+  url: string;
+};
+
 export type Pitch = {
   id: string;
   name: string;
@@ -29,6 +34,9 @@ export type Pitch = {
 
   cover_image_url?: string | null;
   image_urls?: string[];
+  // Same photos as image_urls, but each tagged with its PitchImage id so the
+  // edit form can tell the backend exactly which one to delete.
+  images?: PitchImageItem[];
 
   is_approved: boolean;
   is_active: boolean;

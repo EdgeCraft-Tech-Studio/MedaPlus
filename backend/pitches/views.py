@@ -360,11 +360,20 @@ def pitch_detail(request, pitch_id: str):
 
     pitch.save()
 
+    # ------------------------
+    # IMAGES: surgical update, not wipe-and-replace
+    # ------------------------
+    # The frontend sends:
+    #   - "removed_image_ids": ids of existing PitchImage rows the user removed
+    #   - "images": newly picked files to add
+    # Anything not mentioned in either list is left completely untouched.
+    removed_image_ids = request.data.getlist("removed_image_ids")
+    if removed_image_ids:
+        pitch.images.filter(id__in=removed_image_ids).delete()
+
     new_images = request.FILES.getlist("images")
-    if new_images:
-        pitch.images.all().delete()
-        for uploaded_file in new_images:
-            PitchImage.objects.create(pitch=pitch, image=uploaded_file)
+    for uploaded_file in new_images:
+        PitchImage.objects.create(pitch=pitch, image=uploaded_file)
 
     return Response(
         {
@@ -372,70 +381,6 @@ def pitch_detail(request, pitch_id: str):
             "message": "Pitch updated successfully.",
         }
     )
-
-"""
-@api_view(["GET", "PATCH"])
-@permission_classes([IsAuthenticated])
-@parser_classes([MultiPartParser, FormParser, JSONParser])
-def pitch_detail(request, pitch_id: str):
-    pitch = get_object_or_404(Pitch, id=pitch_id)
-
-    if request.method == "GET":
-        if not _can_view_pitch(request.user, pitch):
-            return Response({"detail": "Pitch not found."}, status=404)
-
-        return Response({
-            "pitch": PitchSerializer(pitch, context={"request": request}).data,
-            "daily_weekly_days": _build_next_7_days(pitch),
-            "monthly_weeks": _build_monthly_weeks(pitch),
-        })
-
-    # PATCH
-    if not _can_edit_pitch(request.user, pitch):
-        return Response({"detail": "Forbidden"}, status=403)
-
-    serializer = PitchUpdateSerializer(data=request.data, partial=True)
-    if not serializer.is_valid():
-        return Response(serializer.errors, status=400)
-
-    data = serializer.validated_data
-
-    for field in [
-        "name",
-        "address",
-        "latitude",
-        "longitude",
-        "opening_time",
-        "closing_time",
-        "min_hours",
-        "allow_hourly",
-        "allow_weekly",
-        "allow_monthly",
-        "hourly_price",
-        "weekly_price",
-        "monthly_price",
-        "has_dressing_room",
-        "has_showers",
-        "has_parking",
-        "has_lighting",
-        "other_services",
-    ]:
-        if field in data:
-            setattr(pitch, field, data[field])
-
-    pitch.save()
-
-    new_images = request.FILES.getlist("images")
-    if new_images:
-        pitch.images.all().delete()
-        for uploaded_file in new_images:
-            PitchImage.objects.create(pitch=pitch, image=uploaded_file)
-
-    return Response({
-        "pitch": PitchSerializer(pitch, context={"request": request}).data,
-        "message": "Pitch updated successfully.",
-    })
-"""
 
 
 @api_view(["GET"])

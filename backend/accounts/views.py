@@ -109,7 +109,17 @@ def register(request):
     )
 
 
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def logout(request):
-    return Response({"ok": True, "message": "Logged out (client should delete tokens)."})
+    session = getattr(request, "session_obj", None)
+
+    if session:
+        session.is_active = False
+        session.save(update_fields=["is_active"])
+
+    return Response({
+        "ok": True,
+        "message": "Logged out successfully."
+    })
