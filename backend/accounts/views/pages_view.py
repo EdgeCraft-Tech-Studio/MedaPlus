@@ -15,7 +15,7 @@ def _require_admin(request):
 
 
 class MeView(APIView):
-    """GET /auth/me/ — return the currently authenticated user's profile."""
+    
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -34,7 +34,7 @@ class MeView(APIView):
 
 
 class HealthView(APIView):
-    """GET /health/ — service liveness check."""
+    
     permission_classes = [AllowAny]
     authentication_classes = []  # no need to authenticate for a health check
 
@@ -43,7 +43,7 @@ class HealthView(APIView):
 
 
 class AdminListOwnersView(APIView):
-    """GET /admin/owners/ — list all users with role=OWNER."""
+    
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -62,7 +62,7 @@ class AdminListOwnersView(APIView):
 
 
 class AdminPendingOwnersView(APIView):
-    """GET /admin/owners/pending/ — list owners awaiting approval."""
+    
     permission_classes = [IsAuthenticated]
 
     def get(self, request):

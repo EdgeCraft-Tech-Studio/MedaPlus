@@ -6,16 +6,76 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from accounts.views import me, health, logout, register
 from accounts.views import admin_list_owners, admin_pending_owners, admin_approve_owner
+from backend.accounts.views.auth_view import ForgotPasswordVerifyOTPView, ForgotPasswordView, LoginView, LogoutView, ResendOTPView, ResetPasswordView, SignupVerifyOTPView, SignupView
+from backend.accounts.views.otp_view import OTPStatusView
 
 urlpatterns = [
     path("admin/", admin.site.urls),
 
-    path("api/auth/login/", TokenObtainPairView.as_view(), name="token_obtain_pair"),
     path("api/auth/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
     path("api/auth/me/", me, name="auth_me"),
     path("api/auth/health/", health, name="auth_health"),
-    path("api/auth/logout/", logout, name="auth_logout"),
-    path("api/auth/register/", register, name="auth_register"),
+    path(
+        'api/auth/register/',
+        SignupView.as_view(),
+        name='auth_register',
+    ),
+
+    path(
+        'auth/auth/register/verify/',
+        SignupVerifyOTPView.as_view(),
+        name='auth-signup-verify',
+    ),
+
+
+    path(
+        'api/auth/login/',
+        LoginView.as_view(),
+        name='auth-login',
+    ),
+
+    path(
+        'api/auth/logout/',
+        LogoutView.as_view(),
+        name='auth-logout',
+    ),
+
+    path(
+        'api/auth/forgot-password/',
+        ForgotPasswordView.as_view(),
+        name='auth-forgot-password',
+    ),
+
+    path(
+        'api/auth/forgot-password/verify/',
+        ForgotPasswordVerifyOTPView.as_view(),
+        name='auth-forgot-password-verify',
+    ),
+
+    path(
+        'api/auth/reset-password/',
+        ResetPasswordView.as_view(),
+        name='auth-reset-password',
+    ),
+
+    path(
+        'auth/token/refresh/',
+        TokenRefreshView.as_view(),
+        name='auth-token-refresh',
+    ),
+
+
+    path(
+        'api/otp/resend/',
+        ResendOTPView.as_view(),
+        name='otp-resend',
+    ),
+
+    path(
+        'api/otp/status/',
+        OTPStatusView.as_view(),
+        name='otp-status',
+    ),
 
     path("api/", include("pitches.urls")),
     path("api/", include("bookings.urls")),
