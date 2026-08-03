@@ -440,7 +440,10 @@ export default function Owner() {
               {filteredPitches.map((p, index) => (
                 <div
                   key={p.id}
-                  onClick={() => navigate(`/app/pitches/${p.id}`)}
+                  onClick={() => {
+                  if (!p.is_approved) return;           // block navigation if not approved
+                  navigate(`/app/pitches/${p.id}`);
+                }}
                   className={styles.pitchCard}
                   style={{ "--i": index } as React.CSSProperties}
                 >

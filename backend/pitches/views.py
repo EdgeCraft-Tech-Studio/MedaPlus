@@ -8,7 +8,7 @@ from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
-from accounts.models import UserRole
+from backend.accounts.models.user import UserRole
 from bookings.models import Slot, SlotStatus
 from .models import Tenant, Pitch, PitchImage
 from .serializers import PitchSerializer, PitchCreateSerializer, PitchUpdateSerializer

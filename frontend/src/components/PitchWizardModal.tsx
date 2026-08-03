@@ -46,6 +46,8 @@ type Props = {
   initialData?: InitialPitchData | null;
 };
 
+type StepNum = 1 | 2 | 3 | 4;
+
 // "new" = a File the user just picked, not uploaded yet (gets sent on submit).
 // "existing" = a photo that's already saved on the pitch (edit mode only).
 // imageId is the PitchImage.id on the server - if the user removes one of
@@ -62,7 +64,8 @@ type PersistedImage = {
 
 type DraftShape = {
   savedAt: number;
-  step: 1 | 2;
+  step: StepNum;
+  maxStepReached: StepNum;
   ownerId: string;
   name: string;
   address: string;
@@ -89,6 +92,12 @@ type DraftShape = {
   removedImageIds: string[];
 };
 
+// Plain-value snapshot of every field a draft could hold, used to detect
+// whether the current form actually differs from a blank/untouched one.
+type FieldSnapshot = Omit<DraftShape, "savedAt" | "step" | "maxStepReached" | "images"> & {
+  newImageCount: number;
+};
+
 const ADDIS_ABABA = { lat: 8.9806, lng: 38.7578 };
 
 const TIME_OPTIONS = Array.from({ length: 24 }, (_, h) => {
@@ -105,6 +114,97 @@ function normalizeTime(value?: string) {
 
 function draftKey(mode: "create" | "edit", initialData?: InitialPitchData | null) {
   return `pitchWizardDraft:${mode}:${initialData?.id ?? "new"}`;
+}
+
+// The "nothing has actually changed yet" baseline for the current mode -
+// used to decide whether a draft is worth saving/restoring at all.
+function buildBaseline(
+  mode: "create" | "edit",
+  data?: InitialPitchData | null
+): FieldSnapshot {
+  if (mode === "edit") {
+    return {
+      ownerId: data?.owner_id || "",
+      name: data?.name || "",
+      address: data?.address || "",
+      openingTime: normalizeTime(data?.opening_time) || "08:00",
+      closingTime: normalizeTime(data?.closing_time) || "22:00",
+      hourly: data?.hourly_price ?? "0",
+      weekly: data?.weekly_price ?? "0",
+      monthly: data?.monthly_price ?? "0",
+      minHours: String(data?.min_hours ?? 1),
+      allowHourly: data?.allow_hourly ?? true,
+      allowWeekly: data?.allow_weekly ?? false,
+      allowMonthly: data?.allow_monthly ?? false,
+      dressing: data?.has_dressing_room ?? false,
+      showers: data?.has_showers ?? false,
+      parking: data?.has_parking ?? false,
+      lighting: data?.has_lighting ?? false,
+      services: data?.other_services || "",
+      slotDate: "",
+      slotHours: "8,9,10,11",
+      lat: data?.latitude ?? ADDIS_ABABA.lat,
+      lng: data?.longitude ?? ADDIS_ABABA.lng,
+      removedImageIds: [],
+      newImageCount: 0,
+    };
+  }
+
+  return {
+    ownerId: "",
+    name: "",
+    address: "",
+    openingTime: "08:00",
+    closingTime: "22:00",
+    hourly: "0",
+    weekly: "0",
+    monthly: "0",
+    minHours: "1",
+    allowHourly: true,
+    allowWeekly: false,
+    allowMonthly: false,
+    dressing: false,
+    showers: false,
+    parking: false,
+    lighting: false,
+    services: "",
+    slotDate: "",
+    slotHours: "8,9,10,11",
+    lat: ADDIS_ABABA.lat,
+    lng: ADDIS_ABABA.lng,
+    removedImageIds: [],
+    newImageCount: 0,
+  };
+}
+
+// True if `snapshot` differs from the untouched baseline in any way that
+// matters - i.e. there's actually something worth restoring or clearing.
+function isMeaningfulSnapshot(snapshot: FieldSnapshot, baseline: FieldSnapshot) {
+  return (
+    snapshot.ownerId !== baseline.ownerId ||
+    snapshot.name !== baseline.name ||
+    snapshot.address !== baseline.address ||
+    snapshot.openingTime !== baseline.openingTime ||
+    snapshot.closingTime !== baseline.closingTime ||
+    snapshot.hourly !== baseline.hourly ||
+    snapshot.weekly !== baseline.weekly ||
+    snapshot.monthly !== baseline.monthly ||
+    snapshot.minHours !== baseline.minHours ||
+    snapshot.allowHourly !== baseline.allowHourly ||
+    snapshot.allowWeekly !== baseline.allowWeekly ||
+    snapshot.allowMonthly !== baseline.allowMonthly ||
+    snapshot.dressing !== baseline.dressing ||
+    snapshot.showers !== baseline.showers ||
+    snapshot.parking !== baseline.parking ||
+    snapshot.lighting !== baseline.lighting ||
+    snapshot.services !== baseline.services ||
+    snapshot.slotDate !== baseline.slotDate ||
+    snapshot.slotHours !== baseline.slotHours ||
+    snapshot.lat !== baseline.lat ||
+    snapshot.lng !== baseline.lng ||
+    snapshot.removedImageIds.length > 0 ||
+    snapshot.newImageCount > 0
+  );
 }
 
 // Turns the pitch's already-saved photos into displayable ImageItems,
@@ -176,6 +276,58 @@ function LocationPicker({
   );
 }
 
+/* ---------- step-rail icons ---------- */
+
+function InfoIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" {...props}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 8v.01M11 12h1v5h1" />
+    </svg>
+  );
+}
+
+function TagIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" {...props}>
+      <path d="M20.59 13.41 12 22 2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
+      <circle cx="7" cy="7" r="1.3" />
+    </svg>
+  );
+}
+
+function SparkleIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" {...props}>
+      <path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3z" />
+    </svg>
+  );
+}
+
+function PinIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" {...props}>
+      <path d="M12 21s-7-7.58-7-12a7 7 0 0 1 14 0c0 4.42-7 12-7 12z" />
+      <circle cx="12" cy="9" r="2.3" />
+    </svg>
+  );
+}
+
+function CheckIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" {...props}>
+      <path d="M20 6L9 17l-5-5" />
+    </svg>
+  );
+}
+
+const STEP_META: Array<{ num: StepNum; label: string; hint: string; Icon: (p: React.SVGProps<SVGSVGElement>) => React.ReactElement }> = [
+  { num: 1, label: "Basics", hint: "Name, hours & photos", Icon: InfoIcon },
+  { num: 2, label: "Pricing", hint: "Rates & availability", Icon: TagIcon },
+  { num: 3, label: "Amenities", hint: "Facilities & extras", Icon: SparkleIcon },
+  { num: 4, label: "Location", hint: "Pin it on the map", Icon: PinIcon },
+];
+
 export default function PitchWizardModal({
   open,
   onClose,
@@ -185,7 +337,8 @@ export default function PitchWizardModal({
   mode = "create",
   initialData = null,
 }: Props) {
-  const [step, setStep] = useState<1 | 2>(1);
+  const [step, setStep] = useState<StepNum>(1);
+  const [maxStepReached, setMaxStepReached] = useState<StepNum>(1);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [draftRestored, setDraftRestored] = useState(false);
@@ -240,6 +393,7 @@ export default function PitchWizardModal({
   function applyCreateDefaults() {
     skipNextSave.current = true;
     setStep(1);
+    setMaxStepReached(1);
     setError("");
     setDraftRestored(false);
     setOwnerId("");
@@ -271,6 +425,7 @@ export default function PitchWizardModal({
   function applyInitialData(data?: InitialPitchData | null) {
     skipNextSave.current = true;
     setStep(1);
+    setMaxStepReached(1);
     setError("");
     setDraftRestored(false);
     setOwnerId(data?.owner_id || "");
@@ -303,6 +458,7 @@ export default function PitchWizardModal({
   function applyDraft(draft: DraftShape, restoredImages: ImageItem[]) {
     skipNextSave.current = true;
     setStep(draft.step ?? 1);
+    setMaxStepReached(draft.maxStepReached ?? draft.step ?? 1);
     setOwnerId(draft.ownerId ?? "");
     setName(draft.name ?? "");
     setAddress(draft.address ?? "");
@@ -350,6 +506,51 @@ export default function PitchWizardModal({
       if (raw) {
         try {
           const draft: DraftShape = JSON.parse(raw);
+          const baseline = buildBaseline(mode, initialData);
+          const snapshot: FieldSnapshot = {
+            ownerId: draft.ownerId ?? "",
+            name: draft.name ?? "",
+            address: draft.address ?? "",
+            openingTime: draft.openingTime ?? "08:00",
+            closingTime: draft.closingTime ?? "22:00",
+            hourly: draft.hourly ?? "0",
+            weekly: draft.weekly ?? "0",
+            monthly: draft.monthly ?? "0",
+            minHours: draft.minHours ?? "1",
+            allowHourly: draft.allowHourly ?? true,
+            allowWeekly: draft.allowWeekly ?? false,
+            allowMonthly: draft.allowMonthly ?? false,
+            dressing: draft.dressing ?? false,
+            showers: draft.showers ?? false,
+            parking: draft.parking ?? false,
+            lighting: draft.lighting ?? false,
+            services: draft.services ?? "",
+            slotDate: draft.slotDate ?? "",
+            slotHours: draft.slotHours ?? "8,9,10,11",
+            lat: draft.lat ?? ADDIS_ABABA.lat,
+            lng: draft.lng ?? ADDIS_ABABA.lng,
+            removedImageIds: draft.removedImageIds ?? [],
+            newImageCount: (draft.images || []).length,
+          };
+
+          // A stale/blank draft (e.g. saved from a modal that was opened
+          // and closed without any real input) should never trigger a
+          // restore - that's what caused the "restored" text with an
+          // empty form. Only restore when something actually changed.
+          if (!isMeaningfulSnapshot(snapshot, baseline)) {
+            try {
+              localStorage.removeItem(key);
+            } catch {
+              // ignore
+            }
+            if (mode === "edit") {
+              applyInitialData(initialData);
+            } else {
+              applyCreateDefaults();
+            }
+            return;
+          }
+
           const restoredNewImages = await Promise.all(
             (draft.images || []).map((img) => dataUrlToFile(img))
           );
@@ -385,6 +586,8 @@ export default function PitchWizardModal({
   }, [open, mode, initialData]);
 
   // Autosave the in-progress draft (debounced) so a refresh never loses input.
+  // Only ever writes when the form actually differs from a blank one, and
+  // cleans up any now-pointless draft the moment the user reverts to blank.
   useEffect(() => {
     if (!open) return;
 
@@ -396,13 +599,48 @@ export default function PitchWizardModal({
     if (saveTimer.current) clearTimeout(saveTimer.current);
 
     saveTimer.current = setTimeout(async () => {
-      try {
-        // Only newly picked files need to be persisted - existing pitch
-        // photos are re-derived from initialData on load, not from the draft.
-        const newImages = images.filter(
-          (img): img is Extract<ImageItem, { kind: "new" }> => img.kind === "new"
-        );
+      const key = draftKey(mode, initialData);
+      const baseline = buildBaseline(mode, initialData);
+      const newImages = images.filter(
+        (img): img is Extract<ImageItem, { kind: "new" }> => img.kind === "new"
+      );
 
+      const snapshot: FieldSnapshot = {
+        ownerId,
+        name,
+        address,
+        openingTime,
+        closingTime,
+        hourly,
+        weekly,
+        monthly,
+        minHours,
+        allowHourly,
+        allowWeekly,
+        allowMonthly,
+        dressing,
+        showers,
+        parking,
+        lighting,
+        services,
+        slotDate,
+        slotHours,
+        lat,
+        lng,
+        removedImageIds,
+        newImageCount: newImages.length,
+      };
+
+      if (!isMeaningfulSnapshot(snapshot, baseline)) {
+        try {
+          localStorage.removeItem(key);
+        } catch {
+          // ignore
+        }
+        return;
+      }
+
+      try {
         const persistedImages: PersistedImage[] = await Promise.all(
           newImages.map(async (img) => ({
             name: img.file.name,
@@ -414,6 +652,7 @@ export default function PitchWizardModal({
         const draft: DraftShape = {
           savedAt: Date.now(),
           step,
+          maxStepReached,
           ownerId,
           name,
           address,
@@ -440,15 +679,12 @@ export default function PitchWizardModal({
         };
 
         try {
-          localStorage.setItem(draftKey(mode, initialData), JSON.stringify(draft));
+          localStorage.setItem(key, JSON.stringify(draft));
         } catch {
           // Likely quota exceeded because of large images - retry without images
           // so text fields are still protected against refresh.
           try {
-            localStorage.setItem(
-              draftKey(mode, initialData),
-              JSON.stringify({ ...draft, images: [] })
-            );
+            localStorage.setItem(key, JSON.stringify({ ...draft, images: [] }));
           } catch {
             // give up silently, nothing more we can do
           }
@@ -465,6 +701,7 @@ export default function PitchWizardModal({
   }, [
     open,
     step,
+    maxStepReached,
     ownerId,
     name,
     address,
@@ -574,48 +811,69 @@ export default function PitchWizardModal({
     return () => window.removeEventListener("keydown", onKey);
   }, [lightboxId]);
 
-  function validateStep1() {
+  function validateStep(target: StepNum): boolean {
     setError("");
 
-    if (mode === "create" && isAdmin && !ownerId) {
-      setError("Please select an owner.");
-      return false;
+    if (target === 1) {
+      if (mode === "create" && isAdmin && !ownerId) {
+        setError("Please select an owner.");
+        return false;
+      }
+      if (!name.trim()) {
+        setError("Pitch name is required.");
+        return false;
+      }
+      if (images.length < 1) {
+        setError("At least one pitch image is required.");
+        return false;
+      }
+      if (openingTime >= closingTime) {
+        setError("Closing time must be later than opening time.");
+        return false;
+      }
+      return true;
     }
 
-    if (!name.trim()) {
-      setError("Pitch name is required.");
-      return false;
+    if (target === 2) {
+      const h = Number(hourly);
+      const w = Number(weekly);
+      const m = Number(monthly);
+      if ([h, w, m].some((x) => Number.isNaN(x) || x < 0)) {
+        setError("Prices must be valid numbers.");
+        return false;
+      }
+      const mh = Number(minHours);
+      if (Number.isNaN(mh) || mh < 1) {
+        setError("Minimum hours must be at least 1.");
+        return false;
+      }
+      return true;
     }
 
-    // Applies to both create and edit: the pitch must end up with at least
-    // one photo. In edit mode "images" already reflects removals, so this
-    // naturally checks the post-save state.
-    if (images.length < 1) {
-      setError("At least one pitch image is required.");
-      return false;
-    }
-
-    if (openingTime >= closingTime) {
-      setError("Closing time must be later than opening time.");
-      return false;
-    }
-
-    const h = Number(hourly);
-    const w = Number(weekly);
-    const m = Number(monthly);
-
-    if ([h, w, m].some((x) => Number.isNaN(x) || x < 0)) {
-      setError("Prices must be valid numbers.");
-      return false;
-    }
-
-    const mh = Number(minHours);
-    if (Number.isNaN(mh) || mh < 1) {
-      setError("Minimum hours must be at least 1.");
-      return false;
-    }
-
+    // Step 3 (amenities) has no required fields.
     return true;
+  }
+
+  function goNext() {
+    if (!validateStep(step)) return;
+    const next = Math.min(4, step + 1) as StepNum;
+    setStep(next);
+    setMaxStepReached((m) => (m >= next ? m : next));
+  }
+
+  function goBack() {
+    if (step === 1) {
+      handleClose();
+      return;
+    }
+    setError("");
+    setStep((s) => (s - 1) as StepNum);
+  }
+
+  function goToStep(target: StepNum) {
+    if (target > maxStepReached || target === step) return;
+    setError("");
+    setStep(target);
   }
 
   async function finish() {
@@ -705,334 +963,389 @@ export default function PitchWizardModal({
     }
   }
 
-  const modalTitle =
-    step === 1
-      ? mode === "edit"
-        ? "Edit Pitch Details"
-        : "Add Pitch Details"
-      : mode === "edit"
-        ? "Update Pitch Location"
-        : "Pick Pitch Location";
-
   const lightboxImage = images.find((i) => i.id === lightboxId);
 
+  const topBarCopy: Record<StepNum, { title: string; subtitle: string }> = {
+    1: {
+      title: mode === "edit" ? "Edit pitch details" : "Add a new pitch",
+      subtitle: "Name, hours, and photos people will see first.",
+    },
+    2: {
+      title: "Pricing & availability",
+      subtitle: "Set your rates and how people can book.",
+    },
+    3: {
+      title: "Amenities & services",
+      subtitle: "Let players know what's on offer.",
+    },
+    4: {
+      title: mode === "edit" ? "Update pitch location" : "Pin the location",
+      subtitle: "Click the map or drag the marker to place it precisely.",
+    },
+  };
+
   return (
-    <Modal open={open} onClose={handleClose} title={modalTitle}>
+    <Modal open={open} onClose={handleClose} title={topBarCopy[step].title}>
       <div className={styles.wizard}>
-        {draftRestored && (
-          <div className={styles.draftBanner}>
-            <span>We restored the details you were filling in earlier.</span>
-            <button type="button" onClick={discardDraft}>
-              Start over
+        {/* ---------- left rail: 4-step navigator ---------- */}
+        <div className={styles.rail}>
+          <div className={styles.railHead}>
+            <div className={styles.railTitle}>{mode === "edit" ? "Edit pitch" : "New pitch"}</div>
+            <div className={styles.railSubtitle}>Step {step} of 4</div>
+          </div>
+
+          {draftRestored && (
+            <button type="button" className={styles.railClearBtn} onClick={discardDraft}>
+              Clear form
             </button>
-          </div>
-        )}
+          )}
 
-        {error && <div className={styles.errorBanner}>{error}</div>}
+          {STEP_META.map((meta, index) => {
+            const isActive = meta.num === step;
+            const isDone = meta.num < step || (meta.num < maxStepReached && meta.num !== step);
+            const isClickable = meta.num <= maxStepReached && meta.num !== step;
 
-        <div className={styles.steps} style={{ ["--progress" as any]: step === 1 ? "0%" : "100%" }}>
-          <div className={`${styles.stepBadge} ${step === 1 ? styles.active : styles.done}`}>
-            <span className={styles.stepDot}>1</span>
-            Details
-          </div>
-          <div className={styles.stepTrack} />
-          <div className={`${styles.stepBadge} ${step === 2 ? styles.active : ""}`}>
-            <span className={styles.stepDot}>2</span>
-            Location
-          </div>
+            return (
+              <button
+                key={meta.num}
+                type="button"
+                onClick={() => goToStep(meta.num)}
+                className={`${styles.railStep} ${isActive ? styles.active : ""} ${
+                  isDone ? styles.done : ""
+                } ${isClickable ? styles.railStepClickable : ""}`}
+                disabled={!isClickable}
+                style={index > 0 ? ({ position: "relative" } as React.CSSProperties) : undefined}
+              >
+                {index > 0 && (
+                  <span
+                    className={styles.railConnector}
+                    style={{ ["--fill" as any]: meta.num <= maxStepReached ? 1 : 0 }}
+                  />
+                )}
+                <span className={styles.railDot}>
+                  {isDone ? <CheckIcon /> : <meta.Icon />}
+                </span>
+                <span className={styles.railStepBody}>
+                  <span className={styles.railStepLabel}>{meta.label}</span>
+                  <span className={styles.railStepHint}>{meta.hint}</span>
+                </span>
+              </button>
+            );
+          })}
         </div>
 
-        <div className={styles.body}>
-          {step === 1 ? (
-            <form
-              id="pitch-step1-form"
-              className={`${styles.form} ${styles.stepContent}`}
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (validateStep1()) setStep(2);
-              }}
-            >
-              <div className={styles.section}>
-                <div className={styles.sectionTitle}>Basics</div>
+        {/* ---------- main column ---------- */}
+        <div className={styles.mainCol}>
+          <div className={styles.topBar}>
+            <div className={styles.topBarTitle}>{topBarCopy[step].title}</div>
+            <div className={styles.topBarSubtitle}>{topBarCopy[step].subtitle}</div>
+          </div>
 
-                {isAdmin && mode === "create" && (
-                  <div className={styles.field}>
-                    <label className={styles.label}>Owner</label>
-                    <select
-                      className={styles.select}
-                      value={ownerId}
-                      onChange={(e) => setOwnerId(e.target.value)}
-                    >
-                      <option value="">Select owner</option>
-                      {approvedOwners.map((o) => (
-                        <option key={o.id} value={o.id}>
-                          {o.username}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
+          {error && <div className={styles.errorBanner}>{error}</div>}
 
-                <div className={styles.field}>
-                  <label className={styles.label}>Pitch name</label>
-                  <input
-                    className={styles.input}
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="e.g. Bole 5-a-side Arena"
-                  />
-                </div>
+          <div className={styles.body}>
+            {step === 1 && (
+              <div className={`${styles.form} ${styles.stepContent}`}>
+                <div className={styles.section}>
+                  <div className={styles.sectionTitle}>Basics</div>
 
-                <div className={styles.field}>
-                  <label className={styles.label}>Address</label>
-                  <input
-                    className={styles.input}
-                    value={address}
-                    onChange={(e) => setAddress(e.target.value)}
-                    placeholder="Street, area, landmark"
-                  />
-                </div>
-
-                <div className={styles.row2}>
-                  <div className={styles.field}>
-                    <label className={styles.label}>Opening at (GMT+3)</label>
-                    <select
-                      className={styles.select}
-                      value={openingTime}
-                      onChange={(e) => setOpeningTime(e.target.value)}
-                    >
-                      {TIME_OPTIONS.map((opt) => (
-                        <option key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className={styles.field}>
-                    <label className={styles.label}>Closes at (GMT+3)</label>
-                    <select
-                      className={styles.select}
-                      value={closingTime}
-                      onChange={(e) => setClosingTime(e.target.value)}
-                    >
-                      {TIME_OPTIONS.map((opt) => (
-                        <option key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              <div className={styles.section}>
-                <div className={styles.sectionTitle}>Photos</div>
-
-                <div className={styles.field}>
-                  <label className={styles.label}>Pitch images</label>
-
-                  <label className={styles.dropZone}>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      onChange={(e) => handleFilesSelected(e.target.files)}
-                    />
-                    <svg className={styles.dropZoneIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
-                      <path d="M4 16.5V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10.5" strokeLinecap="round" />
-                      <path d="M4 17l4.5-4.5a2 2 0 0 1 2.8 0L15 16l1.7-1.7a2 2 0 0 1 2.8 0L21 16.5" strokeLinecap="round" strokeLinejoin="round" />
-                      <circle cx="8.5" cy="8.5" r="1.5" />
-                      <path d="M3 19h18" strokeLinecap="round" />
-                    </svg>
-                    <div className={styles.dropZoneText}>Click to choose photos</div>
-                    <div className={styles.dropZoneSub}>
-                      {mode === "create"
-                        ? "At least one image is required. You can select several at once."
-                        : "Remove the ones you don't want and add new ones — everything else stays untouched."}
-                    </div>
-                  </label>
-
-                  {images.length > 0 && (
-                    <div className={styles.thumbGrid}>
-                      {images.map((img) => (
-                        <div key={img.id} className={styles.thumb} onClick={() => toggleLightbox(img.id)}>
-                          <img
-                            src={img.url}
-                            alt={img.kind === "new" ? img.file.name : "Pitch photo"}
-                          />
-                          <button
-                            type="button"
-                            className={styles.thumbRemove}
-                            aria-label="Remove image"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              removeImage(img.id);
-                            }}
-                          >
-                            ×
-                          </button>
-                        </div>
-                      ))}
+                  {isAdmin && mode === "create" && (
+                    <div className={styles.field}>
+                      <label className={styles.label}>Owner</label>
+                      <select
+                        className={styles.select}
+                        value={ownerId}
+                        onChange={(e) => setOwnerId(e.target.value)}
+                      >
+                        <option value="">Select owner</option>
+                        {approvedOwners.map((o) => (
+                          <option key={o.id} value={o.id}>
+                            {o.username}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                   )}
-                </div>
-              </div>
 
-              <div className={styles.section}>
-                <div className={styles.sectionTitle}>Pricing</div>
-
-                <div className={styles.row3}>
                   <div className={styles.field}>
-                    <label className={styles.label}>Hourly price</label>
-                    <input className={styles.input} value={hourly} onChange={(e) => setHourly(e.target.value)} />
+                    <label className={styles.label}>Pitch name</label>
+                    <input
+                      className={styles.input}
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      placeholder="e.g. Bole 5-a-side Arena"
+                    />
                   </div>
+
                   <div className={styles.field}>
-                    <label className={styles.label}>Weekly (1x/week)</label>
-                    <input className={styles.input} value={weekly} onChange={(e) => setWeekly(e.target.value)} />
+                    <label className={styles.label}>Address</label>
+                    <input
+                      className={styles.input}
+                      value={address}
+                      onChange={(e) => setAddress(e.target.value)}
+                      placeholder="Street, area, landmark"
+                    />
                   </div>
-                  <div className={styles.field}>
-                    <label className={styles.label}>Monthly (4x/month)</label>
-                    <input className={styles.input} value={monthly} onChange={(e) => setMonthly(e.target.value)} />
-                  </div>
-                </div>
 
-                <div className={styles.field}>
-                  <label className={styles.label}>Minimum hours per booking</label>
-                  <input className={styles.input} value={minHours} onChange={(e) => setMinHours(e.target.value)} style={{ maxWidth: 160 }} />
-                </div>
-
-                <div className={styles.field}>
-                  <label className={styles.label}>Available booking types</label>
-                  <div className={styles.chipRow}>
-                    <label className={`${styles.chip} ${allowHourly ? styles.chipOn : ""}`}>
-                      <input type="checkbox" checked={allowHourly} onChange={(e) => setAllowHourly(e.target.checked)} />
-                      <span className={styles.chipDot} />
-                      Hourly
-                    </label>
-                    <label className={`${styles.chip} ${allowWeekly ? styles.chipOn : ""}`}>
-                      <input type="checkbox" checked={allowWeekly} onChange={(e) => setAllowWeekly(e.target.checked)} />
-                      <span className={styles.chipDot} />
-                      Weekly
-                    </label>
-                    <label className={`${styles.chip} ${allowMonthly ? styles.chipOn : ""}`}>
-                      <input type="checkbox" checked={allowMonthly} onChange={(e) => setAllowMonthly(e.target.checked)} />
-                      <span className={styles.chipDot} />
-                      Monthly
-                    </label>
-                  </div>
-                </div>
-              </div>
-
-              {mode === "create" && (
-                <div className={styles.section}>
-                  <div className={styles.sectionTitle}>Initial slots (optional)</div>
                   <div className={styles.row2}>
                     <div className={styles.field}>
-                      <label className={styles.label}>Date</label>
-                      <input
-                        type="date"
-                        className={styles.input}
-                        value={slotDate}
-                        onChange={(e) => setSlotDate(e.target.value)}
-                      />
+                      <label className={styles.label}>Opening at (GMT+3)</label>
+                      <select
+                        className={styles.select}
+                        value={openingTime}
+                        onChange={(e) => setOpeningTime(e.target.value)}
+                      >
+                        {TIME_OPTIONS.map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
                     </div>
+
                     <div className={styles.field}>
-                      <label className={styles.label}>Hours</label>
-                      <input
-                        className={styles.input}
-                        value={slotHours}
-                        onChange={(e) => setSlotHours(e.target.value)}
-                        placeholder="8,9,10,11"
-                      />
-                      <div className={styles.hint}>Comma separated, 0 to 23</div>
+                      <label className={styles.label}>Closes at (GMT+3)</label>
+                      <select
+                        className={styles.select}
+                        value={closingTime}
+                        onChange={(e) => setClosingTime(e.target.value)}
+                      >
+                        {TIME_OPTIONS.map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                   </div>
                 </div>
-              )}
 
-              <div className={styles.section}>
-                <div className={styles.sectionTitle}>Amenities</div>
-                <div className={styles.chipRow}>
-                  <label className={`${styles.chip} ${dressing ? styles.chipOn : ""}`}>
-                    <input type="checkbox" checked={dressing} onChange={(e) => setDressing(e.target.checked)} />
-                    <span className={styles.chipDot} />
-                    Dressing room
-                  </label>
-                  <label className={`${styles.chip} ${showers ? styles.chipOn : ""}`}>
-                    <input type="checkbox" checked={showers} onChange={(e) => setShowers(e.target.checked)} />
-                    <span className={styles.chipDot} />
-                    Showers
-                  </label>
-                  <label className={`${styles.chip} ${parking ? styles.chipOn : ""}`}>
-                    <input type="checkbox" checked={parking} onChange={(e) => setParking(e.target.checked)} />
-                    <span className={styles.chipDot} />
-                    Parking
-                  </label>
-                  <label className={`${styles.chip} ${lighting ? styles.chipOn : ""}`}>
-                    <input type="checkbox" checked={lighting} onChange={(e) => setLighting(e.target.checked)} />
-                    <span className={styles.chipDot} />
-                    Lighting
-                  </label>
+                <div className={styles.section}>
+                  <div className={styles.sectionTitle}>Photos</div>
+
+                  <div className={styles.field}>
+                    <label className={styles.label}>Pitch images</label>
+
+                    <label className={styles.dropZone}>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        onChange={(e) => handleFilesSelected(e.target.files)}
+                      />
+                      <svg className={styles.dropZoneIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+                        <path d="M4 16.5V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10.5" strokeLinecap="round" />
+                        <path d="M4 17l4.5-4.5a2 2 0 0 1 2.8 0L15 16l1.7-1.7a2 2 0 0 1 2.8 0L21 16.5" strokeLinecap="round" strokeLinejoin="round" />
+                        <circle cx="8.5" cy="8.5" r="1.5" />
+                        <path d="M3 19h18" strokeLinecap="round" />
+                      </svg>
+                      <div className={styles.dropZoneText}>Click to choose photos</div>
+                      <div className={styles.dropZoneSub}>
+                        {mode === "create"
+                          ? "At least one image is required. You can select several at once."
+                          : "Remove the ones you don't want and add new ones — everything else stays untouched."}
+                      </div>
+                    </label>
+
+                    {images.length > 0 && (
+                      <div className={styles.thumbGrid}>
+                        {images.map((img) => (
+                          <div key={img.id} className={styles.thumb} onClick={() => toggleLightbox(img.id)}>
+                            <img
+                              src={img.url}
+                              alt={img.kind === "new" ? img.file.name : "Pitch photo"}
+                            />
+                            <button
+                              type="button"
+                              className={styles.thumbRemove}
+                              aria-label="Remove image"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                removeImage(img.id);
+                              }}
+                            >
+                              ×
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {step === 2 && (
+              <div className={`${styles.form} ${styles.stepContent}`}>
+                <div className={styles.section}>
+                  <div className={styles.sectionTitle}>Pricing</div>
+
+                  <div className={styles.row3}>
+                    <div className={styles.field}>
+                      <label className={styles.label}>Hourly price</label>
+                      <input className={styles.input} value={hourly} onChange={(e) => setHourly(e.target.value)} />
+                    </div>
+                    <div className={styles.field}>
+                      <label className={styles.label}>Weekly (1x/week)</label>
+                      <input className={styles.input} value={weekly} onChange={(e) => setWeekly(e.target.value)} />
+                    </div>
+                    <div className={styles.field}>
+                      <label className={styles.label}>Monthly (4x/month)</label>
+                      <input className={styles.input} value={monthly} onChange={(e) => setMonthly(e.target.value)} />
+                    </div>
+                  </div>
+
+                  <div className={styles.field}>
+                    <label className={styles.label}>Minimum hours per booking</label>
+                    <input
+                      className={styles.input}
+                      value={minHours}
+                      onChange={(e) => setMinHours(e.target.value)}
+                      style={{ maxWidth: 160 }}
+                    />
+                  </div>
+
+                  <div className={styles.field}>
+                    <label className={styles.label}>Available booking types</label>
+                    <div className={styles.chipRow}>
+                      <label className={`${styles.chip} ${allowHourly ? styles.chipOn : ""}`}>
+                        <input type="checkbox" checked={allowHourly} onChange={(e) => setAllowHourly(e.target.checked)} />
+                        <span className={styles.chipDot} />
+                        Hourly
+                      </label>
+                      <label className={`${styles.chip} ${allowWeekly ? styles.chipOn : ""}`}>
+                        <input type="checkbox" checked={allowWeekly} onChange={(e) => setAllowWeekly(e.target.checked)} />
+                        <span className={styles.chipDot} />
+                        Weekly
+                      </label>
+                      <label className={`${styles.chip} ${allowMonthly ? styles.chipOn : ""}`}>
+                        <input type="checkbox" checked={allowMonthly} onChange={(e) => setAllowMonthly(e.target.checked)} />
+                        <span className={styles.chipDot} />
+                        Monthly
+                      </label>
+                    </div>
+                  </div>
                 </div>
 
-                <div className={styles.field}>
-                  <label className={styles.label}>Other services</label>
-                  <input
-                    className={styles.input}
-                    value={services}
-                    onChange={(e) => setServices(e.target.value)}
-                    placeholder="Referee, water, ball rental"
-                  />
+                {mode === "create" && (
+                  <div className={styles.section}>
+                    <div className={styles.sectionTitle}>Initial slots (optional)</div>
+                    <div className={styles.row2}>
+                      <div className={styles.field}>
+                        <label className={styles.label}>Date</label>
+                        <input
+                          type="date"
+                          className={styles.input}
+                          value={slotDate}
+                          onChange={(e) => setSlotDate(e.target.value)}
+                        />
+                      </div>
+                      <div className={styles.field}>
+                        <label className={styles.label}>Hours</label>
+                        <input
+                          className={styles.input}
+                          value={slotHours}
+                          onChange={(e) => setSlotHours(e.target.value)}
+                          placeholder="8,9,10,11"
+                        />
+                        <div className={styles.hint}>Comma separated, 0 to 23</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {step === 3 && (
+              <div className={`${styles.form} ${styles.stepContent}`}>
+                <div className={styles.section}>
+                  <div className={styles.sectionTitle}>Amenities</div>
+                  <div className={styles.chipRow}>
+                    <label className={`${styles.chip} ${dressing ? styles.chipOn : ""}`}>
+                      <input type="checkbox" checked={dressing} onChange={(e) => setDressing(e.target.checked)} />
+                      <span className={styles.chipDot} />
+                      Dressing room
+                    </label>
+                    <label className={`${styles.chip} ${showers ? styles.chipOn : ""}`}>
+                      <input type="checkbox" checked={showers} onChange={(e) => setShowers(e.target.checked)} />
+                      <span className={styles.chipDot} />
+                      Showers
+                    </label>
+                    <label className={`${styles.chip} ${parking ? styles.chipOn : ""}`}>
+                      <input type="checkbox" checked={parking} onChange={(e) => setParking(e.target.checked)} />
+                      <span className={styles.chipDot} />
+                      Parking
+                    </label>
+                    <label className={`${styles.chip} ${lighting ? styles.chipOn : ""}`}>
+                      <input type="checkbox" checked={lighting} onChange={(e) => setLighting(e.target.checked)} />
+                      <span className={styles.chipDot} />
+                      Lighting
+                    </label>
+                  </div>
+
+                  <div className={styles.field}>
+                    <label className={styles.label}>Other services</label>
+                    <input
+                      className={styles.input}
+                      value={services}
+                      onChange={(e) => setServices(e.target.value)}
+                      placeholder="Referee, water, ball rental"
+                    />
+                  </div>
                 </div>
               </div>
-            </form>
-          ) : (
-            <div className={`${styles.form} ${styles.stepContent}`}>
-              <div className={styles.mapHint}>Click on the map or drag the marker to set the exact pitch location.</div>
+            )}
 
-              <div className={styles.mapFrame}>
-                <MapContainer center={[lat, lng]} zoom={13} style={{ height: "100%", width: "100%" }}>
-                  <TileLayer
-                    attribution="&copy; OpenStreetMap contributors"
-                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                  />
-                  <LocationPicker
-                    lat={lat}
-                    lng={lng}
-                    onChange={(newLat, newLng) => {
-                      setLat(newLat);
-                      setLng(newLng);
-                    }}
-                  />
-                </MapContainer>
+            {step === 4 && (
+              <div className={`${styles.form} ${styles.stepContent}`}>
+                <div className={styles.mapHint}>Click on the map or drag the marker to set the exact pitch location.</div>
+
+                <div className={styles.mapFrame}>
+                  <MapContainer center={[lat, lng]} zoom={13} style={{ height: "100%", width: "100%" }}>
+                    <TileLayer
+                      attribution="&copy; OpenStreetMap contributors"
+                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                    />
+                    <LocationPicker
+                      lat={lat}
+                      lng={lng}
+                      onChange={(newLat, newLng) => {
+                        setLat(newLat);
+                        setLng(newLng);
+                      }}
+                    />
+                  </MapContainer>
+                </div>
+
+                <div className={styles.coordsPill}>
+                  📍 {lat.toFixed(6)}, {lng.toFixed(6)}
+                </div>
               </div>
+            )}
+          </div>
 
-              <div className={styles.coordsPill}>
-                📍 {lat.toFixed(6)}, {lng.toFixed(6)}
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className={styles.footer}>
-          <button
-            type="button"
-            className={`${styles.btn} ${styles.btnGhost}`}
-            onClick={step === 1 ? handleClose : () => setStep(1)}
-          >
-            {step === 1 ? "Cancel" : "Back"}
-          </button>
-
-          {step === 1 ? (
-            <button type="submit" form="pitch-step1-form" className={`${styles.btn} ${styles.btnPrimary}`}>
-              Next
+          <div className={styles.footer}>
+            <button type="button" className={`${styles.btn} ${styles.btnGhost}`} onClick={goBack}>
+              {step === 1 ? "Cancel" : "Back"}
             </button>
-          ) : (
-            <button type="button" className={`${styles.btn} ${styles.btnPrimary}`} onClick={finish} disabled={submitting}>
-              {submitting ? "Saving..." : mode === "edit" ? "Save Changes" : "Create Pitch"}
-            </button>
-          )}
+
+            <span className={styles.footerProgress}>Step {step} of 4</span>
+
+            {step < 4 ? (
+              <button type="button" className={`${styles.btn} ${styles.btnPrimary}`} onClick={goNext}>
+                Next
+              </button>
+            ) : (
+              <button
+                type="button"
+                className={`${styles.btn} ${styles.btnPrimary}`}
+                onClick={finish}
+                disabled={submitting}
+              >
+                {submitting ? "Saving..." : mode === "edit" ? "Save Changes" : "Create Pitch"}
+              </button>
+            )}
+          </div>
         </div>
       </div>
 

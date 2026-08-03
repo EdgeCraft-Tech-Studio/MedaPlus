@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { me } from "../lib/auth";
 import { createBooking, getPitchDetail } from "../lib/pitches";
@@ -173,6 +173,13 @@ export default function PitchDetail() {
   const [notes, setNotes] = useState("");
   const [activeImageIndex, setActiveImageIndex] = useState(0);
 
+  // ---------- days scroller: overflow + scroll-affordance state ----------
+  const daysScrollRef = useRef<HTMLDivElement>(null);
+  const [daysOverflow, setDaysOverflow] = useState(false);
+  const [daysAtStart, setDaysAtStart] = useState(true);
+  const [daysAtEnd, setDaysAtEnd] = useState(false);
+  const [daysUserScrolled, setDaysUserScrolled] = useState(false);
+
   const role = user?.role;
   const isManager = role === "OWNER" || role === "ADMIN";
 
@@ -295,6 +302,89 @@ export default function PitchDetail() {
     return true;
   }, [monthlyWeeks, selected]);
 
+  const displayedDays =
+    mode === "monthly" ? monthlyWeeks[monthlyWeekIndex]?.days || [] : days;
+
+  // ---------- measure whether the days row actually overflows ----------
+  function measureDaysOverflow() {
+    const el = daysScrollRef.current;
+    if (!el) return;
+    const overflow = el.scrollWidth > el.clientWidth + 1;
+    setDaysOverflow(overflow);
+    setDaysAtStart(el.scrollLeft <= 1);
+    setDaysAtEnd(el.scrollLeft >= el.scrollWidth - el.clientWidth - 1);
+  }
+
+  useEffect(() => {
+    measureDaysOverflow();
+    const el = daysScrollRef.current;
+    if (!el) return;
+
+    const ro = new ResizeObserver(() => measureDaysOverflow());
+    ro.observe(el);
+    window.addEventListener("resize", measureDaysOverflow);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", measureDaysOverflow);
+    };
+    // re-measure whenever the visible set of days changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [displayedDays]);
+
+  function handleDaysScroll() {
+    const el = daysScrollRef.current;
+    if (!el) return;
+    setDaysAtStart(el.scrollLeft <= 1);
+    setDaysAtEnd(el.scrollLeft >= el.scrollWidth - el.clientWidth - 1);
+    if (el.scrollLeft > 8 && !daysUserScrolled) setDaysUserScrolled(true);
+  }
+
+  // ---------- one-time "peek" nudge so users feel it's scrollable ----------
+  useEffect(() => {
+    const el = daysScrollRef.current;
+    if (!el || !daysOverflow) return;
+
+    // Capture the narrowed, non-null value in its own binding. TS can't
+    // carry the `!el` guard above into a closure that runs later on a
+    // requestAnimationFrame callback, so without this `node` would still
+    // be typed HTMLDivElement | null inside tick().
+    const node = el;
+
+    const prefersReducedMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)"
+    ).matches;
+    if (prefersReducedMotion) return;
+
+    setDaysUserScrolled(false);
+
+    let cancelled = false;
+    const distance = 46;
+    const duration = 650;
+    let start = 0;
+
+    function easeOutCubic(x: number) {
+      return 1 - Math.pow(1 - x, 3);
+    }
+
+    function tick(now: number) {
+      if (cancelled) return;
+      if (!start) start = now;
+      const t = Math.min((now - start) / duration, 1);
+      const progress =
+        t < 0.5 ? easeOutCubic(t / 0.5) : 1 - easeOutCubic((t - 0.5) / 0.5);
+      node.scrollLeft = progress * distance;
+      if (t < 1) requestAnimationFrame(tick);
+      else measureDaysOverflow();
+    }
+
+    const timeout = window.setTimeout(() => requestAnimationFrame(tick), 350);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [daysOverflow, mode, monthlyWeekIndex]);
+
   async function handleBook() {
     if (!pitch || !pitchId || selectedList.length === 0) return;
 
@@ -360,9 +450,6 @@ export default function PitchDetail() {
       </div>
     );
   }
-
-  const displayedDays =
-    mode === "monthly" ? monthlyWeeks[monthlyWeekIndex]?.days || [] : days;
 
   const amenityEntries = [
     { active: pitch.has_dressing_room, label: "Dressing room", Icon: ShirtIcon },
@@ -556,34 +643,50 @@ export default function PitchDetail() {
                 </div>
               </div>
 
-              <div className={styles.daysGrid}>
-                {displayedDays.map((day) => (
-                  <div key={day.date} className={styles.dayColumn}>
-                    <div className={styles.dayHeader}>
-                      <div className={styles.dayWeekday}>{day.weekday}</div>
-                      <div className={styles.dayDate}>{day.display_date}</div>
-                    </div>
+              {/* ---------- days: always-horizontal scroller with scroll hints ---------- */}
+              <div className={styles.daysGridWrap}>
+                <div
+                  className={styles.daysGrid}
+                  ref={daysScrollRef}
+                  onScroll={handleDaysScroll}
+                >
+                  {displayedDays.map((day) => (
+                    <div key={day.date} className={styles.dayColumn}>
+                      <div className={styles.dayHeader}>
+                        <div className={styles.dayWeekday}>{day.weekday}</div>
+                        <div className={styles.dayDate}>{day.display_date}</div>
+                      </div>
 
-                    <div className={styles.slotList}>
-                      {day.slots.map((slot) => {
-                        const isSelected = !!selected[slot.key];
-                        return (
-                          <button
-                            key={slot.key}
-                            type="button"
-                            onClick={() => toggleSlot(slot)}
-                            disabled={!slot.is_available}
-                            className={`${styles.slotBtn} ${slotClassName(slot, isSelected)}`}
-                          >
-                            {slot.status === "BOOKED" && <LockIcon />}
-                            {isSelected && slot.status !== "BOOKED" && <CheckIcon />}
-                            {slot.label}
-                          </button>
-                        );
-                      })}
+                      <div className={styles.slotList}>
+                        {day.slots.map((slot) => {
+                          const isSelected = !!selected[slot.key];
+                          return (
+                            <button
+                              key={slot.key}
+                              type="button"
+                              onClick={() => toggleSlot(slot)}
+                              disabled={!slot.is_available}
+                              className={`${styles.slotBtn} ${slotClassName(slot, isSelected)}`}
+                            >
+                              {slot.status === "BOOKED" && <LockIcon />}
+                              {isSelected && slot.status !== "BOOKED" && <CheckIcon />}
+                              {slot.label}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
+                  ))}
+                </div>
+
+                {daysOverflow && !daysAtStart && <div className={styles.edgeFadeLeft} />}
+                {daysOverflow && !daysAtEnd && <div className={styles.edgeFadeRight} />}
+
+                {daysOverflow && !daysUserScrolled && (
+                  <div className={styles.scrollHintBadge} aria-hidden="true">
+                    <ChevronRightIcon />
                   </div>
-                ))}
+                )}
               </div>
             </div>
           </div>

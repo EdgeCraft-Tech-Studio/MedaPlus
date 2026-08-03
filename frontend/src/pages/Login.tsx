@@ -54,7 +54,7 @@ export default function Login() {
       // no setLoading(false) here on success — keep the loader up through
       // the redirect so the form doesn't flash back before navigating away.
     } catch (e: any) {
-      setErr("Login failed. Check username/password or API config.");
+      setErr("Invalid Username or Password!");
       setLoading(false);
     }
   }

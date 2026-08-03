@@ -22,18 +22,207 @@
   --radius-sm: 10px;
 
   display: flex;
-  flex-direction: column;
-  height: min(86vh, 780px);
-  max-height: 86vh;
+  height: min(88vh, 400px);
+  max-height: 88vh;
   width: 100%;
   font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
   color: var(--ink);
   background: var(--paper);
+  overflow: hidden;
+}
+
+/* ============================================================
+   LEFT RAIL — the 4-step navigator. This is the signature element:
+   a vertical stepper with a connecting line that fills as you
+   progress, instead of the usual flat top progress bar.
+   ============================================================ */
+
+.rail {
+  width: 190px;
+  flex-shrink: 0;
+  background: linear-gradient(180deg, var(--green-900), var(--green-700));
+  color: #fff;
+  padding: 24px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.railHead {
+  padding: 0 4px 20px;
+}
+
+.railTitle {
+  font-size: 13.5px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.railSubtitle {
+  font-size: 11.5px;
+  color: rgba(255, 255, 255, 0.55);
+  margin-top: 2px;
+}
+
+.railClearBtn {
+  margin: 2px 4px 16px;
+  align-self: flex-start;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.06);
+  color: #eafff4;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+  animation: dropIn 0.25s ease;
+}
+
+.railClearBtn:hover {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+@keyframes dropIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.railStep {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 4px;
+  border: none;
+  background: none;
+  text-align: left;
+  cursor: default;
+  color: rgba(255, 255, 255, 0.45);
+  font-family: inherit;
+}
+
+.railStepClickable {
+  cursor: pointer;
+}
+
+.railStepClickable:hover .railDot {
+  border-color: var(--grass);
+}
+
+.railConnector {
+  position: absolute;
+  left: 19px;
+  top: 34px;
+  bottom: -10px;
+  width: 2px;
+  background: rgba(255, 255, 255, 0.15);
+  overflow: hidden;
+}
+
+.railConnector::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--grass);
+  transform: scaleY(var(--fill, 0));
+  transform-origin: top;
+  transition: transform 0.35s ease;
+}
+
+.railDot {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.06);
+  display: grid;
+  place-items: center;
+  transition: all 0.22s ease;
+  z-index: 1;
+}
+
+.railDot svg {
+  width: 13px;
+  height: 13px;
+}
+
+.railStepBody {
+  padding-top: 3px;
+  min-width: 0;
+}
+
+.railStepLabel {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.3;
+  transition: color 0.2s ease;
+}
+
+.railStepHint {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.4);
+  margin-top: 1px;
+}
+
+.railStep.active {
+  color: #fff;
+}
+
+.railStep.active .railDot {
+  border-color: var(--grass);
+  background: var(--grass);
+  box-shadow: 0 0 0 4px rgba(63, 174, 127, 0.28);
+}
+
+.railStep.done {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.railStep.done .railDot {
+  border-color: var(--grass);
+  background: rgba(63, 174, 127, 0.25);
+  color: var(--grass);
+}
+
+.railStep.done .railStepHint {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+/* ============================================================
+   MAIN COLUMN — header, scrollable body, sticky footer
+   ============================================================ */
+
+.mainCol {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.topBar {
+  flex-shrink: 0;
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.topBarTitle {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.topBarSubtitle {
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  margin-top: 2px;
 }
 
 /* ---------- error banner ---------- */
 .errorBanner {
-  margin: 0 20px 12px;
+  margin: 14px 24px 0;
   display: flex;
   align-items: flex-start;
   gap: 10px;
@@ -44,126 +233,20 @@
   border-radius: var(--radius-sm);
   font-size: 13.5px;
   line-height: 1.45;
-  animation: dropIn 0.22s ease;
+  animation: bannerIn 0.22s ease;
   flex-shrink: 0;
 }
 
-.draftBanner {
-  margin: 0 20px 12px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  color: var(--green-700);
-  background: var(--grass-soft);
-  border: 1px solid #c7e6d7;
-  padding: 10px 14px;
-  border-radius: var(--radius-sm);
-  font-size: 13px;
-  animation: dropIn 0.22s ease;
-  flex-shrink: 0;
-}
-
-.draftBanner button {
-  border: none;
-  background: none;
-  color: var(--green-700);
-  font-weight: 600;
-  font-size: 12.5px;
-  cursor: pointer;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-  padding: 2px 4px;
-}
-
-@keyframes dropIn {
+@keyframes bannerIn {
   from { opacity: 0; transform: translateY(-6px); }
   to { opacity: 1; transform: translateY(0); }
-}
-
-/* ---------- step indicator (signature element: touchline progress) ---------- */
-.steps {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: 0;
-  padding: 4px 20px 20px;
-}
-
-.stepBadge {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--ink-soft);
-  white-space: nowrap;
-}
-
-.stepBadge.active {
-  color: var(--green-700);
-}
-
-.stepDot {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  background: #fff;
-  border: 2px solid var(--line-strong);
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--ink-soft);
-  transition: all 0.25s ease;
-  flex-shrink: 0;
-}
-
-.stepBadge.active .stepDot {
-  border-color: var(--grass);
-  background: var(--green-600);
-  color: #fff;
-  box-shadow: 0 0 0 4px var(--grass-soft);
-}
-
-.stepBadge.done .stepDot {
-  border-color: var(--grass);
-  background: var(--grass);
-  color: #fff;
-}
-
-.stepTrack {
-  flex: 1;
-  height: 2px;
-  margin: 0 12px;
-  background: repeating-linear-gradient(
-    to right,
-    var(--line-strong) 0,
-    var(--line-strong) 6px,
-    transparent 6px,
-    transparent 12px
-  );
-  position: relative;
-  border-radius: 2px;
-  overflow: hidden;
-}
-
-.stepTrack::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(to right, var(--grass), var(--green-600));
-  width: var(--progress, 0%);
-  transition: width 0.35s ease;
-  border-radius: 2px;
 }
 
 /* ---------- scrollable body ---------- */
 .body {
   flex: 1;
   overflow-y: auto;
-  padding: 4px 20px 24px;
+  padding: 20px 24px 24px;
   scroll-behavior: smooth;
 }
 
@@ -183,8 +266,8 @@
 }
 
 @keyframes fadeSlide {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translateX(10px); }
+  to { opacity: 1; transform: translateX(0); }
 }
 
 .form {
@@ -277,10 +360,6 @@
   outline: none;
   border-color: var(--grass);
   box-shadow: 0 0 0 4px var(--grass-soft);
-}
-
-.inputError {
-  border-color: var(--danger) !important;
 }
 
 /* ---------- file drop zone ---------- */
@@ -533,10 +612,16 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 14px 20px;
+  padding: 14px 24px;
   border-top: 1px solid var(--line);
   background: #fff;
   box-shadow: 0 -4px 14px rgba(14, 47, 36, 0.05);
+}
+
+.footerProgress {
+  font-size: 12px;
+  color: var(--ink-soft);
+  font-weight: 600;
 }
 
 .btn {
@@ -581,7 +666,63 @@
   box-shadow: none;
 }
 
-.selectedFiles {
-  font-size: 12.5px;
-  color: var(--ink-soft);
+/* ---------- mobile: rail becomes a compact horizontal bar ---------- */
+@media (max-width: 680px) {
+  .wizard {
+    flex-direction: column;
+    height: min(92vh, 860px);
+    max-height: 92vh;
+  }
+
+  .rail {
+    width: 100%;
+    flex-direction: row;
+    align-items: center;
+    padding: 14px 16px;
+    gap: 0;
+    overflow-x: auto;
+  }
+
+  .railHead {
+    display: none;
+  }
+
+  .railClearBtn {
+    display: none;
+  }
+
+  .railStep {
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    flex: 1;
+  }
+
+  .railStepBody {
+    padding-top: 0;
+    text-align: center;
+  }
+
+  .railStepHint {
+    display: none;
+  }
+
+  .railStepLabel {
+    font-size: 10.5px;
+  }
+
+  .railConnector {
+    left: -50%;
+    right: 50%;
+    top: 13px;
+    bottom: auto;
+    width: auto;
+    height: 2px;
+  }
+
+  .railConnector::after {
+    transform: scaleX(var(--fill, 0));
+    transform-origin: left;
+  }
 }

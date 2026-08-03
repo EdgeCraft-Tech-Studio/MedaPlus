@@ -13,14 +13,34 @@
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 14px clamp(20px, 4vw, 56px);
-  background: rgba(251, 251, 248, 0.92);
-  backdrop-filter: blur(8px);
-  border-bottom: 1px solid var(--line);
+
+  /* ---- floating pill shell ---- */
+  max-width: 93%;
+  margin: 1px auto 0;
+  padding: 9px 9px;
+  border-radius: 15px;
+  border: 1.5px solid rgba(63, 174, 127, 0.38);
+  background:
+    linear-gradient(180deg, rgba(234, 247, 239, 0.95), rgba(251, 251, 248, 0.9));
+  box-shadow:
+    0 10px 30px rgba(14, 47, 36, 0.12),
+    0 2px 8px rgba(14, 47, 36, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(10px);
+
   font-family: 'Inter', -apple-system, sans-serif;
   position: sticky;
-  top: 0;
+  top: 14px;
   z-index: 30;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.nav:hover {
+  border-color: rgba(63, 174, 127, 0.55);
+  box-shadow:
+    0 14px 36px rgba(14, 47, 36, 0.16),
+    0 3px 10px rgba(14, 47, 36, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7);
 }
 
 .brand {
@@ -34,12 +54,18 @@
 .brandMark {
   width: 32px;
   height: 32px;
-  border-radius: 9px;
+  border-radius: 10px;
   background: linear-gradient(135deg, var(--green-700), var(--grass));
   display: grid;
   place-items: center;
   flex-shrink: 0;
-  box-shadow: 0 4px 12px rgba(22, 81, 63, 0.28);
+  box-shadow: 0 4px 12px rgba(22, 81, 63, 0.32), 0 0 0 3px rgba(63, 174, 127, 0.16);
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.brand:hover .brandMark {
+  transform: translateY(-1px) scale(1.04);
+  box-shadow: 0 6px 16px rgba(22, 81, 63, 0.36), 0 0 0 4px rgba(63, 174, 127, 0.22);
 }
 
 .brandMark svg {
@@ -52,6 +78,7 @@
   font-size: 16.5px;
   font-weight: 800;
   letter-spacing: -0.02em;
+  color: var(--green-900);
 }
 
 .logoutBtn {
@@ -59,16 +86,17 @@
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  border: 1px solid var(--line);
+  border: 1px solid rgba(63, 174, 127, 0.3);
   background: #fff;
-  color: #6b7a72;
+  color: var(--green-700);
   font-family: inherit;
   font-weight: 600;
   font-size: 13.5px;
-  padding: 8px 15px;
-  border-radius: 999px;
+  padding: 8px 12px;
+  border-radius: 9px;
   cursor: pointer;
-  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease,
+    transform 0.1s ease;
 }
 
 .logoutBtn svg {
@@ -83,5 +111,21 @@
 }
 
 .logoutBtn:active {
-  transform: scale(0.97);
+  transform: scale(0.96);
+}
+
+@media (max-width: 640px) {
+  .nav {
+    margin: 12px 12px 0;
+    padding: 10px 16px;
+    top: 10px;
+  }
+
+  .brandName {
+    font-size: 15px;
+  }
+
+  .logoutBtn span {
+    display: none;
+  }
 }

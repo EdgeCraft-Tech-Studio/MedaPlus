@@ -596,21 +596,122 @@
 }
 
 /* ============================================================
-   DAYS GRID — desktop: wraps into a responsive grid (unchanged)
+   DAYS — always a horizontal scroller. On a screen wide enough
+   to fit every day, total content width <= container width, so
+   the browser simply shows no scrollbar and nothing scrolls —
+   same look as the old grid. On narrower screens the extra days
+   overflow and become scrollable. No breakpoint math needed.
    ============================================================ */
 
+.daysGridWrap {
+  position: relative;
+}
+
 .daysGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+
+  overflow-x: auto;
+  overflow-y: hidden;
+
+  /* keep the horizontal drag from bubbling up and moving the page */
+  overscroll-behavior-x: contain;
+  touch-action: pan-x;
+
+  /* smooth momentum + gentle snap to the next day */
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+  scroll-snap-type: x proximity;
+
   gap: 12px;
+  padding-bottom: 6px;
 }
 
 .dayColumn {
+  flex: 0 0 auto;
+  width: clamp(150px, 20vw, 190px);
+  scroll-snap-align: start;
+
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   overflow: hidden;
   background: var(--surface);
 }
+
+/* soft fade over whichever edge still has hidden days — appears/
+   disappears automatically as the user scrolls */
+.edgeFadeLeft,
+.edgeFadeRight {
+  position: absolute;
+  top: 0;
+  bottom: 6px;
+  width: 36px;
+  pointer-events: none;
+  z-index: 3;
+  opacity: 1;
+  transition: opacity 0.2s ease;
+}
+
+.edgeFadeLeft {
+  left: 0;
+  background: linear-gradient(to right, var(--surface) 0%, transparent 100%);
+}
+
+.edgeFadeRight {
+  right: 0;
+  background: linear-gradient(to left, var(--surface) 0%, transparent 100%);
+}
+
+/* pulsing chevron — the "psst, this scrolls" hint. Only rendered
+   while there's overflow and the user hasn't scrolled yet. */
+.scrollHintBadge {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: rgba(17, 19, 24, 0.55);
+  backdrop-filter: blur(2px);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  z-index: 4;
+  pointer-events: none;
+  animation: hintPulse 1.4s ease-in-out infinite;
+}
+
+.scrollHintBadge svg {
+  width: 15px;
+  height: 15px;
+}
+
+@keyframes hintPulse {
+  0%, 100% {
+    opacity: 0.55;
+    transform: translateY(-50%) translateX(0);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-50%) translateX(4px);
+  }
+}
+
+/*
+  ---- Optional: hide the horizontal scrollbar later ----
+  Scrolling still works exactly the same, the bar just becomes invisible.
+  Uncomment when ready:
+
+  .daysGrid {
+    scrollbar-width: none;        // Firefox
+    -ms-overflow-style: none;     // old Edge / IE
+  }
+  .daysGrid::-webkit-scrollbar {  // Chrome / Safari / new Edge
+    display: none;
+  }
+*/
 
 .dayHeader {
   padding: 11px 12px;
@@ -1019,60 +1120,6 @@
   .bookingSection {
     padding: 6px 18px 22px;
   }
-}
-
-/* ============================================================
-   PHONE ONLY — days scroll horizontally instead of stacking.
-   Everything above (gallery, sidebar, page layout) is untouched;
-   only .daysGrid / .dayColumn change inside this query.
-   ============================================================ */
-@media (max-width: 600px) {
-  .daysGrid {
-    /* row instead of the desktop grid -> days sit side by side */
-    display: flex;
-    flex-direction: row;
-    flex-wrap: nowrap;
-
-    /* only THIS element scrolls horizontally */
-    overflow-x: auto;
-    overflow-y: hidden;
-
-    /* keeps the drag/scroll gesture from bubbling up and moving the page */
-    overscroll-behavior-x: contain;
-    touch-action: pan-x;
-
-    /* smooth momentum + nice "snap to next day" feel */
-    scroll-behavior: smooth;
-    -webkit-overflow-scrolling: touch;
-    scroll-snap-type: x proximity;
-
-    gap: 10px;
-    padding: 4px 2px 10px; /* small bottom padding reserves room for the scrollbar */
-    margin: 0 -2px;
-  }
-
-  .dayColumn {
-    /* stop days from shrinking to fit — this is what forces the horizontal overflow */
-    flex: 0 0 auto;
-    width: 78vw;
-    max-width: 230px;
-    scroll-snap-align: start;
-  }
-
-  /*
-    ---- Optional: hide the horizontal scrollbar later ----
-    Scrolling still works exactly the same, the bar just becomes invisible.
-    Uncomment these 4 rules (and you can drop the extra bottom padding above)
-    when you're ready to hide it:
-
-    .daysGrid {
-      scrollbar-width: none;        // Firefox
-      -ms-overflow-style: none;     // old Edge / IE
-    }
-    .daysGrid::-webkit-scrollbar {  // Chrome / Safari / new Edge
-      display: none;
-    }
-  */
 }
 
 @media (prefers-reduced-motion: reduce) {

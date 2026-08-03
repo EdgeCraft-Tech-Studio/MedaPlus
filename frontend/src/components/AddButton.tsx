@@ -9,22 +9,32 @@ export default function AddButton({ onClick, title = "Add Pitch" }: Props) {
       onClick={onClick}
       title={title}
       style={{
-        width: 56,
-        height: 56,
-        borderRadius: "50%",
+        height: 42,
+        padding: "0 18px",
+        borderRadius: 10,
         border: "none",
         cursor: "pointer",
-        background: "#3bdc4a",
-        color: "white",
-        fontSize: 34,
-        lineHeight: "56px",
+        background: "#111111",
+        color: "#ffffff",
+        fontSize: 13,
+        fontWeight: 300,
         display: "inline-flex",
         alignItems: "center",
-        justifyContent: "center",
-        boxShadow: "0 10px 25px rgba(0,0,0,0.2)",
+        gap: 8,
+        boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+        transition: "all 0.2s ease",
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.background = "#000000";
+        e.currentTarget.style.transform = "translateY(-1px)";
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = "#111111";
+        e.currentTarget.style.transform = "translateY(0)";
       }}
     >
-      +
+      <span style={{ fontSize: 20, lineHeight: 1 }}>+</span>
+      {title}
     </button>
   );
 }

@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import type { Pitch } from "../lib/pitches";
 import AddButton from "../components/AddButton";
 import PitchWizardModal from "../components/PitchWizardModal";
+import PitchLocationModal from "../components/PitchLocationModal";
 import LoadingBall from "../pages/LoadingBall";
 import styles from "./css/Admin.module.css";
 import ToastContainer, { showToast } from "../pages/Toast";
@@ -213,6 +214,80 @@ function AmenityTags({ pitch }: { pitch: Pitch }) {
   );
 }
 
+// Edit + Location as ONE connected pill, positioned in the card corner.
+//
+// Why not two separate buttons each with the "editCornerBtn" class? Because
+// that class is almost certainly position:absolute with a fixed top/right -
+// applying it to BOTH buttons stacks them exactly on top of each other, and
+// whichever renders last (Location) completely covers the other (Edit),
+// making Edit look like it "disappeared". It never actually vanished, it
+// was just hidden underneath.
+//
+// Fix: only the OUTER wrapper gets the absolute-positioning class. The two
+// buttons inside are plain flex children with no gap between them, so they
+// sit side-by-side inside that single positioned pill - same shape, zero
+// gap, and both fully clickable.
+function CardActions({
+  onEdit,
+  onLocation,
+}: {
+  onEdit: () => void;
+  onLocation: () => void;
+}) {
+  return (
+    <div
+      className={styles.editCornerBtn}
+      style={{
+        display: "flex",
+        alignItems: "stretch",
+        padding: 0,
+        overflow: "hidden",
+        gap: 0,
+      }}
+    >
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onEdit();
+        }}
+        style={{
+          border: "none",
+          borderRight: "1px solid rgba(255,255,255,0.35)",
+          background: "transparent",
+          color: "inherit",
+          font: "inherit",
+          padding: "6px 12px",
+          cursor: "pointer",
+        }}
+      >
+        Edit
+      </button>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onLocation();
+        }}
+        style={{
+          border: "none",
+          background: "transparent",
+          color: "inherit",
+          font: "inherit",
+          padding: "6px 12px",
+          cursor: "pointer",
+          display: "flex",
+          alignItems: "center",
+          gap: 4,
+        }}
+      >
+        <Icon name="pin" size={12} />
+        Location
+      </button>
+    </div>
+  );
+}
+
 export default function Admin() {
   const navigate = useNavigate();
 
@@ -225,6 +300,7 @@ export default function Admin() {
   const [msg, setMsg] = useState("");
   const [openAdd, setOpenAdd] = useState(false);
   const [editingPitch, setEditingPitch] = useState<Pitch | null>(null);
+  const [locationPitch, setLocationPitch] = useState<Pitch | null>(null);
   const [loading, setLoading] = useState(true);
 
   const [search, setSearch] = useState("");
@@ -290,8 +366,12 @@ export default function Admin() {
     }
   }
 
-  function goToPitch(pitchId: string) {
-    navigate(`/app/pitches/${pitchId}`);
+  // Only approved pitches have a live detail/booking page worth opening.
+  // Pending pitches are still being reviewed, so clicking the card does
+  // nothing until an admin approves it.
+  function goToPitch(pitch: Pitch) {
+    if (!pitch.is_approved) return;
+    navigate(`/app/pitches/${pitch.id}`);
   }
 
   const filteredPendingPitches = useMemo(() => {
@@ -350,31 +430,31 @@ export default function Admin() {
           owners={owners}
           mode="edit"
           initialData={
-  editingPitch
-    ? {
-        id: editingPitch.id,
-        name: editingPitch.name,
-        address: editingPitch.address,
-        latitude: editingPitch.latitude,
-        longitude: editingPitch.longitude,
-        opening_time: editingPitch.opening_time,
-        closing_time: editingPitch.closing_time,
-        hourly_price: editingPitch.hourly_price,
-        weekly_price: editingPitch.weekly_price,
-        monthly_price: editingPitch.monthly_price,
-        min_hours: editingPitch.min_hours,
-        allow_hourly: editingPitch.allow_hourly,
-        allow_weekly: editingPitch.allow_weekly,
-        allow_monthly: editingPitch.allow_monthly,
-        has_dressing_room: editingPitch.has_dressing_room,
-        has_showers: editingPitch.has_showers,
-        has_parking: editingPitch.has_parking,
-        has_lighting: editingPitch.has_lighting,
-        other_services: editingPitch.other_services,
-        images: editingPitch.images,
-      }
-    : undefined
-}
+            editingPitch
+              ? {
+                  id: editingPitch.id,
+                  name: editingPitch.name,
+                  address: editingPitch.address,
+                  latitude: editingPitch.latitude,
+                  longitude: editingPitch.longitude,
+                  opening_time: editingPitch.opening_time,
+                  closing_time: editingPitch.closing_time,
+                  hourly_price: editingPitch.hourly_price,
+                  weekly_price: editingPitch.weekly_price,
+                  monthly_price: editingPitch.monthly_price,
+                  min_hours: editingPitch.min_hours,
+                  allow_hourly: editingPitch.allow_hourly,
+                  allow_weekly: editingPitch.allow_weekly,
+                  allow_monthly: editingPitch.allow_monthly,
+                  has_dressing_room: editingPitch.has_dressing_room,
+                  has_showers: editingPitch.has_showers,
+                  has_parking: editingPitch.has_parking,
+                  has_lighting: editingPitch.has_lighting,
+                  other_services: editingPitch.other_services,
+                  images: editingPitch.images,
+                }
+              : undefined
+          }
           onSubmit={async (payload) => {
             if (!editingPitch?.id) return;
             await updatePitch(editingPitch.id, payload);
@@ -382,6 +462,16 @@ export default function Admin() {
             setEditingPitch(null);
             await refresh();
           }}
+        />
+
+        <PitchLocationModal
+          open={!!locationPitch}
+          onClose={() => setLocationPitch(null)}
+          pitchId={locationPitch?.id}
+          pitchName={locationPitch?.name}
+          address={locationPitch?.address}
+          latitude={locationPitch?.latitude}
+          longitude={locationPitch?.longitude}
         />
 
         <div className={styles.filtersCard}>
@@ -535,8 +625,8 @@ export default function Admin() {
                 {filteredPendingPitches.map((p, index) => (
                   <div
                     key={p.id}
-                    onClick={() => goToPitch(p.id)}
-                    className={styles.pitchCard}
+                    onClick={() => goToPitch(p)}
+                    className={`${styles.pitchCard} ${!p.is_approved ? styles.pitchCardDisabled : ""}`}
                     style={{ "--i": index } as React.CSSProperties}
                   >
                     <CardImage pitch={p} />
@@ -565,16 +655,13 @@ export default function Admin() {
                       <PitchHours pitch={p} />
                     </div>
 
-                    <button
-                      className={styles.editCornerBtn}
-                      onClick={(e) => {
-                        e.stopPropagation();
+                    <CardActions
+                      onEdit={() => {
                         setMsg("");
                         setEditingPitch(p);
                       }}
-                    >
-                      Edit
-                    </button>
+                      onLocation={() => setLocationPitch(p)}
+                    />
                   </div>
                 ))}
               </div>
@@ -598,8 +685,8 @@ export default function Admin() {
                 {filteredAllPitches.map((p, index) => (
                   <div
                     key={p.id}
-                    onClick={() => goToPitch(p.id)}
-                    className={styles.pitchCard}
+                    onClick={() => goToPitch(p)}
+                    className={`${styles.pitchCard} ${!p.is_approved ? styles.pitchCardDisabled : ""}`}
                     style={{ "--i": index } as React.CSSProperties}
                   >
                     <CardImage pitch={p} />
@@ -627,16 +714,13 @@ export default function Admin() {
                       <AmenityTags pitch={p} />
                     </div>
 
-                    <button
-                      className={styles.editCornerBtn}
-                      onClick={(e) => {
-                        e.stopPropagation();
+                    <CardActions
+                      onEdit={() => {
                         setMsg("");
                         setEditingPitch(p);
                       }}
-                    >
-                      Edit
-                    </button>
+                      onLocation={() => setLocationPitch(p)}
+                    />
                   </div>
                 ))}
               </div>

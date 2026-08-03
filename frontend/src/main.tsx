@@ -10,7 +10,6 @@ import Signup from "./pages/Signup";
 import Admin from "./pages/Admin";
 import Owner from "./pages/Owner";
 import App from "./pages/App";
-import PitchDetailPlaceholder from "./pages/PitchDetailPlaceholder";
 import PitchDetail from "./pages/PitchDetail";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
