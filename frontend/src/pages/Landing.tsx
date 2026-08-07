@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+ import { Link } from "react-router-dom";
 import styles from "./css/Landing.module.css";
 
 /* ---------- small inline icons (purely presentational) ---------- */

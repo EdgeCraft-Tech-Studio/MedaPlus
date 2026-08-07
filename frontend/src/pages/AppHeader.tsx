@@ -1,6 +1,5 @@
-import { useNavigate, Link } from "react-router-dom";
-import { logout } from "../lib/auth";
-import styles from "./css/AppHeader.module.css";
+import { Link } from "react-router-dom";
+import styles from "../pages/css/AppHeader.module.css";
 
 function BallIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
@@ -12,49 +11,29 @@ function BallIcon(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
-function LogoutIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" {...props}>
-      <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
-      <path d="M16 17l5-5-5-5" />
-      <path d="M21 12H9" />
-    </svg>
-  );
-}
-
-type Props = {
-  /** "logout" shows a logout button on the right. "none" shows nothing there. */
-  variant?: "logout" | "none";
-  /** Where the brand mark links to. Defaults to "/". */
-  homeHref?: string;
+type AppHeaderProps = {
+  variant?: "logout";
 };
 
-export default function AppHeader({ variant = "none", homeHref = "/" }: Props) {
-  const navigate = useNavigate();
-
-  async function handleLogout() {
-    try {
-      await logout();
-    } finally {
-      navigate("/login", { replace: true });
-    }
-  }
-
+export default function AppHeader({ variant = "logout" }: AppHeaderProps) {
   return (
     <nav className={styles.nav}>
-      <Link to={homeHref} className={styles.brand}>
+      <Link to="/" className={styles.brand}>
         <span className={styles.brandMark}>
           <BallIcon />
         </span>
-        <span className={styles.brandName}>Meda Plus</span>
+        <span className={styles.brandName}>MedaPlus</span>
       </Link>
 
-      {variant === "logout" && (
-        <button type="button" className={styles.logoutBtn} onClick={handleLogout}>
-          <LogoutIcon />
-          Logout
-        </button>
-      )}
+      <div className={styles.navActions}>
+        <span className={styles.verifiedPill}>
+          <span className={styles.verifiedDot} />
+          Verified
+        </span>
+        {variant === "logout" && (
+          <button className={styles.btnGhostNav}>Log out</button>
+        )}
+      </div>
     </nav>
   );
 }

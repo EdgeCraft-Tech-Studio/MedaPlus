@@ -1,15 +1,19 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { register, login, me } from "../lib/auth";
+import { register } from "../lib/auth";
 import AuthHeader from "../pages/AuthHeader";
 import styles from "./css/Auth.module.css";
 import LoadingBall from "./LoadingBall";
 
+// ---------------------------------------------------------------------------
+// Icons
+// ---------------------------------------------------------------------------
+
 function EyeIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" {...props}>
-      <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z" />
-      <circle cx="12" cy="12" r="3" />
+      <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="12" cy="12" r="3" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -17,50 +21,200 @@ function EyeIcon(props: React.SVGProps<SVGSVGElement>) {
 function EyeOffIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" {...props}>
-      <path d="M3 3l18 18" />
-      <path d="M10.6 5.2A10.4 10.4 0 0112 5c6.4 0 10 7 10 7a17.5 17.5 0 01-3.2 4.1M6.3 6.3A17.6 17.6 0 002 12s3.6 7 10 7a10.3 10.3 0 004.2-.9" />
-      <path d="M9.9 9.9a3 3 0 004.2 4.2" />
+      <path
+        d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a19.4 19.4 0 0 1 5.06-5.94M9.9 4.24A10.4 10.4 0 0 1 12 4c7 0 11 8 11 8a19.5 19.5 0 0 1-2.2 3.19M14.12 14.12a3 3 0 1 1-4.24-4.24"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <line x1="1" y1="1" x2="23" y2="23" strokeLinecap="round" />
     </svg>
   );
 }
 
 function AlertIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" {...props}>
-      <circle cx="12" cy="12" r="9" />
-      <path d="M12 8v5M12 16v.01" />
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" {...props}>
+      <circle cx="12" cy="12" r="10" />
+      <line x1="12" y1="8" x2="12" y2="13" strokeLinecap="round" />
+      <line x1="12" y1="16.5" x2="12" y2="16.51" strokeLinecap="round" />
     </svg>
   );
 }
 
+// ---------------------------------------------------------------------------
+// Validation
+// ---------------------------------------------------------------------------
+
+interface PhoneValidationResult {
+  valid: boolean;
+  message: string;
+  normalized: string;
+}
+
+interface FieldValidationResult {
+  valid: boolean;
+  message: string;
+}
+
+/**
+ * Validates Ethiopian mobile numbers for the two carriers currently
+ * issuing numbers: Ethio Telecom (09XXXXXXXX) and Safaricom Ethiopia
+ * (07XXXXXXXX). Accepts local (0...), and international (+251... / 251...)
+ * formats, and normalizes everything to the local 10-digit form
+ * (e.g. "0912345678") since that's what the UI asks the user to enter.
+ */
+function validateEthioPhone(value: string): PhoneValidationResult {
+  const cleaned = value.replace(/[\s\-()]/g, "");
+
+  if (!cleaned) {
+    return { valid: false, message: "Phone number is required", normalized: "" };
+  }
+
+  let digits = cleaned;
+
+  // Normalize international prefixes down to the local 0-prefixed form.
+  if (digits.startsWith("+251")) {
+    digits = "0" + digits.slice(4);
+  } else if (digits.startsWith("251") && digits.length === 12) {
+    digits = "0" + digits.slice(3);
+  }
+
+  if (!/^\d+$/.test(digits)) {
+    return { valid: false, message: "Phone number can only contain digits", normalized: "" };
+  }
+
+  if (digits.length !== 10) {
+    return {
+      valid: false,
+      message: "Enter a 10-digit number, e.g. 09XXXXXXXX or 07XXXXXXXX",
+      normalized: "",
+    };
+  }
+
+  if (digits[0] !== "0") {
+    return { valid: false, message: "Phone number must start with 0", normalized: "" };
+  }
+
+  const carrierDigit = digits[1];
+
+  if (carrierDigit !== "9" && carrierDigit !== "7") {
+    return {
+      valid: false,
+      message: "Enter a valid Ethio Telecom (09) or Safaricom (07) number",
+      normalized: "",
+    };
+  }
+
+  // NOTE: carrier blocks (e.g. which 090x / 070x ranges are actually
+  // issued) shift over time as new blocks get allocated. If you need
+  // stricter carrier-block validation, add the specific 3rd-digit
+  // ranges here — for now we validate the structural pattern that's
+  // guaranteed to hold: 0 + (9|7) + 8 digits.
+
+  return { valid: true, message: "", normalized: digits };
+}
+
+/** Email is optional on this form, so an empty value is valid. */
+function validateEmail(value: string): FieldValidationResult {
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return { valid: true, message: "" };
+  }
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+  if (!emailRegex.test(trimmed)) {
+    return { valid: false, message: "Enter a valid email address" };
+  }
+
+  return { valid: true, message: "" };
+}
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
 export default function Signup() {
   const nav = useNavigate();
-  const [username, setUsername] = useState("");
+  const [phone, setPhone] = useState("");
+  const [phoneError, setPhoneError] = useState("");
+  const [phoneTouched, setPhoneTouched] = useState(false);
+
   const [email, setEmail] = useState("");
+  const [emailError, setEmailError] = useState("");
+  const [emailTouched, setEmailTouched] = useState(false);
+
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [role, setRole] = useState<"OWNER" | "PLAYER">("PLAYER");
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
 
+  function handlePhoneChange(value: string) {
+    setPhone(value);
+    if (phoneTouched) {
+      const result = validateEthioPhone(value);
+      setPhoneError(result.valid ? "" : result.message);
+    }
+  }
+
+  function handlePhoneBlur() {
+    setPhoneTouched(true);
+    const result = validateEthioPhone(phone);
+    setPhoneError(result.valid ? "" : result.message);
+  }
+
+  function handleEmailChange(value: string) {
+    setEmail(value);
+    if (emailTouched) {
+      const result = validateEmail(value);
+      setEmailError(result.valid ? "" : result.message);
+    }
+  }
+
+  function handleEmailBlur() {
+    setEmailTouched(true);
+    const result = validateEmail(email);
+    setEmailError(result.valid ? "" : result.message);
+  }
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setErr("");
+
+    const phoneResult = validateEthioPhone(phone);
+    const emailResult = validateEmail(email);
+
+    setPhoneTouched(true);
+    setEmailTouched(true);
+    setPhoneError(phoneResult.valid ? "" : phoneResult.message);
+    setEmailError(emailResult.valid ? "" : emailResult.message);
+
+    if (!phoneResult.valid || !emailResult.valid) {
+      return;
+    }
+
     setLoading(true);
 
     try {
-      await register({ username, email, password, role });
+      await register({
+        username: phoneResult.normalized,
+        phone: phoneResult.normalized,
+        email: email.trim(),
+        password,
+        role,
+      });
 
-      // auto-login after signup
-      await login(username, password);
-      const user = await me();
-
-      if (user.role === "OWNER") nav("/owner");
-      else nav("/app");
-      // no setLoading(false) on success — the loader stays up through
-      // the redirect so there's no flash of the form again beforehand.
+      nav("/verify-otp", {
+        state: {
+          phone: phoneResult.normalized,
+          password,
+          role,
+        },
+      });
     } catch (e: any) {
-      setErr("Signup failed. Try a different username/email.");
+      setErr("Signup failed. This phone number or email might already be in use.");
       setLoading(false);
     }
   }
@@ -86,20 +240,35 @@ export default function Signup() {
             </div>
           )}
 
-          <form onSubmit={onSubmit} className={styles.form}>
+          <form onSubmit={onSubmit} className={styles.form} noValidate>
             <div className={styles.field}>
-              <label className={styles.label} htmlFor="signup-username">
-                Username
+              <label className={styles.label} htmlFor="signup-phone">
+                Phone number
               </label>
               <input
-                id="signup-username"
+                id="signup-phone"
                 className={styles.input}
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="Choose a username"
-                autoComplete="username"
+                value={phone}
+                onChange={(e) => handlePhoneChange(e.target.value)}
+                onBlur={handlePhoneBlur}
+                placeholder="09XXXXXXXX or 07XXXXXXXX"
+                autoComplete="tel"
+                inputMode="tel"
                 disabled={loading}
+                aria-invalid={!!phoneError}
+                aria-describedby={phoneError ? "signup-phone-error" : undefined}
+                style={phoneError ? { borderColor: "var(--danger, #e5484d)" } : undefined}
               />
+              {phoneError && (
+                <div
+                  id="signup-phone-error"
+                  className={styles.fieldError}
+                  style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6, fontSize: 13, color: "var(--danger, #e5484d)" }}
+                >
+                  <AlertIcon width={13} height={13} style={{ flexShrink: 0 }} />
+                  <span>{phoneError}</span>
+                </div>
+              )}
             </div>
 
             <div className={styles.field}>
@@ -110,11 +279,25 @@ export default function Signup() {
                 id="signup-email"
                 className={styles.input}
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => handleEmailChange(e.target.value)}
+                onBlur={handleEmailBlur}
                 placeholder="you@example.com"
                 autoComplete="email"
                 disabled={loading}
+                aria-invalid={!!emailError}
+                aria-describedby={emailError ? "signup-email-error" : undefined}
+                style={emailError ? { borderColor: "var(--danger, #e5484d)" } : undefined}
               />
+              {emailError && (
+                <div
+                  id="signup-email-error"
+                  className={styles.fieldError}
+                  style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6, fontSize: 13, color: "var(--danger, #e5484d)" }}
+                >
+                  <AlertIcon width={13} height={13} style={{ flexShrink: 0 }} />
+                  <span>{emailError}</span>
+                </div>
+              )}
             </div>
 
             <div className={styles.field}>
@@ -148,34 +331,14 @@ export default function Signup() {
             <div className={styles.field}>
               <label className={styles.label}>I am a</label>
               <div className={styles.roleRow}>
-                <label
-                  className={`${styles.roleOption} ${
-                    role === "PLAYER" ? styles.roleOptionOn : ""
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="role"
-                    checked={role === "PLAYER"}
-                    onChange={() => setRole("PLAYER")}
-                    disabled={loading}
-                  />
+                <label className={`${styles.roleOption} ${role === "PLAYER" ? styles.roleOptionOn : ""}`}>
+                  <input type="radio" name="role" checked={role === "PLAYER"} onChange={() => setRole("PLAYER")} disabled={loading} />
                   <span className={styles.roleOptionLabel}>Player</span>
                   <span className={styles.roleOptionHint}>Book pitches to play</span>
                 </label>
 
-                <label
-                  className={`${styles.roleOption} ${
-                    role === "OWNER" ? styles.roleOptionOn : ""
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="role"
-                    checked={role === "OWNER"}
-                    onChange={() => setRole("OWNER")}
-                    disabled={loading}
-                  />
+                <label className={`${styles.roleOption} ${role === "OWNER" ? styles.roleOptionOn : ""}`}>
+                  <input type="radio" name="role" checked={role === "OWNER"} onChange={() => setRole("OWNER")} disabled={loading} />
                   <span className={styles.roleOptionLabel}>Pitch Owner</span>
                   <span className={styles.roleOptionHint}>List your pitch</span>
                 </label>

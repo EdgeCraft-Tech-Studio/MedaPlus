@@ -11,6 +11,11 @@ import Admin from "./pages/Admin";
 import Owner from "./pages/Owner";
 import App from "./pages/App";
 import PitchDetail from "./pages/PitchDetail";
+import OtpVerify from "./pages/OtpVerify";
+import Home from "./pages/Home";
+import CreateTeam from "./pages/CreateTeam";
+import CreateMatch from "./pages/CreateMatch";
+import Tournaments from "./pages/Tournaments";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
@@ -19,6 +24,11 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
+        <Route path="/verify-otp" element={<OtpVerify />} />
+        <Route path="/home" element={<Home />} />
+        <Route path="/team/create" element={<CreateTeam />} />
+        <Route path="/match/create" element={<CreateMatch />} />
+        <Route path="/tournaments" element={<Tournaments />} />
 
         <Route path="/admin" element={<Admin />} />
         <Route path="/owner" element={<Owner />} />

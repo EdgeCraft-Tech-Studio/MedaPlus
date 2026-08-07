@@ -1,46 +1,27 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=IBM+Plex+Mono:wght@500;600&display=swap');
 
 .nav {
-  --green-900: #0e2f24;
   --green-700: #16513f;
+  --green-800: #123c2d;
   --grass: #3fae7f;
-  --ink: #14201a;
-  --line: #e6e9e3;
-  --danger: #c0392b;
-  --danger-soft: #fdeeec;
+  --grass-soft: #e6f5ee;
+  --line: #ece9df;
+  --ink: #0e1712;
+  --muted: #6b7a72;
+  --font: 'Inter', -apple-system, sans-serif;
+  --font-mono: 'IBM Plex Mono', monospace;
 
+  position: sticky;
+  top: 0;
+  z-index: 20;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-
-  /* ---- floating pill shell ---- */
-  max-width: 93%;
-  margin: 1px auto 0;
-  padding: 9px 9px;
-  border-radius: 15px;
-  border: 1.5px solid rgba(63, 174, 127, 0.38);
-  background:
-    linear-gradient(180deg, rgba(234, 247, 239, 0.95), rgba(251, 251, 248, 0.9));
-  box-shadow:
-    0 10px 30px rgba(14, 47, 36, 0.12),
-    0 2px 8px rgba(14, 47, 36, 0.06),
-    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  padding: 18px clamp(20px, 5vw, 64px);
+  background: rgba(251, 251, 248, 0.86);
   backdrop-filter: blur(10px);
-
-  font-family: 'Inter', -apple-system, sans-serif;
-  position: sticky;
-  top: 14px;
-  z-index: 30;
-  transition: box-shadow 0.2s ease, border-color 0.2s ease;
-}
-
-.nav:hover {
-  border-color: rgba(63, 174, 127, 0.55);
-  box-shadow:
-    0 14px 36px rgba(14, 47, 36, 0.16),
-    0 3px 10px rgba(14, 47, 36, 0.08),
-    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  border-bottom: 1px solid var(--line);
+  font-family: var(--font);
 }
 
 .brand {
@@ -52,80 +33,66 @@
 }
 
 .brandMark {
-  width: 32px;
-  height: 32px;
-  border-radius: 10px;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
   background: linear-gradient(135deg, var(--green-700), var(--grass));
   display: grid;
   place-items: center;
-  flex-shrink: 0;
-  box-shadow: 0 4px 12px rgba(22, 81, 63, 0.32), 0 0 0 3px rgba(63, 174, 127, 0.16);
-  transition: transform 0.18s ease, box-shadow 0.18s ease;
-}
-
-.brand:hover .brandMark {
-  transform: translateY(-1px) scale(1.04);
-  box-shadow: 0 6px 16px rgba(22, 81, 63, 0.36), 0 0 0 4px rgba(63, 174, 127, 0.22);
-}
-
-.brandMark svg {
-  width: 17px;
-  height: 17px;
   color: #fff;
+  box-shadow: 0 4px 12px rgba(22, 81, 63, 0.35);
 }
+
+.brandMark svg { width: 18px; height: 18px; }
 
 .brandName {
-  font-size: 16.5px;
+  font-size: 17px;
   font-weight: 800;
   letter-spacing: -0.02em;
-  color: var(--green-900);
 }
 
-.logoutBtn {
-  appearance: none;
+.navActions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.verifiedPill {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  border: 1px solid rgba(63, 174, 127, 0.3);
-  background: #fff;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 600;
   color: var(--green-700);
+  background: var(--grass-soft);
+  border: 1px solid #cfe8db;
+  padding: 6px 12px;
+  border-radius: 999px;
+}
+
+.verifiedDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--grass);
+}
+
+.btnGhostNav {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--muted);
   font-family: inherit;
   font-weight: 600;
   font-size: 13.5px;
-  padding: 8px 12px;
-  border-radius: 9px;
+  padding: 9px 14px;
+  border-radius: 999px;
   cursor: pointer;
-  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease,
-    transform 0.1s ease;
+  transition: background 0.18s ease, color 0.18s ease;
 }
 
-.logoutBtn svg {
-  width: 15px;
-  height: 15px;
-}
-
-.logoutBtn:hover {
-  border-color: #f0c6c0;
-  background: var(--danger-soft);
-  color: var(--danger);
-}
-
-.logoutBtn:active {
-  transform: scale(0.96);
-}
-
-@media (max-width: 640px) {
-  .nav {
-    margin: 12px 12px 0;
-    padding: 10px 16px;
-    top: 10px;
-  }
-
-  .brandName {
-    font-size: 15px;
-  }
-
-  .logoutBtn span {
-    display: none;
-  }
+.btnGhostNav:hover {
+  background: var(--grass-soft);
+  color: var(--green-800);
 }
