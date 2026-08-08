@@ -123,6 +123,7 @@ def _store_signup_data(phone: str, validated: dict) -> None:
     if validated['email']:
         _auth_service.store_signup_data(
             phone=phone,
+            username=validated['username'],
             first_name=validated['first_name'],
             last_name=validated['last_name'],
             password=validated['password'],
@@ -132,6 +133,7 @@ def _store_signup_data(phone: str, validated: dict) -> None:
     else:
         _auth_service.store_signup_data(
             phone=phone,
+            username=validated['username'],
             first_name=validated['first_name'],
             last_name=validated['last_name'],
             password=validated['password'],
@@ -239,6 +241,7 @@ class SignupVerifyOTPView(APIView):
         try:
             result = _auth_service.complete_signup(
                 phone=phone,
+                username=signup_data['username'],
                 first_name=signup_data['first_name'],
                 last_name=signup_data['last_name'],
                 hashed_password=signup_data['hashed_password'],   # hashed in Redis
@@ -341,6 +344,14 @@ class LoginView(APIView):
         )
 
 
+class HomeDataView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        # request.user was resolved and verified by SessionTokenAuthentication
+        # before this line ever runs — no re-fetch needed.
+        serializer = UserSerializer(request.user, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_200_OK)
 # ─────────────────────────────────────────────────────────────────────────────
 # 4. LOGOUT VIEW
 #    Revokes the current session or all sessions.
@@ -552,7 +563,7 @@ class ResetPasswordView(APIView):
 #    401: Invalid or expired refresh token
 # ─────────────────────────────────────────────────────────────────────────────
 
-class TokenRefreshView(APIView):
+class TokenRefreshsView(APIView): 
     """POST /auth/token/refresh/ — exchange refresh token for new session token."""
     permission_classes = [AllowAny]   # session_token is expired — cannot require auth
 

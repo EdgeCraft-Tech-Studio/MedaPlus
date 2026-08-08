@@ -2,7 +2,7 @@ from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes, authentication_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
-from backend.accounts.models.user import User, UserRole
+from accounts.models.user import User, UserRole
 from .serializers import RegisterSerializer
 from pitches.models import Tenant
 

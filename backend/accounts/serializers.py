@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from backend.accounts.models.user import User, UserRole
+from accounts.models.user import User, UserRole
 from pitches.models import Tenant
 
 class RegisterSerializer(serializers.Serializer):

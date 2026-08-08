@@ -2,19 +2,15 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import path, include
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
-from accounts.views import me, health, logout, register
-from accounts.views import admin_list_owners, admin_pending_owners, admin_approve_owner
-from backend.accounts.views.auth_view import ForgotPasswordVerifyOTPView, ForgotPasswordView, LoginView, LogoutView, ResendOTPView, ResetPasswordView, SignupVerifyOTPView, SignupView
-from backend.accounts.views.otp_view import OTPStatusView
+from accounts.views.auth_view import ForgotPasswordVerifyOTPView, ForgotPasswordView, HomeDataView, LoginView, LogoutView, ResendOTPView, ResetPasswordView, SignupVerifyOTPView, SignupView, TokenRefreshsView
+from accounts.views.otp_view import OTPStatusView
 
 urlpatterns = [
     path("admin/", admin.site.urls),
 
-    path("api/auth/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
-    path("api/auth/me/", me, name="auth_me"),
-    path("api/auth/health/", health, name="auth_health"),
+    # path("api/auth/me/", me, name="auth_me"),
+    # path("api/auth/health/", health, name="auth_health"),
     path(
         'api/auth/register/',
         SignupView.as_view(),
@@ -22,7 +18,7 @@ urlpatterns = [
     ),
 
     path(
-        'auth/auth/register/verify/',
+        'api/auth/register/verify/',
         SignupVerifyOTPView.as_view(),
         name='auth-signup-verify',
     ),
@@ -32,6 +28,13 @@ urlpatterns = [
         'api/auth/login/',
         LoginView.as_view(),
         name='auth-login',
+    ),
+
+    
+    path(
+        'api/auth/home/',
+        HomeDataView.as_view(),
+        name='auth-home',
     ),
 
     path(
@@ -59,8 +62,8 @@ urlpatterns = [
     ),
 
     path(
-        'auth/token/refresh/',
-        TokenRefreshView.as_view(),
+        'api/auth/refresh/',
+        TokenRefreshsView.as_view(),
         name='auth-token-refresh',
     ),
 
@@ -78,11 +81,11 @@ urlpatterns = [
     ),
 
     path("api/", include("pitches.urls")),
-    path("api/", include("bookings.urls")),
+    # path("api/", include("bookings.urls")),
 
-    path("api/admin/owners/", admin_list_owners),
-    path("api/admin/owners/pending/", admin_pending_owners),
-    path("api/admin/owners/<str:user_id>/approve/", admin_approve_owner),
+    # path("api/admin/owners/", admin_list_owners),
+    # path("api/admin/owners/pending/", admin_pending_owners),
+    # path("api/admin/owners/<str:user_id>/approve/", admin_approve_owner),
 ]
 
 if settings.DEBUG:

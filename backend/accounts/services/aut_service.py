@@ -12,8 +12,8 @@ from django.utils import timezone
 from accounts.models import PhoneVerification, UserSession
 from accounts.services.otp_services import OTPService, SMSSendError
 from accounts.services.session_services import SessionService
-from backend.accounts.models.user import User, UserRole
-from backend.pitches.models import Tenant
+from accounts.models.user import User, UserRole
+from pitches.models import Tenant
 from core.utils.constant import REVOKE_REASON_CHOICES
 
 logger = logging.getLogger(__name__)
@@ -29,6 +29,13 @@ class AuthException(Exception):
 
 
 class PhoneAlreadyExistsError(AuthException):
+    """
+    Raised when signup phone is already registered.
+    View returns HTTP 409 Conflict.
+    """
+    pass
+
+class UsernameAlreadyExistsError(AuthException):
     """
     Raised when signup phone is already registered.
     View returns HTTP 409 Conflict.
@@ -185,8 +192,10 @@ class AuthService:
     def store_signup_data(
         self,
         phone: str,
+        username: str,
         first_name: str,
         last_name: str,
+        role: str,
         password: str,
     ) -> None:
         """
@@ -207,8 +216,10 @@ class AuthService:
         """
         key  = f'{self._SIGNUP_KEY_PREFIX}{phone}'
         data = {
+            'username': username,
             'first_name':      first_name,
             'last_name':       last_name,
+            'role': role,
             'hashed_password': make_password(password),   # raw password never stored
         }
         cache.set(key, json.dumps(data), timeout=self._SIGNUP_DATA_TTL)
@@ -249,6 +260,7 @@ class AuthService:
     def complete_signup(
         self,
         phone: str,
+        username: str,
         first_name: str,
         last_name: str,
         hashed_password: str,
@@ -301,11 +313,16 @@ class AuthService:
             raise PhoneAlreadyExistsError(
                 'An account with this phone number already exists.'
             )
+        if User.objects.filter(username=username, deleted_at__isnull=True).exists():
+            raise UsernameAlreadyExistsError(
+                'This username is already taken.'
+            )
 
         # step 3 — create user
         # password is already hashed — pass directly to avoid double-hashing
         user = User.objects.create_user(
             phone=phone,
+            username=username,
             first_name=first_name,
             last_name=last_name,
             password=hashed_password,
@@ -670,9 +687,9 @@ class AuthService:
         Raises:
             RefreshTokenInvalidError: token not found or already revoked
             RefreshTokenExpiredError: refresh_expires_at has passed
-
+ 
         Called by:
-            auth_views.TokenRefreshView
+            auth_views.TokenRefreshsView
         """
         return self.session_service.refresh_session(
             raw_refresh_token=raw_refresh_token,

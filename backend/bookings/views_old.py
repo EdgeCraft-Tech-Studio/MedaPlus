@@ -9,7 +9,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 
-from backend.accounts.models.user import UserRole
+from accounts.models.user import UserRole
 from pitches.models import Pitch, BookingType
 from .models import Slot, SlotStatus, Booking, BookingStatus
 from .serializers import BookingCreateSerializer

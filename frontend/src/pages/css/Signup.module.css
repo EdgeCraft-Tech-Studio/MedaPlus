@@ -385,3 +385,76 @@
     transition: none !important;
   }
 }
+
+
+/* First name / Last name side-by-side row */
+.nameRow {
+  display: flex;
+  gap: 10px;
+}
+
+.nameRow .field {
+  flex: 1 1 0;
+  min-width: 0; /* prevents flex children from overflowing on narrow screens */
+}
+
+.fieldError {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--danger, #e5484d);
+}
+
+/* ---------- responsive ---------- */
+
+@media (max-width: 480px) {
+  .main {
+    padding: 24px 14px 40px;
+  }
+
+  .card {
+    padding: 26px 20px 22px;
+    border-radius: 16px;
+  }
+
+  .cardTitle {
+    font-size: 21px;
+  }
+
+  .cardSubtitle {
+    font-size: 13px;
+  }
+
+  /* First/last name stack on very narrow phones instead of squeezing */
+  .nameRow {
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .roleRow {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .input {
+    font-size: 16px; /* prevents iOS Safari auto-zoom on focus */
+    padding: 10px 12px;
+  }
+
+  .submitBtn {
+    font-size: 14px;
+    padding: 13px 16px;
+  }
+
+  .nav {
+    padding: 14px 16px;
+  }
+}
+
+@media (max-width: 360px) {
+  .card {
+    padding: 22px 16px 18px;
+  }
+}

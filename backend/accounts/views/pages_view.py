@@ -4,8 +4,8 @@ from rest_framework.views import APIView
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
-from backend.accounts.models.user import User, UserRole
-from backend.pitches.models import Tenant
+from accounts.models.user import User, UserRole
+from pitches.models import Tenant
 
 
 

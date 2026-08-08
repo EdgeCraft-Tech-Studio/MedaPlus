@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { register } from "../lib/auth";
 import AuthHeader from "../pages/AuthHeader";
-import styles from "./css/Auth.module.css";
+import styles from "./css/Signup.module.css";
 import LoadingBall from "./LoadingBall";
 
 // ---------------------------------------------------------------------------
@@ -114,6 +114,12 @@ function validateEthioPhone(value: string): PhoneValidationResult {
   return { valid: true, message: "", normalized: digits };
 }
 
+/** Converts the normalized local 10-digit form to the +251 international
+ * format the backend requires, e.g. "0941184305" -> "+251941184305". */
+function toInternationalPhone(local: string): string {
+  return "+251" + local.slice(1);
+}
+
 /** Email is optional on this form, so an empty value is valid. */
 function validateEmail(value: string): FieldValidationResult {
   const trimmed = value.trim();
@@ -131,12 +137,88 @@ function validateEmail(value: string): FieldValidationResult {
   return { valid: true, message: "" };
 }
 
+/** Simple required-text validator for name fields. */
+function validateRequiredName(value: string, label: string): FieldValidationResult {
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return { valid: false, message: `${label} is required` };
+  }
+
+  if (trimmed.length < 2) {
+    return { valid: false, message: `${label} is too short` };
+  }
+
+  if (!/^[a-zA-Z\s'-]+$/.test(trimmed)) {
+    return { valid: false, message: `${label} can only contain letters` };
+  }
+
+  return { valid: true, message: "" };
+}
+
+/** Username: required, no spaces, letters/numbers/underscore/dot, 3-20 chars. */
+function validateUsername(value: string): FieldValidationResult {
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return { valid: false, message: "Username is required" };
+  }
+
+  if (!/^[a-zA-Z0-9_.]{3,20}$/.test(trimmed)) {
+    return {
+      valid: false,
+      message: "3-20 characters, letters/numbers/underscore/dot only, no spaces",
+    };
+  }
+
+  return { valid: true, message: "" };
+}
+
+/** Password: required, min 8 chars to match backend's strength floor. */
+function validatePassword(value: string): FieldValidationResult {
+  if (!value) {
+    return { valid: false, message: "Password is required" };
+  }
+
+  if (value.length < 8) {
+    return { valid: false, message: "Password must be at least 8 characters long" };
+  }
+
+  return { valid: true, message: "" };
+}
+
+/** Confirm password: required, must match the original password. */
+function validateConfirmPassword(value: string, password: string): FieldValidationResult {
+  if (!value) {
+    return { valid: false, message: "Please confirm your password" };
+  }
+
+  if (value !== password) {
+    return { valid: false, message: "Passwords do not match" };
+  }
+
+  return { valid: true, message: "" };
+}
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
 export default function Signup() {
   const nav = useNavigate();
+
+  const [firstName, setFirstName] = useState("");
+  const [firstNameError, setFirstNameError] = useState("");
+  const [firstNameTouched, setFirstNameTouched] = useState(false);
+
+  const [lastName, setLastName] = useState("");
+  const [lastNameError, setLastNameError] = useState("");
+  const [lastNameTouched, setLastNameTouched] = useState(false);
+
+  const [username, setUsername] = useState("");
+  const [usernameError, setUsernameError] = useState("");
+  const [usernameTouched, setUsernameTouched] = useState(false);
+
   const [phone, setPhone] = useState("");
   const [phoneError, setPhoneError] = useState("");
   const [phoneTouched, setPhoneTouched] = useState(false);
@@ -146,10 +228,59 @@ export default function Signup() {
   const [emailTouched, setEmailTouched] = useState(false);
 
   const [password, setPassword] = useState("");
+  const [passwordError, setPasswordError] = useState("");
+  const [passwordTouched, setPasswordTouched] = useState(false);
+
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [confirmPasswordError, setConfirmPasswordError] = useState("");
+  const [confirmPasswordTouched, setConfirmPasswordTouched] = useState(false);
+
   const [showPassword, setShowPassword] = useState(false);
   const [role, setRole] = useState<"OWNER" | "PLAYER">("PLAYER");
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
+
+  function handleFirstNameChange(value: string) {
+    setFirstName(value);
+    if (firstNameTouched) {
+      const result = validateRequiredName(value, "First name");
+      setFirstNameError(result.valid ? "" : result.message);
+    }
+  }
+
+  function handleFirstNameBlur() {
+    setFirstNameTouched(true);
+    const result = validateRequiredName(firstName, "First name");
+    setFirstNameError(result.valid ? "" : result.message);
+  }
+
+  function handleLastNameChange(value: string) {
+    setLastName(value);
+    if (lastNameTouched) {
+      const result = validateRequiredName(value, "Last name");
+      setLastNameError(result.valid ? "" : result.message);
+    }
+  }
+
+  function handleLastNameBlur() {
+    setLastNameTouched(true);
+    const result = validateRequiredName(lastName, "Last name");
+    setLastNameError(result.valid ? "" : result.message);
+  }
+
+  function handleUsernameChange(value: string) {
+    setUsername(value);
+    if (usernameTouched) {
+      const result = validateUsername(value);
+      setUsernameError(result.valid ? "" : result.message);
+    }
+  }
+
+  function handleUsernameBlur() {
+    setUsernameTouched(true);
+    const result = validateUsername(username);
+    setUsernameError(result.valid ? "" : result.message);
+  }
 
   function handlePhoneChange(value: string) {
     setPhone(value);
@@ -179,19 +310,77 @@ export default function Signup() {
     setEmailError(result.valid ? "" : result.message);
   }
 
+  function handlePasswordChange(value: string) {
+    setPassword(value);
+    if (passwordTouched) {
+      const result = validatePassword(value);
+      setPasswordError(result.valid ? "" : result.message);
+    }
+    // Re-check confirm password live once it's been touched, since typing
+    // in the password field can flip the match state for what was typed.
+    if (confirmPasswordTouched) {
+      const confirmResult = validateConfirmPassword(confirmPassword, value);
+      setConfirmPasswordError(confirmResult.valid ? "" : confirmResult.message);
+    }
+  }
+
+  function handlePasswordBlur() {
+    setPasswordTouched(true);
+    const result = validatePassword(password);
+    setPasswordError(result.valid ? "" : result.message);
+  }
+
+  function handleConfirmPasswordChange(value: string) {
+    setConfirmPassword(value);
+    if (confirmPasswordTouched) {
+      const result = validateConfirmPassword(value, password);
+      setConfirmPasswordError(result.valid ? "" : result.message);
+    }
+  }
+
+  function handleConfirmPasswordBlur() {
+    setConfirmPasswordTouched(true);
+    const result = validateConfirmPassword(confirmPassword, password);
+    setConfirmPasswordError(result.valid ? "" : result.message);
+  }
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setErr("");
 
+    const firstNameResult = validateRequiredName(firstName, "First name");
+    const lastNameResult = validateRequiredName(lastName, "Last name");
+    const usernameResult = validateUsername(username);
     const phoneResult = validateEthioPhone(phone);
     const emailResult = validateEmail(email);
+    const passwordResult = validatePassword(password);
+    const confirmPasswordResult = validateConfirmPassword(confirmPassword, password);
 
+    setFirstNameTouched(true);
+    setLastNameTouched(true);
+    setUsernameTouched(true);
     setPhoneTouched(true);
     setEmailTouched(true);
+    setPasswordTouched(true);
+    setConfirmPasswordTouched(true);
+
+    setFirstNameError(firstNameResult.valid ? "" : firstNameResult.message);
+    setLastNameError(lastNameResult.valid ? "" : lastNameResult.message);
+    setUsernameError(usernameResult.valid ? "" : usernameResult.message);
     setPhoneError(phoneResult.valid ? "" : phoneResult.message);
     setEmailError(emailResult.valid ? "" : emailResult.message);
+    setPasswordError(passwordResult.valid ? "" : passwordResult.message);
+    setConfirmPasswordError(confirmPasswordResult.valid ? "" : confirmPasswordResult.message);
 
-    if (!phoneResult.valid || !emailResult.valid) {
+    if (
+      !firstNameResult.valid ||
+      !lastNameResult.valid ||
+      !usernameResult.valid ||
+      !phoneResult.valid ||
+      !emailResult.valid ||
+      !passwordResult.valid ||
+      !confirmPasswordResult.valid
+    ) {
       return;
     }
 
@@ -199,22 +388,42 @@ export default function Signup() {
 
     try {
       await register({
-        username: phoneResult.normalized,
-        phone: phoneResult.normalized,
+        username: username.trim(),
+        first_name: firstName.trim(),
+        last_name: lastName.trim(),
+        phone: toInternationalPhone(phoneResult.normalized),
         email: email.trim(),
         password,
+        confirm_password: confirmPassword,
         role,
       });
 
       nav("/verify-otp", {
         state: {
-          phone: phoneResult.normalized,
+          phone: toInternationalPhone(phoneResult.normalized),
+          username: username.trim(),
           password,
           role,
         },
       });
     } catch (e: any) {
-      setErr("Signup failed. This phone number or email might already be in use.");
+      const data = e?.response?.data;
+      let message = "Signup failed. Please try again.";
+
+      if (data) {
+        if (typeof data === "string") {
+          message = data;
+        } else if (data.detail) {
+          message = data.detail;
+        } else {
+          // DRF validation errors look like { field: ["msg1", "msg2"], ... }
+          const firstKey = Object.keys(data)[0];
+          const firstVal = data[firstKey];
+          message = Array.isArray(firstVal) ? firstVal[0] : String(firstVal);
+        }
+      }
+
+      setErr(message);
       setLoading(false);
     }
   }
@@ -241,6 +450,85 @@ export default function Signup() {
           )}
 
           <form onSubmit={onSubmit} className={styles.form} noValidate>
+            {/* First / Last name — side by side, stacks on small screens */}
+            <div className={styles.nameRow}>
+              <div className={styles.field}>
+                <label className={styles.label} htmlFor="signup-firstname">
+                  First name
+                </label>
+                <input
+                  id="signup-firstname"
+                  className={styles.input}
+                  value={firstName}
+                  onChange={(e) => handleFirstNameChange(e.target.value)}
+                  onBlur={handleFirstNameBlur}
+                  placeholder="Abebe"
+                  autoComplete="given-name"
+                  disabled={loading}
+                  aria-invalid={!!firstNameError}
+                  aria-describedby={firstNameError ? "signup-firstname-error" : undefined}
+                  style={firstNameError ? { borderColor: "var(--danger, #e5484d)" } : undefined}
+                />
+                {firstNameError && (
+                  <div id="signup-firstname-error" className={styles.fieldError}>
+                    <AlertIcon width={13} height={13} style={{ flexShrink: 0 }} />
+                    <span>{firstNameError}</span>
+                  </div>
+                )}
+              </div>
+
+              <div className={styles.field}>
+                <label className={styles.label} htmlFor="signup-lastname">
+                  Last name
+                </label>
+                <input
+                  id="signup-lastname"
+                  className={styles.input}
+                  value={lastName}
+                  onChange={(e) => handleLastNameChange(e.target.value)}
+                  onBlur={handleLastNameBlur}
+                  placeholder="Kebede"
+                  autoComplete="family-name"
+                  disabled={loading}
+                  aria-invalid={!!lastNameError}
+                  aria-describedby={lastNameError ? "signup-lastname-error" : undefined}
+                  style={lastNameError ? { borderColor: "var(--danger, #e5484d)" } : undefined}
+                />
+                {lastNameError && (
+                  <div id="signup-lastname-error" className={styles.fieldError}>
+                    <AlertIcon width={13} height={13} style={{ flexShrink: 0 }} />
+                    <span>{lastNameError}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Username — full width, below the name row */}
+            <div className={styles.field}>
+              <label className={styles.label} htmlFor="signup-username">
+                Username
+              </label>
+              <input
+                id="signup-username"
+                className={styles.input}
+                value={username}
+                onChange={(e) => handleUsernameChange(e.target.value)}
+                onBlur={handleUsernameBlur}
+                placeholder="abebe_k"
+                autoComplete="username"
+                disabled={loading}
+                aria-invalid={!!usernameError}
+                aria-describedby={usernameError ? "signup-username-error" : undefined}
+                style={usernameError ? { borderColor: "var(--danger, #e5484d)" } : undefined}
+              />
+              {usernameError && (
+                <div id="signup-username-error" className={styles.fieldError}>
+                  <AlertIcon width={13} height={13} style={{ flexShrink: 0 }} />
+                  <span>{usernameError}</span>
+                </div>
+              )}
+            </div>
+
             <div className={styles.field}>
               <label className={styles.label} htmlFor="signup-phone">
                 Phone number
@@ -260,11 +548,7 @@ export default function Signup() {
                 style={phoneError ? { borderColor: "var(--danger, #e5484d)" } : undefined}
               />
               {phoneError && (
-                <div
-                  id="signup-phone-error"
-                  className={styles.fieldError}
-                  style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6, fontSize: 13, color: "var(--danger, #e5484d)" }}
-                >
+                <div id="signup-phone-error" className={styles.fieldError}>
                   <AlertIcon width={13} height={13} style={{ flexShrink: 0 }} />
                   <span>{phoneError}</span>
                 </div>
@@ -289,11 +573,7 @@ export default function Signup() {
                 style={emailError ? { borderColor: "var(--danger, #e5484d)" } : undefined}
               />
               {emailError && (
-                <div
-                  id="signup-email-error"
-                  className={styles.fieldError}
-                  style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6, fontSize: 13, color: "var(--danger, #e5484d)" }}
-                >
+                <div id="signup-email-error" className={styles.fieldError}>
                   <AlertIcon width={13} height={13} style={{ flexShrink: 0 }} />
                   <span>{emailError}</span>
                 </div>
@@ -309,12 +589,15 @@ export default function Signup() {
                   id="signup-password"
                   className={styles.input}
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(e) => handlePasswordChange(e.target.value)}
+                  onBlur={handlePasswordBlur}
                   placeholder="Create a password"
                   type={showPassword ? "text" : "password"}
                   autoComplete="new-password"
                   style={{ paddingRight: 40 }}
                   disabled={loading}
+                  aria-invalid={!!passwordError}
+                  aria-describedby={passwordError ? "signup-password-error" : undefined}
                 />
                 <button
                   type="button"
@@ -326,6 +609,40 @@ export default function Signup() {
                   {showPassword ? <EyeOffIcon /> : <EyeIcon />}
                 </button>
               </div>
+              {passwordError && (
+                <div id="signup-password-error" className={styles.fieldError}>
+                  <AlertIcon width={13} height={13} style={{ flexShrink: 0 }} />
+                  <span>{passwordError}</span>
+                </div>
+              )}
+            </div>
+
+            <div className={styles.field}>
+              <label className={styles.label} htmlFor="signup-confirm-password">
+                Confirm password
+              </label>
+              <div className={styles.passwordField}>
+                <input
+                  id="signup-confirm-password"
+                  className={styles.input}
+                  value={confirmPassword}
+                  onChange={(e) => handleConfirmPasswordChange(e.target.value)}
+                  onBlur={handleConfirmPasswordBlur}
+                  placeholder="Re-enter your password"
+                  type={showPassword ? "text" : "password"}
+                  autoComplete="new-password"
+                  style={{ paddingRight: 40 }}
+                  disabled={loading}
+                  aria-invalid={!!confirmPasswordError}
+                  aria-describedby={confirmPasswordError ? "signup-confirm-password-error" : undefined}
+                />
+              </div>
+              {confirmPasswordError && (
+                <div id="signup-confirm-password-error" className={styles.fieldError}>
+                  <AlertIcon width={13} height={13} style={{ flexShrink: 0 }} />
+                  <span>{confirmPasswordError}</span>
+                </div>
+              )}
             </div>
 
             <div className={styles.field}>

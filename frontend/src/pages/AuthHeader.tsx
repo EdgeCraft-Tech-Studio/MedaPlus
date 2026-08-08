@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import styles from "./css/Auth.module.css";
+import styles from "./css/Signup.module.css";
 
 function BallIcon(props: React.SVGProps<SVGSVGElement>) {
   return (

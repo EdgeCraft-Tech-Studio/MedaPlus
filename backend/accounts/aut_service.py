@@ -656,7 +656,7 @@ class AuthService:
             RefreshTokenExpiredError: refresh_expires_at has passed
 
         Called by:
-            auth_views.TokenRefreshView
+            auth_views.TokenRefreshsView
         """
         return self.session_service.refresh_session(
             raw_refresh_token=raw_refresh_token,

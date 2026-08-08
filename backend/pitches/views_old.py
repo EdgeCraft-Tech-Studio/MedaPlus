@@ -6,7 +6,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 
-from backend.accounts.models.user import UserRole
+from accounts.models.user import UserRole
 from bookings.models import Slot, SlotStatus
 from .models import Tenant, Pitch
 from .serializers import PitchSerializer, PitchCreateSerializer

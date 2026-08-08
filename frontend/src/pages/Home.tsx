@@ -1,6 +1,10 @@
-import { Link } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import styles from "./css/Home.module.css";
 import AppHeader from "./AppHeader";
+import { getHomeData, logout } from "../lib/auth";
+import type { SessionUser } from "../lib/session";
+import { getCurrentUser } from "../lib/session";
 
 /* ---------- icons ---------- */
 
@@ -130,15 +134,58 @@ function getGreeting() {
 }
 
 export default function Home() {
+  const nav = useNavigate();
+
+  // Show cached user instantly (no flash of empty state) while the
+  // fresh fetch below confirms/updates it. getCurrentUser() reads from
+  // whatever was last saved to storage at login/signup.
+  const [user, setUser] = useState<SessionUser | null>(getCurrentUser());
+  const [loadingUser, setLoadingUser] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadUser() {
+      try {
+        // This call is what actually proves the session is valid:
+        // - api.ts's request interceptor checks/refreshes the access
+        //   token first if it's expired but the refresh token isn't.
+        // - The backend's SessionTokenAuthentication independently
+        //   re-validates the token server-side regardless of anything
+        //   the frontend claims.
+        const freshUser = await getHomeData();
+        if (!cancelled) setUser(freshUser);
+      } catch {
+        // If both tokens are dead, api.ts's interceptors already
+        // redirected to /login before this catch even runs. Nothing
+        // extra to do here.
+      } finally {
+        if (!cancelled) setLoadingUser(false);
+      }
+    }
+
+    loadUser();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function handleLogout() {
+    await logout();
+    nav("/login", { replace: true });
+  }
+
+  const displayName = user?.full_name || user?.username || "there";
+
   return (
     <div className={styles.page}>
-      <AppHeader variant="logout" />
+      <AppHeader variant="logout" onLogout={handleLogout} />
 
       <header className={styles.hero}>
         <div className={styles.heroGlow} />
         <span className={styles.eyebrow}>{getGreeting()}</span>
         <h1 className={styles.heroTitle}>
-          Where are we <em>playing</em> today?
+          {loadingUser ? "Loading..." : `Hey ${displayName}, where are we`} <em>playing</em> today?
         </h1>
         <p className={styles.heroSubtitle}>Pick an action below to get started.</p>
 

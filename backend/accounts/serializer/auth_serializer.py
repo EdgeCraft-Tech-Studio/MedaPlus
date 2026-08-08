@@ -12,7 +12,7 @@ from accounts.serializer.user_serializer import (
     validate_phone_format,
     validate_password_strength,
 )
-from backend.accounts.models.user import UserRole
+from accounts.models.user import UserRole
 from core.utils.constant import DeviceType
 from core.utils.time_formatter import format_lockout_duration
 
@@ -110,7 +110,7 @@ class SignupSerializer(serializers.Serializer):
     starting signup with the same phone close together can both pass this
     check, so the final guard has to live inside the atomic transaction.
     """
-
+    username = serializers.CharField(max_length=50, required=True, help_text='User first name. Letters only.')
     first_name = serializers.CharField(max_length=50, required=True, help_text='User first name. Letters only.')
     last_name = serializers.CharField(max_length=50, required=True, help_text='User last name. Letters only.')
     phone = serializers.CharField(max_length=20, required=True, help_text='International format. Example: +251912345678')
@@ -125,6 +125,14 @@ class SignupSerializer(serializers.Serializer):
     )
     role = serializers.ChoiceField(choices=[UserRole.OWNER, UserRole.PLAYER])
 
+
+    def validate_username(self, value: str) -> str:
+        value = value.strip()
+        if User.objects.filter(username=value).exists():
+            raise serializers.ValidationError('Username taken, please choose a different username.')
+        return value
+            
+        return value.capitalize()
     def validate_first_name(self, value: str) -> str:
         value = value.strip()
         if not value.replace(' ', '').isalpha():
@@ -145,6 +153,7 @@ class SignupSerializer(serializers.Serializer):
 
     def validate_password(self, value: str) -> str:
         return validate_password_strength(value)
+
 
     def validate(self, attrs: dict) -> dict:
         if attrs['password'] != attrs['confirm_password']:
@@ -172,6 +181,7 @@ class SignupVerifyOTPSerializer(DeviceInfoMixin, serializers.Serializer):
     otp_code = serializers.CharField(
         max_length=5, min_length=5, required=True, write_only=True, help_text='5-digit OTP sent to phone.'
     )
+ 
 
     def validate_phone(self, value: str) -> str:
         return validate_phone_format(value)

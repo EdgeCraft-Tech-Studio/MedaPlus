@@ -16,13 +16,12 @@ import os
 load_dotenv(override=True)
 
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "dev")
-DEBUG = os.getenv("DEBUG", "0") == "1"
+DEBUG = True #os.getenv("DEBUG", "0") == "1"
 ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "localhost").split(",")
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-AUTH_USER_MODEL = "accounts.User"
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
@@ -55,12 +54,13 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'accounts.middleware.SessionAuthMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -121,14 +121,16 @@ MIGRATION_MODULES = {
     "contenttypes": "mongo_migrations.contenttypes",
 }
 
+
 REST_FRAMEWORK = {
-    "DEFAULT_AUTHENTICATION_CLASSES": (
-        "rest_framework_simplejwt.authentication.JWTAuthentication",
-    ),
-    "DEFAULT_PERMISSION_CLASSES": (
-        "rest_framework.permissions.IsAuthenticated",
-    ),
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'accounts.authentication.SessionTokenAuthentication',  # ALL auth logic here
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ],
 }
+
 
 CORS_ALLOWED_ORIGINS = os.getenv("CORS_ALLOWED_ORIGINS", "").split(",")
 
@@ -151,3 +153,5 @@ STATIC_URL = 'static/'
 
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
+
+AUTH_USER_MODEL = "accounts.User"

@@ -13,9 +13,10 @@ function BallIcon(props: React.SVGProps<SVGSVGElement>) {
 
 type AppHeaderProps = {
   variant?: "logout";
+  onLogout?: () => void;
 };
 
-export default function AppHeader({ variant = "logout" }: AppHeaderProps) {
+export default function AppHeader({ variant = "logout", onLogout }: AppHeaderProps) {
   return (
     <nav className={styles.nav}>
       <Link to="/" className={styles.brand}>
@@ -31,7 +32,9 @@ export default function AppHeader({ variant = "logout" }: AppHeaderProps) {
           Verified
         </span>
         {variant === "logout" && (
-          <button className={styles.btnGhostNav}>Log out</button>
+          <button className={styles.btnGhostNav} onClick={onLogout}>
+            Log out
+          </button>
         )}
       </div>
     </nav>

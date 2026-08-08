@@ -4,12 +4,22 @@ from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, Permis
 from django.db import models
 from django.utils import timezone
 
-
-
-class UserRole(models.TextChoices):
-    ADMIN = "ADMIN", "Admin"
-    OWNER = "OWNER", "Pitch Owner"
-    PLAYER = "PLAYER", "Player"
+# django-mongodb-backend==6.0.2
+# Same rules as before: no Meta.indexes, no Meta.constraints, no db_index=True
+# anywhere. id stays a UUIDField primary key.
+#
+# Latest change: USERNAME_FIELD switched from 'phone' to 'username'.
+#   - Added `username` (unique=True) as the login identifier.
+#   - REQUIRED_FIELDS now includes 'phone' (was just first_name/last_name),
+#     since phone is still required/unique but is no longer USERNAME_FIELD,
+#     so Django won't collect it automatically without being told to.
+#   - get_by_natural_key() now looks up by username, not phone.
+#   - create_user()/create_superuser()/created_user() now take `username`
+#     as the primary identifier and `phone` as an explicit required arg
+#     (previously phone was the primary identifier).
+# Earlier fix, still in place: create_user()/create_superuser() set
+# role/is_approved from extra_fields so OWNER accounts can be created
+# through the manager, not just by hand-editing after create_user().
 
 
 class UserQueryset(models.QuerySet):
@@ -41,25 +51,20 @@ class UserQueryset(models.QuerySet):
             deleted_at__isnull=True
         )
 
-    
-    def by_role(self, role):
-        return self.filter(role=role, deleted_at__isnull=True)
-
-    def approved_owners(self):
-        return self.filter(role=UserRole.OWNER, is_approved=True, deleted_at__isnull=True)
-
 
 class UserManager(BaseUserManager):
 
     def get_queryset(self):
         return UserQueryset(self.model, using=self._db)
 
-    def get_by_natural_key(self, phone):
+    def get_by_natural_key(self, username):
         """Required by Django for createsuperuser command"""
-        return self.get(phone=phone)
+        return self.get(username=username)
 
-    def create_user(self, phone, first_name, last_name, password, **extra_fields):
+    def create_user(self, username, first_name, last_name, phone, password, **extra_fields):
         """Create and save a regular user"""
+        if not username:
+            raise ValueError('The username must be set')
         if not phone:
             raise ValueError('The Phone number must be set')
         if not first_name:
@@ -70,33 +75,34 @@ class UserManager(BaseUserManager):
             raise ValueError('Password must be set')
 
         user = self.model(
+            username=username,
             phone=phone,
             first_name=first_name,
             last_name=last_name,
             password=password
         )
 
-        
+        # Set boolean/choice fields from extra_fields
+        user.role = extra_fields.get('role', UserRole.PLAYER)
+        user.is_approved = extra_fields.get('is_approved', False)
         user.platform_admin = extra_fields.get('platform_admin', False)
         user.is_staff = extra_fields.get('is_staff', False)
         user.active = extra_fields.get('active', True)
         user.must_change_password = extra_fields.get('must_change_password', True)
         user.is_superuser = extra_fields.get('is_superuser', False)
-        user.role = extra_fields.get('role', UserRole.PLAYER)
-        user.is_approved = extra_fields.get('is_approved', False)
 
         user.save(using=self._db)
         return user
 
-    def create_superuser(self, phone, first_name, last_name, password=None, **extra_fields):
+    def create_superuser(self, username, first_name, last_name, phone, password=None, **extra_fields):
         """Create and save a superuser"""
+        extra_fields.setdefault('role', UserRole.ADMIN)
+        extra_fields.setdefault('is_approved', True)
         extra_fields.setdefault('platform_admin', True)
         extra_fields.setdefault('is_staff', True)
         extra_fields.setdefault('active', True)
         extra_fields.setdefault('must_change_password', False)
         extra_fields.setdefault('is_superuser', True)
-        extra_fields.setdefault('role', UserRole.ADMIN)
-        extra_fields.setdefault('is_approved', True)
 
         if extra_fields.get('platform_admin') is not True:
             raise ValueError('Superuser must have platform_admin=True.')
@@ -105,16 +111,16 @@ class UserManager(BaseUserManager):
         if extra_fields.get('is_superuser') is not True:
             raise ValueError('Superuser must have is_superuser=True.')
 
-        return self.create_user(phone, first_name, last_name, password, **extra_fields)
+        return self.create_user(username, first_name, last_name, phone, password, **extra_fields)
 
     def created_user(
-            self, first_name, last_name, phone, password, **extra_fields
+            self, first_name, last_name, username, phone, password, **extra_fields
     ):
         extra_fields.setdefault('platform_admin', False)
         extra_fields.setdefault('is_staff', False)
         extra_fields.setdefault('must_change_password', False)
         return self.create_user(
-            phone, first_name, last_name, password, **extra_fields
+            username, first_name, last_name, phone, password, **extra_fields
         )
 
     def is_active(self):
@@ -130,35 +136,34 @@ class UserManager(BaseUserManager):
         return self.get_queryset().by_phone(phone)
 
 
-class User(AbstractBaseUser, PermissionsMixin):
+class UserRole(models.TextChoices):
+    ADMIN = "ADMIN", "Admin"
+    OWNER = "OWNER", "Pitch Owner"
+    PLAYER = "PLAYER", "Player"
 
+
+class User(AbstractBaseUser, PermissionsMixin):
 
     id = models.UUIDField(
         primary_key=True,
         default=uuid.uuid4,
         editable=False,
-        db_index=True
     )
 
+    role = models.CharField(max_length=20, choices=UserRole.choices, default=UserRole.PLAYER)
 
-    
-    role = models.CharField(
-        max_length=20,
-        choices=UserRole.choices,
-        default=UserRole.PLAYER,
-        db_index=True,
-    )
-    is_approved = models.BooleanField(
-        default=False,
-        help_text='Owners must be approved by admin before their pitches show publicly'
-    )
+    # Owners must be approved by admin before their pitches show publicly
+    is_approved = models.BooleanField(default=False)
 
     first_name = models.CharField(max_length=50, null=False)
     last_name = models.CharField(max_length=50, null=False)
+    username = models.CharField(
+        max_length=20,
+        unique=True,
+    )
     phone = models.CharField(
         max_length=20,
         unique=True,
-        db_index=True,
     )
     email = models.EmailField(null=True, blank=True, unique=True)
     profile_photo = models.ImageField(
@@ -170,21 +175,18 @@ class User(AbstractBaseUser, PermissionsMixin):
     password = models.CharField(max_length=128, blank=True, null=False)
     active = models.BooleanField(
         default=True,
-        db_index=True,
         help_text=(
             'check if user can access our system'
         )
     )
     platform_admin = models.BooleanField(
         default=False,
-        db_index=True,
         help_text=(
             'access everything bypass all thing'
         )
     )
     is_staff = models.BooleanField(
         default=False,
-        db_index=True,
         help_text=(
             'Designates whether the user can log into this admin site.'
         )
@@ -192,14 +194,13 @@ class User(AbstractBaseUser, PermissionsMixin):
     must_change_password = models.BooleanField(
         default=True,
         help_text=(
-            'force password change for staff when owner create them'
+            'force password change for admin when owner create them'
         )
     )
     failed_attempts = models.PositiveSmallIntegerField(default=0)
     blocked_until = models.DateTimeField(
         null=True,
         blank=True,
-        db_index=True,
         help_text=(
             'login blocked until - auto-expire'
         )
@@ -226,12 +227,11 @@ class User(AbstractBaseUser, PermissionsMixin):
     deleted_at = models.DateTimeField(
         null=True,
         blank=True,
-        db_index=True,
         help_text='soft delete data preserve, but user hidden from queries'
     )
 
-    USERNAME_FIELD = 'phone'
-    REQUIRED_FIELDS = ['first_name', 'last_name']
+    USERNAME_FIELD = 'username'
+    REQUIRED_FIELDS = ['first_name', 'last_name', 'phone']
 
     objects = UserManager()
 
@@ -240,46 +240,13 @@ class User(AbstractBaseUser, PermissionsMixin):
         verbose_name = 'User'
         verbose_name_plural = 'Users'
         ordering = ['first_name']
-        indexes = [
-            
-            models.Index(
-                fields=['phone'],
-                name='idx_users_phone_org'
-            ),
-
-            
-            models.Index(
-                fields=['phone', 'active'],
-                name='idx_user_active'
-            ),
-
-            
-            models.Index(
-                fields=['blocked_until'],
-                name='idx_user_blocked'
-            ),
-
-            
-            models.Index(
-                fields=['phone', 'deleted_at'],
-                name='idx_user_deleted'
-            ),
-
-            
-            models.Index(
-                fields=['role', 'is_approved'],
-                name='idx_user_role_approved'
-            ),
-        ]
-
-        constraints = [
-            
-            models.UniqueConstraint(
-                fields=['phone'],
-                condition=models.Q(deleted_at__isnull=True),
-                name='unique_phone_for_all'
-            )
-        ]
+        # No indexes and no constraints — removed per your request.
+        # NOTE: `username` is now unique=True because Django's auth system
+        # requires USERNAME_FIELD to be unique (auth.E003) — not optional.
+        # `phone` keeps unique=True too since you added it that way; it's
+        # no longer forced by Django though, since it's not USERNAME_FIELD
+        # anymore — drop it if you want soft-deleted users' phone numbers
+        # to become reusable again.
 
     def __str__(self):
         try:
@@ -287,14 +254,15 @@ class User(AbstractBaseUser, PermissionsMixin):
         except:
             return f'{self.phone}'
 
-    
+    # ---- overrides ----
+
     def save(self, *args, **kwargs):
         if self.is_superuser:
             self.role = UserRole.ADMIN
             self.is_approved = True
         super().save(*args, **kwargs)
 
-    
+    # ---- properties ----
 
     @property
     def get_short_name(self):
@@ -327,20 +295,7 @@ class User(AbstractBaseUser, PermissionsMixin):
             return False
         return timezone.now() < self.blocked_until
 
-    @property
-    def is_admin_role(self):
-        """ true if role is ADMIN (business role, distinct from is_staff/platform_admin) """
-        return self.role == UserRole.ADMIN
-
-    @property
-    def is_owner(self):
-        return self.role == UserRole.OWNER
-
-    @property
-    def is_player(self):
-        return self.role == UserRole.PLAYER
-
-    
+    # ------- methods -------
     def soft_delete(self):
         """ data preserved but not exist on queries search """
         self.deleted_at = timezone.now()
@@ -393,12 +348,3 @@ class User(AbstractBaseUser, PermissionsMixin):
         """ clear force password """
         self.must_change_password = False
         self.save(update_fields=['must_change_password'])
-
-    def approve(self):
-        """ approve an owner so their pitches become publicly visible """
-        self.is_approved = True
-        self.save(update_fields=['is_approved'])
-
-    def revoke_approval(self):
-        self.is_approved = False
-        self.save(update_fields=['is_approved'])

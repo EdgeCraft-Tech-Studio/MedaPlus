@@ -3,6 +3,7 @@ import { useLocation, useNavigate, Link } from "react-router-dom";
 import AuthHeader from "../pages/AuthHeader";
 import styles from "./css/Otp.module.css";
 import LoadingBall from "./LoadingBall";
+import { verifySignupOtp } from "../lib/auth";
 
 const CODE_LENGTH = 5;
 const RESEND_SECONDS = 60;
@@ -60,11 +61,6 @@ function formatTime(totalSeconds: number) {
 //   return resendOtpApi({ phone });
 // }
 // ---------------------------------------------------------------------
-async function verifyOtp(phone: string, code: string): Promise<{ ok: boolean }> {
-  // eslint-disable-next-line no-console
-  console.log("TODO: call backend to verify OTP", { phone, code });
-  throw new Error("verifyOtp not implemented yet");
-}
 
 async function resendOtp(phone: string): Promise<{ ok: boolean }> {
   // eslint-disable-next-line no-console
@@ -185,33 +181,42 @@ export default function OtpVerify() {
     handleChange(0, pasted);
   }
 
-  async function handleVerify() {
-    if (code.length !== CODE_LENGTH) {
-      setErr(`Enter all ${CODE_LENGTH} digits.`);
-      return;
-    }
-
-    setErr("");
-    setLoading(true);
-
-    try {
-      // TODO (backend): wire this up, then decide where to send the user —
-      // e.g. auto-login and route by role, or straight to /login.
-      //await verifyOtp(phone, code);
-      nav("/home", { state: { verified: true, phone } });
-
-      // TODO: on success, e.g.:
-      // await login(phone, state.password);
-      // const user = await me();
-      // nav(user.role === "OWNER" ? "/owner" : "/app");
-    } catch (e: any) {
-      setErr("Invalid or expired code. Please try again.");
-      setDigits(Array(CODE_LENGTH).fill(""));
-      inputsRef.current[0]?.focus();
-    } finally {
-      setLoading(false);
-    }
+async function handleVerify() {
+  if (code.length !== CODE_LENGTH) {
+    setErr(`Enter all ${CODE_LENGTH} digits.`);
+    return;
   }
+
+  setErr("");
+  setLoading(true);
+
+  function generateRandomString(length = 20) {
+    const chars = "abcdefghijklmnopqrstuvwxyz";
+    let result = "";
+    for (let i = 0; i < length; i++) {
+      result += chars[Math.floor(Math.random() * chars.length)];
+    }
+    return result;
+  }
+
+  try {
+    await verifySignupOtp({
+      phone,
+      otp_code: code,
+      device_id: generateRandomString(),
+      device_type: "web",
+      device_name: "phone",
+    });
+    // Session is already persisted by verifySignupOtp() at this point.
+    nav("/home", { replace: true, state: { verified: true, phone } });
+  } catch (e: any) {
+    setErr("Invalid or expired code. Please try again.");
+    setDigits(Array(CODE_LENGTH).fill(""));
+    inputsRef.current[0]?.focus();
+  } finally {
+    setLoading(false);
+  }
+}
 
   async function handleResend() {
     if (secondsLeft > 0 || resending) return;
