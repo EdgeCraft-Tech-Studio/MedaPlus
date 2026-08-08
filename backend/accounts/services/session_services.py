@@ -120,8 +120,8 @@ class SessionService:
     """
 
     # token lifetimes
-    ACCESS_TOKEN_LIFETIME_DAYS  = 7
-    REFRESH_TOKEN_LIFETIME_DAYS = 30
+    ACCESS_TOKEN_LIFETIME_DAYS  = 1
+    REFRESH_TOKEN_LIFETIME_DAYS = 5
 
     # ── private helpers ──
 

@@ -30,10 +30,10 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
         <Route path="/verify-otp" element={<OtpVerify />} />
+        <Route path="/home" element={<Home />} />
 
         {/* ── Protected routes — any authenticated user ───────────────── */}
         <Route element={<ProtectedRoute />}>
-          <Route path="/home" element={<Home />} />
           <Route path="/team/create" element={<CreateTeam />} />
           <Route path="/match/create" element={<CreateMatch />} />
           <Route path="/tournaments" element={<Tournaments />} />

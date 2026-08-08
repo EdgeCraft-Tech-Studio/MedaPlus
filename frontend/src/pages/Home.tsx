@@ -175,7 +175,7 @@ export default function Home() {
     nav("/login", { replace: true });
   }
 
-  const displayName = user?.full_name || user?.username || "there";
+  const displayName = user?.username || user?.full_name || "there";
 
   return (
     <div className={styles.page}>
@@ -184,9 +184,16 @@ export default function Home() {
       <header className={styles.hero}>
         <div className={styles.heroGlow} />
         <span className={styles.eyebrow}>{getGreeting()}</span>
-        <h1 className={styles.heroTitle}>
-          {loadingUser ? "Loading..." : `Hey ${displayName}, where are we`} <em>playing</em> today?
-        </h1>
+       <h1 className={styles.heroTitle}>
+  {loadingUser ? (
+    "Loading..."
+  ) : (
+    <>
+      Hello <em> {displayName}</em>, where are we
+    </>
+  )}{" "}
+  <em>playing</em> today?
+</h1>
         <p className={styles.heroSubtitle}>Pick an action below to get started.</p>
 
         <div className={styles.statsRow}>

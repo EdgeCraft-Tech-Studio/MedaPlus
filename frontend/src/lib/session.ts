@@ -1,11 +1,4 @@
-/**
- * Single source of truth for reading/writing the auth session.
- * Nothing outside this file should touch localStorage directly —
- * that keeps token handling auditable in one place and makes it
- * trivial to swap the storage strategy later (e.g. to an in-memory
- * store backed by an httpOnly refresh cookie) without touching
- * every call site.
- */
+
 
 export interface SessionUser {
   id: string;
