@@ -1,10 +1,36 @@
 import { useMemo, useState } from "react";
-import {  useNavigate } from "react-router-dom";
+import {Link,useNavigate } from "react-router-dom";
 import styles from "./css/CreateMatch.module.css";
 import AppHeader from "./AppHeader";
 
+/*
+ * Every field on this page is traced to the proposal document:
+ * - §4 "Game lobby content": sport, date, start time, duration, pitch/area,
+ *   required player count, skill level, position/team requirements,
+ *   estimated price per player, participation mode, organizer + team
+ *   identity, applicable conduct rules.
+ * - §4 "Lobby lifecycle": Draft ("visible only to organizer... edit,
+ *   publish or delete") vs Open ("discoverable and accepting players").
+ * - §6 "Roster-based price calculation": total price split equally across
+ *   the selected roster.
+ * - BK-01: "Organizer can choose individual or team payment."
+ * - §8 "Conduct: Require acceptance of community standards and booking
+ *   conduct rules."
+ *
+ * There is no "challenge a specific opponent team" mode anywhere in the
+ * document — participation is only Public / Approval-required /
+ * Invitation-only — so that field has been removed entirely.
+ */
+
 /* ---------- icons ---------- */
 
+function ArrowLeftIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" {...props}>
+      <path d="M19 12H5M11 6l-6 6 6 6" />
+    </svg>
+  );
+}
 
 function GlobeIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
@@ -71,6 +97,14 @@ function UsersSmallIcon(props: React.SVGProps<SVGSVGElement>) {
     </svg>
   );
 }
+function DocIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" {...props}>
+      <path d="M6 3.5h8l4 4V20a1 1 0 01-1 1H6a1 1 0 01-1-1V4.5a1 1 0 011-1z" />
+      <path d="M14 3.5V8h4M8 12h8M8 15.5h8" />
+    </svg>
+  );
+}
 
 /* ---------- constants (grounded in proposal §4 & §6) ---------- */
 
@@ -112,7 +146,9 @@ const PARTICIPATION = [
 
 type Participation = (typeof PARTICIPATION)[number]["value"];
 
-const MOCK_TEAMS = ["Riverside Falcons", "Bole United", "Kera City FC"];
+// TODO: replace with the player's actual teams, fetched from the team
+// management service (TM-01/TM-03), once that endpoint exists.
+const MY_TEAMS = ["Riverside Falcons", "Bole United", "Kera City FC"];
 
 interface MatchFormState {
   bookingType: "individual" | "team";
@@ -127,13 +163,12 @@ interface MatchFormState {
   positionNotes: string;
   totalPrice: string;
   participation: Participation;
-  challengeMode: "open" | "challenge";
-  opponentTeam: string;
+  conductAccepted: boolean;
 }
 
 const initialState: MatchFormState = {
   bookingType: "team",
-  organizingTeam: MOCK_TEAMS[0],
+  organizingTeam: MY_TEAMS[0],
   sport: "football",
   date: "",
   startTime: "",
@@ -144,11 +179,11 @@ const initialState: MatchFormState = {
   positionNotes: "",
   totalPrice: "",
   participation: "public",
-  challengeMode: "open",
-  opponentTeam: "",
+  conductAccepted: false,
 };
 
 type Errors = Partial<Record<keyof MatchFormState, string>>;
+type SubmitMode = "draft" | "publish";
 
 function todayISO() {
   const d = new Date();
@@ -160,15 +195,20 @@ export default function CreateMatch() {
   const [form, setForm] = useState<MatchFormState>(initialState);
   const [errors, setErrors] = useState<Errors>({});
   const [touched, setTouched] = useState<Partial<Record<keyof MatchFormState, boolean>>>({});
-  const [submitting, setSubmitting] = useState(false);
+  const [submitting, setSubmitting] = useState<SubmitMode | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
+  const [success, setSuccess] = useState<SubmitMode | null>(null);
 
   function setField<K extends keyof MatchFormState>(key: K, value: MatchFormState[K]) {
     setForm((f) => ({ ...f, [key]: value }));
   }
 
-  function validate(f: MatchFormState): Errors {
+  // Draft state is "visible only to the organizer" per §4, so it can be
+  // saved incomplete. Publishing moves the lobby to "Open" — discoverable
+  // and accepting players — so it must pass full validation first.
+  function validate(f: MatchFormState, mode: SubmitMode): Errors {
+    if (mode === "draft") return {};
+
     const e: Errors = {};
 
     if (f.bookingType === "team" && !f.organizingTeam) {
@@ -193,14 +233,14 @@ export default function CreateMatch() {
 
     if (!f.participation) e.participation = "Choose who can join.";
 
-    if (f.challengeMode === "challenge" && !f.opponentTeam.trim()) {
-      e.opponentTeam = "Name the team you're challenging.";
+    if (!f.conductAccepted) {
+      e.conductAccepted = "You need to accept the conduct rules to publish a game.";
     }
 
     return e;
   }
 
-  const liveErrors = useMemo(() => validate(form), [form]);
+  const liveErrors = useMemo(() => validate(form, "publish"), [form]);
 
   function handleBlur(key: keyof MatchFormState) {
     setTouched((t) => ({ ...t, [key]: true }));
@@ -212,35 +252,47 @@ export default function CreateMatch() {
     Number.isFinite(priceNum) && priceNum > 0 && form.requiredPlayers > 0
       ? priceNum / form.requiredPlayers
       : 0;
+  const remainingSpots = form.requiredPlayers; // confirmed count starts at 0
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    const foundErrors = validate(form);
+  async function handleSubmit(mode: SubmitMode) {
+    const foundErrors = validate(form, mode);
     setErrors(foundErrors);
-    setTouched({
-      organizingTeam: true,
-      date: true,
-      startTime: true,
-      pitchOrArea: true,
-      requiredPlayers: true,
-      totalPrice: true,
-      participation: true,
-      opponentTeam: true,
-    });
+    if (mode === "publish") {
+      setTouched({
+        organizingTeam: true,
+        date: true,
+        startTime: true,
+        pitchOrArea: true,
+        requiredPlayers: true,
+        totalPrice: true,
+        participation: true,
+        conductAccepted: true,
+      });
+    }
     if (Object.keys(foundErrors).length > 0) return;
 
-    setSubmitting(true);
+    setSubmitting(mode);
     setSubmitError(null);
     try {
-      // TODO: await gamesApi.createLobby(form) — POST to the matchmaking
-      // service (MM-01). On success this creates the lobby in "Open" state;
-      // the atomic pitch hold (BK-02) only starts once the roster is ready.
-      await new Promise((resolve) => setTimeout(resolve, 900));
-      setSuccess(true);
+      if (mode === "draft") {
+        // TODO: await gamesApi.saveDraft(form) — lobby stays in "Draft"
+        // state (§4 lifecycle), visible only to the organizer.
+        await new Promise((resolve) => setTimeout(resolve, 700));
+      } else {
+        // TODO: await gamesApi.publishLobby(form) — moves the lobby to
+        // "Open" state (MM-01), discoverable and accepting players. The
+        // atomic pitch hold (BK-02) only starts once the roster is ready.
+        await new Promise((resolve) => setTimeout(resolve, 900));
+      }
+      setSuccess(mode);
     } catch (err) {
-      setSubmitError("Couldn't publish the game. Please try again.");
+      setSubmitError(
+        mode === "draft"
+          ? "Couldn't save the draft. Please try again."
+          : "Couldn't publish the game. Please try again."
+      );
     } finally {
-      setSubmitting(false);
+      setSubmitting(null);
     }
   }
 
@@ -254,10 +306,13 @@ export default function CreateMatch() {
             <span className={styles.successIcon}>
               <CheckCircleIcon width={30} height={30} />
             </span>
-            <h1 className={styles.successTitle}>Your game is on the board</h1>
+            <h1 className={styles.successTitle}>
+              {success === "draft" ? "Draft saved" : "Your game is on the board"}
+            </h1>
             <p className={styles.successText}>
-              We'll fill the remaining spots and notify you as players join. Once the roster is
-              ready, you can start the pitch hold and split payment.
+              {success === "draft"
+                ? "It's saved and only visible to you. Come back any time to finish it and publish."
+                : "We'll fill the remaining spots and notify you as players join. Once the roster is ready, you can start the pitch hold and split payment."}
             </p>
             <div className={styles.successActions}>
               <button className={styles.btnPrimary} onClick={() => navigate("/")}>
@@ -266,12 +321,12 @@ export default function CreateMatch() {
               <button
                 className={styles.btnGhost}
                 onClick={() => {
-                  setSuccess(false);
+                  setSuccess(null);
                   setForm(initialState);
                   setTouched({});
                 }}
               >
-                Create another game
+                {success === "draft" ? "Continue editing" : "Create another game"}
               </button>
             </div>
           </div>
@@ -282,7 +337,12 @@ export default function CreateMatch() {
 
   return (
     <div className={styles.page}>
-      <AppHeader variant="logout" />
+      <AppHeader variant="logout"/>
+      <br />
+        <Link to="/home" className={styles.backLink}>
+          <ArrowLeftIcon width={15} height={15} />
+          Back home
+        </Link>
 
       <header className={styles.hero}>
         <span className={styles.eyebrow}>Game matchmaking</span>
@@ -295,7 +355,7 @@ export default function CreateMatch() {
         </p>
       </header>
 
-      <form className={styles.layout} onSubmit={handleSubmit} noValidate>
+      <div className={styles.layout}>
         <div className={styles.formCol}>
           <section className={styles.card}>
             <h2 className={styles.cardTitle}>Who's organizing</h2>
@@ -319,31 +379,28 @@ export default function CreateMatch() {
             </div>
 
             {form.bookingType === "team" ? (
-              <>
-                <div className={styles.field} style={{ marginTop: 16 }}>
-                  <label className={styles.label} htmlFor="organizingTeam">
-                    Organizing team<span className={styles.req}>*</span>
-                  </label>
-                  <select
-                    id="organizingTeam"
-                    className={styles.select}
-                    data-invalid={!!showError("organizingTeam")}
-                    value={form.organizingTeam}
-                    onChange={(e) => setField("organizingTeam", e.target.value)}
-                    onBlur={() => handleBlur("organizingTeam")}
-                  >
-                    {MOCK_TEAMS.map((t) => (
-                      <option key={t} value={t}>
-                        {t}
-                      </option>
-                    ))}
-                  </select>
-                  {showError("organizingTeam") && (
-                    <span className={styles.errorText}>{errors.organizingTeam}</span>
-                  )}
-                </div>
-
-              </>
+              <div className={styles.field} style={{ marginTop: 16 }}>
+                <label className={styles.label} htmlFor="organizingTeam">
+                  Organizing team<span className={styles.req}>*</span>
+                </label>
+                <select
+                  id="organizingTeam"
+                  className={styles.select}
+                  data-invalid={!!showError("organizingTeam")}
+                  value={form.organizingTeam}
+                  onChange={(e) => setField("organizingTeam", e.target.value)}
+                  onBlur={() => handleBlur("organizingTeam")}
+                >
+                  {MY_TEAMS.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </select>
+                {showError("organizingTeam") && (
+                  <span className={styles.errorText}>{errors.organizingTeam}</span>
+                )}
+              </div>
             ) : (
               <p className={styles.plainNote} style={{ marginTop: 14 }}>
                 This follows the existing individual booking flow — pick a pitch and time, pay
@@ -404,9 +461,9 @@ export default function CreateMatch() {
                 )}
               </div>
             </div>
-
+                <br />
             <div className={styles.field}>
-              <label className={styles.label}>Duration</label>
+              <label className={styles.label}>Expected duration</label>
               <div className={styles.chipRow}>
                 {DURATIONS.map((d) => (
                   <button
@@ -421,7 +478,7 @@ export default function CreateMatch() {
                 ))}
               </div>
             </div>
-
+            <br />
             <div className={styles.field}>
               <label className={styles.label} htmlFor="pitchOrArea">
                 Pitch or preferred area<span className={styles.req}>*</span>
@@ -450,7 +507,7 @@ export default function CreateMatch() {
             <div className={styles.grid2}>
               <div className={styles.field}>
                 <label className={styles.label} htmlFor="requiredPlayers">
-                  Players needed<span className={styles.req}>*</span>
+                  Required player count<span className={styles.req}>*</span>
                 </label>
                 <div className={styles.stepper}>
                   <button
@@ -500,10 +557,10 @@ export default function CreateMatch() {
                 </select>
               </div>
             </div>
-
+            <br />
             <div className={styles.field}>
               <label className={styles.label} htmlFor="positionNotes">
-                Position or team requirements
+                Team or position requirements
               </label>
               <input
                 id="positionNotes"
@@ -521,7 +578,7 @@ export default function CreateMatch() {
               <label className={styles.label} htmlFor="totalPrice">
                 Total pitch price<span className={styles.req}>*</span>
               </label>
-              <div className={styles.priceInputWrap}>
+              <div className={styles.priceInputWrap} data-invalid={!!showError("totalPrice")}>
                 <span className={styles.pricePrefix}>ETB</span>
                 <input
                   id="totalPrice"
@@ -570,6 +627,38 @@ export default function CreateMatch() {
             </div>
           </section>
 
+          <section className={styles.card}>
+            <h2 className={styles.cardTitle}>Conduct rules</h2>
+            <label
+              style={{
+                display: "flex",
+                alignItems: "flex-start",
+                gap: 10,
+                cursor: "pointer",
+                fontSize: 13,
+                lineHeight: 1.5,
+                color: showError("conductAccepted") ? "var(--danger)" : "var(--ink)",
+              }}
+            >
+              <input
+                type="checkbox"
+                style={{ marginTop: 3, width: 16, height: 16, accentColor: "var(--accent)", flexShrink: 0 }}
+                checked={form.conductAccepted}
+                onChange={(e) => setField("conductAccepted", e.target.checked)}
+                onBlur={() => handleBlur("conductAccepted")}
+              />
+              <span>
+                I confirm this game follows the platform's community standards and booking conduct
+                rules.
+              </span>
+            </label>
+            {showError("conductAccepted") ? (
+              <span className={styles.errorText}>{errors.conductAccepted}</span>
+            ) : (
+              <span className={styles.hint}>Required before a game can be published.</span>
+            )}
+          </section>
+
           {submitError && (
             <div className={styles.banner} data-tone="error">
               <AlertIcon width={16} height={16} />
@@ -579,18 +668,41 @@ export default function CreateMatch() {
 
           <div className={styles.submitRow}>
             <span className={styles.submitHint}>
-              Publishing opens the lobby — the pitch isn't held until the roster is ready.
+              A draft stays visible only to you. Publishing opens the lobby — the pitch isn't held
+              until the roster is ready.
             </span>
-            <button type="submit" className={styles.btnPrimary} disabled={submitting}>
-              {submitting ? (
-                <>
-                  <SpinnerIcon className={styles.spin} width={16} height={16} />
-                  Publishing…
-                </>
-              ) : (
-                "Publish game"
-              )}
-            </button>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <button
+                type="button"
+                className={styles.btnGhost}
+                disabled={submitting !== null}
+                onClick={() => handleSubmit("draft")}
+              >
+                {submitting === "draft" ? (
+                  <>
+                    <SpinnerIcon className={styles.spin} width={16} height={16} />
+                    Saving…
+                  </>
+                ) : (
+                  "Save as draft"
+                )}
+              </button>
+              <button
+                type="button"
+                className={styles.btnPrimary}
+                disabled={submitting !== null}
+                onClick={() => handleSubmit("publish")}
+              >
+                {submitting === "publish" ? (
+                  <>
+                    <SpinnerIcon className={styles.spin} width={16} height={16} />
+                    Publishing…
+                  </>
+                ) : (
+                  "Publish game"
+                )}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -598,8 +710,7 @@ export default function CreateMatch() {
           <div className={styles.previewCard}>
             <div className={styles.previewHeader}>
               <span className={styles.previewSport}>
-                {SPORTS.find((s) => s.value === form.sport)?.label} ·{" "}
-                {form.duration} min
+                {SPORTS.find((s) => s.value === form.sport)?.label} · {form.duration} min
               </span>
               <span className={styles.previewCountdown}>
                 <ClockIcon width={12} height={12} />
@@ -624,7 +735,9 @@ export default function CreateMatch() {
               <div className={styles.rosterTrack}>
                 <div className={styles.rosterFill} style={{ width: "0%" }} />
               </div>
-              <span className={styles.rosterCount}>0 / {form.requiredPlayers}</span>
+              <span className={styles.rosterCount}>
+                0 / {form.requiredPlayers} · {remainingSpots} open
+              </span>
             </div>
 
             <div className={styles.priceSplit}>
@@ -636,7 +749,7 @@ export default function CreateMatch() {
               </div>
               <div className={styles.priceSplitDivider} />
               <div>
-                <span className={styles.priceSplitLabel}>Per player</span>
+                <span className={styles.priceSplitLabel}>Per player (est.)</span>
                 <span className={styles.priceSplitValue} data-accent="true">
                   ETB {perPlayer > 0 ? perPlayer.toFixed(2) : "—"}
                 </span>
@@ -654,7 +767,13 @@ export default function CreateMatch() {
           </div>
 
           <div className={styles.tipCard}>
-            <h4 className={styles.tipTitle}>How the hold works</h4>
+            <h4
+              className={styles.tipTitle}
+              style={{ display: "flex", alignItems: "center", gap: 7 }}
+            >
+              <DocIcon width={14} height={14} />
+              From the proposal
+            </h4>
             <ul className={styles.tipList}>
               <li>The pitch locks for 10 minutes once the roster is confirmed and payment starts.</li>
               <li>Players can pay their own share, cover teammates, or clear what's left.</li>
@@ -662,7 +781,7 @@ export default function CreateMatch() {
             </ul>
           </div>
         </aside>
-      </form>
+      </div>
     </div>
   );
 }

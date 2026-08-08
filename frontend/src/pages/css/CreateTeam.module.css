@@ -39,6 +39,15 @@
 
 /* ---------------- HERO ---------------- */
 
+
+
+.backLink {
+  display: inline-flex; align-items: center; gap: 6px; text-decoration: none; color: var(--muted);
+  font-weight: 600; font-size: 13.5px; padding: 8px 12px; border-radius: 999px;
+  transition: background 0.18s ease, color 0.18s ease;
+}
+.backLink:hover { color: var(--accent-soft); color: var(--accent); }
+
 .hero {
   text-align: center;
   padding: clamp(32px, 5vw, 48px) 20px 6px;

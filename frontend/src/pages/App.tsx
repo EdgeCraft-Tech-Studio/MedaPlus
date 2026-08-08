@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { MapContainer, Marker, TileLayer } from "react-leaflet";
 import type { Pitch } from "../lib/pitches";
 import { listPitches } from "../lib/pitches";
@@ -10,6 +10,15 @@ import AppHeader from "./AppHeader";
 type TabKey = "map" | "nearby" | "best";
 
 const ADDIS_ABABA = { lat: 8.9806, lng: 38.7578 };
+
+
+function ArrowLeftIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" {...props}>
+      <path d="M19 12H5M11 6l-6 6 6 6" />
+    </svg>
+  );
+}
 
 function distanceKm(aLat: number, aLng: number, bLat: number, bLng: number) {
   const R = 6371;
@@ -348,7 +357,12 @@ export default function App() {
 
   return (
     <div>
-    <AppHeader variant="logout" /> 
+    <AppHeader variant="logout" />
+      <br />
+        <Link to="/home" className={styles.backLink}>
+          <ArrowLeftIcon width={15} height={15} />
+          Back home
+        </Link> 
     <div className={styles.page}>
       <div className={styles.shell}>
         <div className={styles.header}>

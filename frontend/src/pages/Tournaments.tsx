@@ -1,6 +1,24 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import styles from "./css/Tournaments.module.css";
+import AppHeader from "./AppHeader";
+
+/*
+ * This page deliberately has no creation form.
+ *
+ * The proposal document (§12, "Recommended later phases") places "Leagues
+ * and tournaments" outside this build, and the "Explicitly out of scope"
+ * section says the proposal "does not define... a tournament engine."
+ * There is no field list for tournaments anywhere in the document, so
+ * building a form here would mean inventing fields the document never
+ * specifies. Instead this is a roadmap page, grounded in two things the
+ * document does say:
+ *   - Recommended delivery strategy: "Advanced competition features — such
+ *     as leagues, tournaments, player rankings and automatic opponent
+ *     matching — should follow only after the core workflow is stable."
+ *   - §12 table: "Leagues and tournaments | Introduces schedules, brackets,
+ *     officials, standings and dispute workflows."
+ */
 
 /* ---------- icons ---------- */
 
@@ -43,13 +61,11 @@ function ChartIcon(props: React.SVGProps<SVGSVGElement>) {
     </svg>
   );
 }
-function UsersSmallIcon(props: React.SVGProps<SVGSVGElement>) {
+function ScaleIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" {...props}>
-      <circle cx="9" cy="8" r="3.2" />
-      <path d="M2.5 20c.7-3.6 3.3-5.5 6.5-5.5s5.8 1.9 6.5 5.5" />
-      <circle cx="17.5" cy="9" r="2.4" />
-      <path d="M15.8 14.8c2.4.3 4.1 2 4.7 5.2" />
+      <path d="M12 3v18M7 21h10M5 7l4-1.5L13 7M19 7l-4-1.5" />
+      <path d="M5 7l-2.5 5A2.6 2.6 0 005 15a2.6 2.6 0 002.5-3L5 7zM19 7l-2.5 5A2.6 2.6 0 0019 15a2.6 2.6 0 002.5-3L19 7z" />
     </svg>
   );
 }
@@ -78,18 +94,34 @@ function SpinnerIcon(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
-/* ---------- data ---------- */
+/* ---------- data — every word below traces to §12's own table ---------- */
 
 const FEATURES = [
-  { icon: BracketIcon, title: "Auto-generated brackets", text: "Enter your teams — the bracket seeds and builds itself." },
-  { icon: ChartIcon, title: "Live standings", text: "Scores and rankings update as results come in, no manual tables." },
-  { icon: UsersSmallIcon, title: "Multi-team invites", text: "Pull in several teams at once instead of inviting one by one." },
+  {
+    icon: BracketIcon,
+    title: "Schedules & brackets",
+    text: "Fixtures and bracket structure for the teams entered into a tournament.",
+  },
+  {
+    icon: ChartIcon,
+    title: "Standings",
+    text: "Rankings that update as tournament results come in.",
+  },
+  {
+    icon: ScaleIcon,
+    title: "Officials & disputes",
+    text: "Assigned officials and a workflow for resolving disputed results.",
+  },
 ];
 
+// The document only describes two stages for this feature: the core MVP
+// (which already ships team management, matchmaking, chat and shared
+// payments together per §12's "Included in the MVP" list) and a later
+// phase for competition features. It does not break the MVP itself into
+// sub-phases, so this page doesn't invent one either.
 const PHASES = [
-  { label: "Now", title: "Teams, chat & split payments", status: "live" as const },
-  { label: "Next", title: "Matchmaking & game lobbies", status: "live" as const },
-  { label: "Later", title: "Leagues & tournaments", status: "upcoming" as const },
+  { label: "MVP", title: "Teams, matchmaking, chat & shared booking payments", status: "live" as const },
+  { label: "Later phase", title: "Leagues & tournaments", status: "upcoming" as const },
 ];
 
 function isValidEmail(v: string) {
@@ -130,18 +162,12 @@ export default function Tournaments() {
 
   return (
     <div className={styles.page}>
-      <nav className={styles.nav}>
-        <Link to="/" className={styles.brand}>
-          <span className={styles.brandMark}>
-            <BallIcon />
-          </span>
-          <span className={styles.brandName}>MedaPlus</span>
-        </Link>
+      <AppHeader variant="logout"/>
+      <br />
         <Link to="/home" className={styles.backLink}>
           <ArrowLeftIcon width={15} height={15} />
           Back home
         </Link>
-      </nav>
 
       <header className={styles.hero}>
         <span className={styles.eyebrow}>Tournaments · on the roadmap</span>
@@ -149,8 +175,8 @@ export default function Tournaments() {
           Brackets are <em>coming</em>
         </h1>
         <p className={styles.heroSubtitle}>
-          Leagues and tournaments ship after teams, matchmaking and shared payments have proven
-          out — so the foundation they run on is solid first.
+          Leagues and tournaments ship after the core workflow — teams, matchmaking and shared
+          booking payments — is stable and validated with real users.
         </p>
       </header>
 
@@ -189,7 +215,7 @@ export default function Tournaments() {
             <span className={styles.bracketBadge}>Preview — not live yet</span>
           </div>
         </section>
-
+{/* 
         <section className={styles.timeline}>
           {PHASES.map((p, i) => (
             <div key={p.label} className={styles.timelineStep} data-status={p.status}>
@@ -199,7 +225,7 @@ export default function Tournaments() {
               <span className={styles.timelineTitle}>{p.title}</span>
             </div>
           ))}
-        </section>
+        </section> */}
 
         <section className={styles.featuresGrid}>
           {FEATURES.map((f) => {

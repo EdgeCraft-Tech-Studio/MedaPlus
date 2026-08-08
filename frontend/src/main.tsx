@@ -16,6 +16,7 @@ import Home from "./pages/Home";
 import CreateTeam from "./pages/CreateTeam";
 import CreateMatch from "./pages/CreateMatch";
 import Tournaments from "./pages/Tournaments";
+import TeamMembers from "./pages/TeamMembers";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
@@ -29,6 +30,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
         <Route path="/team/create" element={<CreateTeam />} />
         <Route path="/match/create" element={<CreateMatch />} />
         <Route path="/tournaments" element={<Tournaments />} />
+        <Route path="/team/:teamId/members" element={<TeamMembers />} />
 
         <Route path="/admin" element={<Admin />} />
         <Route path="/owner" element={<Owner />} />

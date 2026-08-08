@@ -1,11 +1,27 @@
 import { useMemo, useState } from "react";
-import {  useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import styles from "./css/CreateTeam.module.css";
 import AppHeader from "./AppHeader";
 
 /* ---------- icons ---------- */
 
+function BallIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" {...props}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 8.2l3.4 2.5-1.3 4h-4.2l-1.3-4L12 8.2z" />
+      <path d="M12 3v5.2M4.5 8.5l3.5 2.7M19.5 8.5L16 11.2M6.3 18l1.6-4.8M17.7 18l-1.6-4.8" />
+    </svg>
+  );
+}
 
+function ArrowLeftIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" {...props}>
+      <path d="M19 12H5M11 6l-6 6 6 6" />
+    </svg>
+  );
+}
 
 function ShieldIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
@@ -159,6 +175,19 @@ function initialsFromName(name: string) {
   return (parts[0][0] + parts[1][0]).toUpperCase();
 }
 
+// TODO: once team creation is backed by a real API, use the id it returns
+// instead of deriving one from the name — this is only a stand-in so the
+// "add your players" link below has somewhere real to go.
+function slugifyTeamName(name: string) {
+  return (
+    name
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/(^-|-$)/g, "") || "your-team"
+  );
+}
+
 export default function CreateTeam() {
   const navigate = useNavigate();
   const [form, setForm] = useState<TeamFormState>(initialState);
@@ -166,7 +195,6 @@ export default function CreateTeam() {
   const [touched, setTouched] = useState<Partial<Record<keyof TeamFormState, boolean>>>({});
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
 
   const badgeInitials = form.logoInitials.trim()
     ? form.logoInitials.trim().slice(0, 3).toUpperCase()
@@ -212,8 +240,10 @@ export default function CreateTeam() {
     setErrors(liveErrors);
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  
+  const teamId = slugifyTeamName(form.name);
+
+  async function handleSubmit() {
     const foundErrors = validate(form);
     setErrors(foundErrors);
     setTouched({
@@ -231,7 +261,7 @@ export default function CreateTeam() {
       // TODO: await teamsApi.createTeam(form) — POST to the team-management
       // service (TM-01), then navigate to the new team's page on success.
       await new Promise((resolve) => setTimeout(resolve, 900));
-      setSuccess(true);
+      navigate(`/team/${teamId}/members`);
     } catch (err) {
       setSubmitError("Couldn't create the team. Please try again.");
     } finally {
@@ -241,44 +271,16 @@ export default function CreateTeam() {
 
   const showError = (key: keyof TeamFormState) => touched[key] && errors[key];
 
-  if (success) {
-    return (
-      <div className={styles.page}>
-        <div className={styles.successWrap}>
-          <div className={styles.successCard}>
-            <span className={styles.successIcon}>
-              <CheckCircleIcon width={30} height={30} />
-            </span>
-            <h1 className={styles.successTitle}>{form.name} is on the pitch</h1>
-            <p className={styles.successText}>
-              Your team is live. Invite your squad, drop into the team chat, and set up your first
-              game whenever you're ready.
-            </p>
-            <div className={styles.successActions}>
-              <button className={styles.btnPrimary} onClick={() => navigate("/")}>
-                Go to dashboard
-              </button>
-              <button
-                className={styles.btnGhost}
-                onClick={() => {
-                  setSuccess(false);
-                  setForm(initialState);
-                  setTouched({});
-                }}
-              >
-                Create another team
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
+
 
   return (
     <div className={styles.page}>
-      
-            <AppHeader variant="logout" />
+        <AppHeader variant="logout"/>
+        <br />
+        <Link to="/home" className={styles.backLink}>
+          <ArrowLeftIcon width={15} height={15} />
+          Back home
+        </Link>
 
       <header className={styles.hero}>
         <span className={styles.eyebrow}>Team management</span>
@@ -291,7 +293,7 @@ export default function CreateTeam() {
         </p>
       </header>
 
-      <form className={styles.layout} onSubmit={handleSubmit} noValidate>
+      <div className={styles.layout}>
         <div className={styles.formCol}>
           <section className={styles.card}>
             <h2 className={styles.cardTitle}>Team identity</h2>
@@ -310,9 +312,8 @@ export default function CreateTeam() {
                   placeholder="Riverside Falcons"
                   maxLength={40}
                 />
-                <span className={styles.hint}>You official team name</span>
+                <span className={styles.hint}>Your official team name.</span>
                 {showError("name") && <span className={styles.errorText}>{errors.name}</span>}
-                <br />
               </div>
 
               <div className={styles.field}>
@@ -328,10 +329,9 @@ export default function CreateTeam() {
                   maxLength={3}
                 />
                 <span className={styles.hint}>Leave blank to auto-generate from the name.</span>
-                 <br />
               </div>
             </div>
-
+            <br />
             <div className={styles.field}>
               <label className={styles.label} htmlFor="description">
                 Short description
@@ -397,7 +397,7 @@ export default function CreateTeam() {
                 )}
               </div>
             </div>
-
+            <br />
             <div className={styles.grid2}>
               <div className={styles.field}>
                 <label className={styles.label} htmlFor="skillLevel">
@@ -439,7 +439,8 @@ export default function CreateTeam() {
                   ))}
                 </select>
               </div>
-            </div>
+            </div>  
+            <br />
 
             <div className={styles.field}>
               <label className={styles.label}>Preferred days</label>
@@ -566,16 +567,21 @@ export default function CreateTeam() {
             <span className={styles.submitHint}>
               You'll be the team owner. Roles and invites come next.
             </span>
-            <button type="submit" className={styles.btnPrimary} disabled={submitting}>
-              {submitting ? (
-                <>
-                  <SpinnerIcon className={styles.spin} width={16} height={16} />
-                  Creating team…
-                </>
-              ) : (
-                "Create team"
-              )}
-            </button>
+            <button
+  type="button"
+  className={styles.btnPrimary}
+  disabled={submitting}
+  onClick={handleSubmit}
+>
+  {submitting ? (
+    <>
+      <SpinnerIcon className={styles.spin} width={16} height={16} />
+      Creating team…
+    </>
+  ) : (
+    "Create team"
+  )}
+</button>
           </div>
         </div>
 
@@ -653,7 +659,7 @@ export default function CreateTeam() {
             </ul>
           </div>
         </aside>
-      </form>
+      </div>
     </div>
   );
 }

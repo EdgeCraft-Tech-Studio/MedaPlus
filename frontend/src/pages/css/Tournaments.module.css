@@ -38,25 +38,13 @@
 
 /* ---------------- NAV ---------------- */
 
-.nav {
-  position: sticky; top: 0; z-index: 20; display: flex; align-items: center; justify-content: space-between;
-  padding: 18px clamp(20px, 5vw, 64px); background: rgba(251, 251, 248, 0.86);
-  backdrop-filter: blur(10px); border-bottom: 1px solid var(--line);
-}
-.brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--ink); }
-.brandMark {
-  width: 34px; height: 34px; border-radius: 9px;
-  background: linear-gradient(135deg, var(--green-700), var(--grass));
-  display: grid; place-items: center; color: #fff; box-shadow: 0 4px 12px rgba(22, 81, 63, 0.35);
-}
-.brandMark svg { width: 18px; height: 18px; }
-.brandName { font-size: 17px; font-weight: 800; letter-spacing: -0.02em; }
+
 .backLink {
   display: inline-flex; align-items: center; gap: 6px; text-decoration: none; color: var(--muted);
   font-weight: 600; font-size: 13.5px; padding: 8px 12px; border-radius: 999px;
   transition: background 0.18s ease, color 0.18s ease;
 }
-.backLink:hover { background: var(--accent-soft); color: var(--accent); }
+.backLink:hover { color: var(--accent-soft); color: var(--accent); }
 
 /* ---------------- HERO ---------------- */
 
