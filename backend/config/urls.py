@@ -5,6 +5,7 @@ from django.urls import path, include
 
 from accounts.views.auth_view import ForgotPasswordVerifyOTPView, ForgotPasswordView, HomeDataView, LoginView, LogoutView, ResendOTPView, ResetPasswordView, SignupVerifyOTPView, SignupView, TokenRefreshsView
 from accounts.views.otp_view import OTPStatusView
+from accounts.views.pages_view import AdminApproveOwnerView, AdminListOwnersView, AdminPendingOwnersView, MeView
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -16,6 +17,7 @@ urlpatterns = [
         SignupView.as_view(),
         name='auth_register',
     ),
+
 
     path(
         'api/auth/register/verify/',
@@ -31,6 +33,12 @@ urlpatterns = [
     ),
 
     
+    path(
+        'api/auth/me/',
+        MeView.as_view(),
+        name='auth_me',
+    ),
+
     path(
         'api/auth/home/',
         HomeDataView.as_view(),
@@ -80,6 +88,25 @@ urlpatterns = [
         name='otp-status',
     ),
 
+    path(
+        "api/admin/owners/pending/",
+        AdminPendingOwnersView.as_view(),
+        name='otp-owenr-pending',
+        ),
+
+    path(
+            "api/admin/owners/",
+            AdminListOwnersView.as_view(),
+            name='otp-owenrs',
+    ),
+
+    path(
+                "api/admin/owners/<str:user_id>/approve/",
+                AdminApproveOwnerView.as_view(),
+                name='otp-owenrs-approve',
+        ),
+    
+ 
     path("api/", include("pitches.urls")),
     # path("api/", include("bookings.urls")),
 

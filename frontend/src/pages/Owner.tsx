@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { me } from "../lib/auth";
+import { logout, me } from "../lib/auth";
 import type { Pitch } from "../lib/pitches";
 import { createPitch, listPitches, updatePitch } from "../lib/pitches";
 import AddButton from "../components/AddButton";
@@ -233,10 +233,14 @@ export default function Owner() {
         matchesAmenities(p, amenities)
     );
   }, [pitches, search, maxPrice, amenities]);
+   async function handleLogout() {
+      await logout();
+      navigate("/login", { replace: true });
+    }
 
   return (
     <div>
-      <AppHeader variant="logout" /> 
+      <AppHeader variant="logout" onLogout={handleLogout} />
     <div className={styles.page}>
       <ToastContainer />
       <div className={styles.container}>

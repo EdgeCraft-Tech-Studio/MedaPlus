@@ -61,7 +61,7 @@ class AdminListOwnersView(APIView):
         return Response({"owners": owners})
 
 
-class AdminPendingOwnersView(APIView):
+class AdminPendingOwnersView(APIView): 
     
     permission_classes = [IsAuthenticated]
 
@@ -70,7 +70,7 @@ class AdminPendingOwnersView(APIView):
             return Response({"detail": "Forbidden"}, status=403)
 
         owners = User.objects.filter(role=UserRole.OWNER, is_approved=False).values(
-            "id", "phone", "email"
+            "id", "first_name", "last_name", "phone", "email"
         )
         owners = [{**o, "id": str(o["id"])} for o in owners]
         return Response({"pending_owners": owners})

@@ -135,9 +135,17 @@ export async function approvePitch(pitchId: string) {
   return res.data;
 }
 
+
 export async function listPendingOwners() {
   const res = await api.get("/admin/owners/pending/");
-  return res.data.pending_owners as Array<{ id: string; username: string; email: string }>;
+  return res.data.pending_owners as Array<{
+    id: string;
+    username: string;
+    first_name: string;
+    last_name: string;
+    phone: string;
+    email: string;
+  }>;
 }
 
 export async function listOwners() {

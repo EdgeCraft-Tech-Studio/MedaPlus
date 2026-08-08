@@ -943,7 +943,6 @@ export default function PitchWizardModal({
 
     try {
       await onSubmit(formData);
-      showToast(mode === "edit" ? "Pitch updated." : "Pitch created — pending approval.", mode === "edit" ? "update" : "create");
       clearDraft();
       onClose();
       if (mode === "edit") {

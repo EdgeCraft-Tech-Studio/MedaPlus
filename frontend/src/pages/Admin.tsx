@@ -19,6 +19,7 @@ import {
   updatePitch,
 } from "../lib/pitches";
 import AppHeader from "./AppHeader";
+import { logout } from "../lib/auth";
 
 type OwnerRow = {
   id: string;
@@ -291,9 +292,17 @@ function CardActions({
 export default function Admin() {
   const navigate = useNavigate();
 
-  const [pendingOwners, setPendingOwners] = useState<
-    Array<{ id: string; username: string; email: string }>
-  >([]);
+  // Admin.tsx
+const [pendingOwners, setPendingOwners] = useState
+  <Array<{
+    id: string;
+    username: string;
+    first_name: string;
+    last_name: string;
+    phone: string;
+    email: string;
+  }>
+>([]);
   const [owners, setOwners] = useState<OwnerRow[]>([]);
   const [pendingPitches, setPendingPitches] = useState<Pitch[]>([]);
   const [allPitches, setAllPitches] = useState<Pitch[]>([]);
@@ -394,9 +403,14 @@ export default function Admin() {
     );
   }, [allPitches, search, maxPrice, amenities, approvalFilter]);
 
+  async function handleLogout() {
+        await logout();
+        navigate("/login", { replace: true });
+      }
+
   return (
     <div>
-      <AppHeader variant="logout" /> 
+      <AppHeader variant="logout" onLogout={handleLogout} />
     <div className={styles.page}>
       <ToastContainer />
       <div className={styles.container}>
@@ -592,10 +606,11 @@ export default function Admin() {
                   {pendingOwners.map((o) => (
                     <li key={o.id} className={styles.ownerRow}>
                       <div className={styles.ownerInfo}>
-                        <span className={styles.ownerName}>{o.username}</span>
+                        <span className={styles.ownerEmail}>{o.first_name } {o.last_name }</span><br />
+                        <span className={styles.ownerEmail}>{o.email }</span><br />
                         <span className={styles.ownerEmail}>
                           <Icon name="mail" size={12} />
-                          {o.email || "-"}
+                          {o.phone || "-"}
                         </span>
                       </div>
                       <button className={styles.approveBtn} onClick={() => onApproveOwner(o.id)}>

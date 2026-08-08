@@ -142,52 +142,6 @@ class ResendOTPView(APIView):
             status=status.HTTP_200_OK
         )
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 2. OTP STATUS VIEW
-#
-# Flutter OTP screen needs to:
-#   - Show a live countdown ("Resend in 45s") from the moment the screen loads
-#   - Know whether resend is currently locked (and until when)
-#   - Know how many resend attempts remain
-#
-# Without this endpoint, Flutter must either:
-#   (a) Hardcode a 60-second countdown that may not match the real OTP TTL
-#   (b) Show nothing and let the user discover the lock by tapping Resend
-#
-# This endpoint is read-only, returns no sensitive data (no OTP hash),
-# and is safe with no authentication.
-#
-# GET /otp/status/?phone=+251912345678&purpose=signup
-#
-# Success 200 — OTP exists and is active:
-# {
-#     "has_pending_otp":      true,
-#     "expires_in_seconds":   247,
-#     "resend_count":         1,
-#     "resend_locked":        false,
-#     "resend_blocked_until": null
-# }
-#
-# Success 200 — OTP is resend-locked:
-# {
-#     "has_pending_otp":      true,
-#     "expires_in_seconds":   247,
-#     "resend_count":         3,
-#     "resend_locked":        true,
-#     "resend_blocked_until": "2026-06-01T14:30:00Z"
-# }
-#
-# Success 200 — No pending OTP:
-# {
-#     "has_pending_otp":      false,
-#     "expires_in_seconds":   null,
-#     "resend_count":         0,
-#     "resend_locked":        false,
-#     "resend_blocked_until": null
-# }
-#
-# Error 400: invalid phone or purpose
-# ─────────────────────────────────────────────────────────────────────────────
 
 class OTPStatusView(APIView):
     """

@@ -70,7 +70,7 @@ from pitches.models import Tenant
 # @permission_classes([AllowAny])
 # def health(request):
 #     return Response({"ok": True, "service": "accounts"})
-
+ 
 
 # @api_view(["GET"])
 # @permission_classes([IsAuthenticated])
