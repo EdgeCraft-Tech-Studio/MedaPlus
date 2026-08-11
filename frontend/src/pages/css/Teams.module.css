@@ -1,0 +1,164 @@
+.page {
+  --green-900: #0e2f24; --green-800: #123c2d; --green-700: #16513f;
+  --grass: #3fae7f; --grass-bright: #4fd897; --grass-soft: #e6f5ee;
+  --c-team: #2f5d8a; --c-team-soft: #eaf1f8;
+  --c-tournament: #c9942a; --c-tournament-soft: #fbf1dd;
+  --danger: #c0392b; --danger-soft: #fdeeec;
+  --ink: #0e1712; --muted: #6b7a72; --faint: #b7c2bb; --line: #ece9df;
+  --font-mono: 'IBM Plex Mono', monospace;
+
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: clamp(20px, 4vw, 36px) clamp(16px, 4vw, 32px) 40px;
+}
+
+* { box-sizing: border-box; }
+
+.hero {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: clamp(22px, 4vw, 32px);
+}
+
+.eyebrow {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--grass);
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.heroTitle { font-size: clamp(22px, 3vw, 28px); font-weight: 800; letter-spacing: -0.02em; }
+
+.heroActions { display: flex; gap: 10px; }
+
+.btnPrimary, .btnGhost {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  text-decoration: none;
+  font-family: inherit;
+  font-weight: 700;
+  font-size: 13.5px;
+  padding: 10px 16px;
+  border-radius: 999px;
+  cursor: pointer;
+  border: none;
+}
+
+.btnPrimary {
+  background: linear-gradient(135deg, var(--green-700), var(--grass));
+  color: #fff;
+  box-shadow: 0 8px 20px rgba(63, 174, 127, 0.3);
+}
+
+.btnGhost {
+  background: var(--grass-soft);
+  color: var(--green-800);
+}
+
+.searchRow {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 22px;
+}
+
+.searchBox {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #fff;
+  border: 1.5px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 14px;
+  color: var(--muted);
+}
+
+.searchBox input {
+  flex: 1;
+  border: none;
+  outline: none;
+  font-size: 13.5px;
+  font-family: inherit;
+  color: var(--ink);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+
+@media (max-width: 860px) { .grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 560px) { .grid { grid-template-columns: 1fr; } }
+
+.card {
+  text-decoration: none;
+  color: var(--ink);
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 18px;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.card:hover { transform: translateY(-3px); box-shadow: 0 16px 30px rgba(14, 47, 36, 0.09); }
+
+.cardTop { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+
+.logo {
+  width: 46px; height: 46px; border-radius: 13px;
+  background: linear-gradient(135deg, var(--green-700), var(--grass));
+  color: #fff; font-weight: 700; font-size: 15px;
+  display: grid; place-items: center; overflow: hidden;
+}
+
+.logo img { width: 100%; height: 100%; object-fit: cover; }
+
+.roleBadge {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 4px 9px;
+  border-radius: 999px;
+}
+
+.roleBadge[data-role="OWNER"] { background: var(--c-tournament-soft); color: var(--c-tournament); }
+.roleBadge[data-role="ADMIN"] { background: var(--c-team-soft); color: var(--c-team); }
+.roleBadge[data-role="MEMBER"] { background: var(--grass-soft); color: var(--green-700); }
+
+.name { font-size: 15px; font-weight: 700; margin-bottom: 2px; }
+.meta { font-size: 12px; color: var(--muted); margin-bottom: 14px; }
+
+.capRow { display: flex; flex-direction: column; gap: 6px; }
+.capBar { height: 5px; border-radius: 999px; background: var(--grass-soft); overflow: hidden; }
+.capFill { height: 100%; background: var(--grass); border-radius: 999px; }
+.capRow span { font-size: 11px; color: var(--muted); }
+
+.cardAdd {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 168px;
+  border-style: dashed;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.cardAdd:hover { color: var(--grass); border-color: var(--grass); }
+
+.empty {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--muted);
+}

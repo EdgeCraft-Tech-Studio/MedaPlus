@@ -46,7 +46,7 @@
   font-weight: 600; font-size: 13.5px; padding: 8px 12px; border-radius: 999px;
   transition: background 0.18s ease, color 0.18s ease;
 }
-.backLink:hover { color: var(--accent-soft); color: var(--accent); }
+.backLink:hover { background: var(--accent-soft); color: var(--accent); }
 
 .hero {
   text-align: center;
@@ -187,6 +187,74 @@
 .counter { font-family: var(--font-mono); font-size: 11px; color: var(--faint); white-space: nowrap; }
 .errorText { font-size: 12px; color: var(--danger); font-weight: 600; }
 
+/* ---------------- PHOTO UPLOAD ---------------- */
+
+.logoUploadRow { display: flex; align-items: center; gap: 14px; }
+
+.logoFileInput {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.logoDropzone {
+  width: 64px;
+  height: 64px;
+  flex-shrink: 0;
+  border-radius: 16px;
+  border: 1.5px dashed var(--line);
+  background: var(--paper);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  overflow: hidden;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.logoDropzone:hover { border-color: var(--accent); background: var(--accent-soft); }
+
+.logoDropzonePlaceholder { color: var(--faint); display: grid; place-items: center; }
+
+.logoDropzoneImg { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+.logoUploadActions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; min-width: 0; }
+
+.logoUploadBtn {
+  appearance: none;
+  border: 1.5px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+  font-family: inherit;
+  font-weight: 700;
+  font-size: 12.5px;
+  padding: 8px 14px;
+  border-radius: 9px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.logoUploadBtn:hover { border-color: var(--accent); background: var(--accent-soft); }
+
+.logoRemoveBtn {
+  appearance: none;
+  border: none;
+  background: none;
+  color: var(--danger);
+  font-family: inherit;
+  font-weight: 700;
+  font-size: 12.5px;
+  padding: 4px 2px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.logoRemoveBtn:hover { opacity: 0.75; }
+
 /* ---------------- CHIPS ---------------- */
 
 .chipRow { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 4px; }
@@ -257,8 +325,8 @@
 
 /* ---------------- VISIBILITY CARDS ---------------- */
 
-.visibilityGrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
-@media (max-width: 640px) { .visibilityGrid { grid-template-columns: 1fr; } }
+.visibilityGrid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+@media (max-width: 560px) { .visibilityGrid { grid-template-columns: 1fr; } }
 
 .visibilityCard {
   text-align: left;
@@ -408,6 +476,14 @@
   font-weight: 700;
   letter-spacing: 0.02em;
   color: #fff;
+}
+
+.badgeImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 20px;
+  display: block;
 }
 
 .badgeShine {

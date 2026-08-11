@@ -6,6 +6,7 @@ import { listPitches } from "../lib/pitches";
 import styles from "./css/Dashboard.module.css";
 import LoadingBall from "./LoadingBall";
 import AppHeader from "./AppHeader";
+import { logout } from "../lib/auth";
 
 type TabKey = "map" | "nearby" | "best";
 
@@ -355,9 +356,14 @@ export default function App() {
     navigate(`/app/pitches/${pitchId}`);
   }
 
+   async function handleLogout() {
+        await logout();
+        navigate("/login", { replace: true });
+      }
+
   return (
     <div>
-    <AppHeader variant="logout" />
+    <AppHeader variant="logout" onLogout={handleLogout} />
       <br />
         <Link to="/home" className={styles.backLink}>
           <ArrowLeftIcon width={15} height={15} />

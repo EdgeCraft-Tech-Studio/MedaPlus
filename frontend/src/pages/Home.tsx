@@ -1,129 +1,38 @@
-import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import styles from "./css/Home.module.css";
-import AppHeader from "./AppHeader";
-import { getHomeData, logout } from "../lib/auth";
-import type { SessionUser } from "../lib/session";
-import { getCurrentUser } from "../lib/session";
+import {
+  MapPinIcon, VersusIcon, SearchIcon, UsersIcon, PlusIcon, ChevronRightIcon, TrophyIcon,
+} from "./Icons";
+import { mockTeams, mockMatches, mockTournaments } from "./mockData";
+import {  type TournamentStatus, type TeamRole } from "./types";
 
-/* ---------- icons ---------- */
-
-function BallIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" {...props}>
-      <circle cx="12" cy="12" r="9" />
-      <path d="M12 8.2l3.4 2.5-1.3 4h-4.2l-1.3-4L12 8.2z" />
-      <path d="M12 3v5.2M4.5 8.5l3.5 2.7M19.5 8.5L16 11.2M6.3 18l1.6-4.8M17.7 18l-1.6-4.8" />
-    </svg>
-  );
-}
-
-function UsersIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" {...props}>
-      <circle cx="9" cy="8" r="3.2" />
-      <path d="M2.5 20c.7-3.6 3.3-5.5 6.5-5.5s5.8 1.9 6.5 5.5" />
-      <circle cx="17.5" cy="9" r="2.4" />
-      <path d="M15.8 14.8c2.4.3 4.1 2 4.7 5.2" />
-    </svg>
-  );
-}
-
-function VersusIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" {...props}>
-      <circle cx="6" cy="12" r="4" />
-      <circle cx="18" cy="12" r="4" />
-      <path d="M9.5 9.5l5 5M14.5 9.5l-5 5" strokeWidth="1.4" />
-    </svg>
-  );
-}
-
-function MapPinIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" {...props}>
-      <path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21z" />
-      <circle cx="12" cy="9.5" r="2.4" />
-    </svg>
-  );
-}
-
-function TrophyIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" {...props}>
-      <path d="M7 4h10v5a5 5 0 01-10 0V4z" />
-      <path d="M7 6H4a3 3 0 003 3M17 6h3a3 3 0 01-3 3" />
-      <path d="M12 14v3M9 21h6M9.5 21c0-2 1-3 2.5-4 1.5 1 2.5 2 2.5 4" />
-    </svg>
-  );
-}
-
-function ArrowRightIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" {...props}>
-      <path d="M5 12h14M13 6l6 6-6 6" />
-    </svg>
-  );
-}
-
-function CheckIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" {...props}>
-      <path d="M4 12l5 5L20 6" />
-    </svg>
-  );
-}
-
-/* ---------- data ---------- */
-
-const actions = [
-  {
-    key: "team",
-    accent: "team",
-    icon: UsersIcon,
-    label: "Create team",
-    to: "/team/create",
-    title: "Create a team",
-    text: "Set up your squad's page — name, colors, and a roster your players can join with a code.",
-    bullets: ["Custom team name & badge", "Invite players by link or code", "Track your squad's match history"],
-  },
-  {
-    key: "match",
-    accent: "match",
-    icon: VersusIcon,
-    label: "Make match",
-    to: "/match/create",
-    title: "Make a match",
-    text: "Set the date, format, and pitch, then send a challenge to another team or open it to anyone.",
-    bullets: ["Pick a format: 5-a-side to 11-a-side", "Challenge a team or post it open", "Automatic reminders before kickoff"],
-  },
-  {
-    key: "pitch",
-    accent: "pitch",
-    icon: MapPinIcon,
-    label: "Find pitch",
-    to: "/app",
-    title: "Find a pitch",
-    text: "Browse pitches near you, check live availability, and lock in your hours in a couple of taps.",
-    bullets: ["Live slots — no back-and-forth", "Filter by price, size & surface", "Verified, owner-approved listings"],
-  },
-  {
-    key: "tournament",
-    accent: "tournament",
-    icon: TrophyIcon,
-    label: "Tournament",
-    to: "/tournaments",
-    title: "Tournament",
-    text: "Join an open bracket with your team, or set up a tournament for your own league to run.",
-    bullets: ["Auto-generated brackets", "Live standings & results", "Invite multiple teams at once"],
-  },
+const quickActions = [
+  { key: "pitch", to: "/app", accent: "pitch", icon: MapPinIcon, label: "Find pitch" },
+  { key: "match", to: "/match/create", accent: "match", icon: VersusIcon, label: "Make match" },
+  { key: "findteam", to: "/discover/teams", accent: "findteam", icon: SearchIcon, label: "Find team" },
+  { key: "createteam", to: "/team/create", accent: "team", icon: UsersIcon, label: "Create team" },
 ];
 
-const stats = [
-  { label: "Your teams", value: "2" },
-  { label: "Upcoming matches", value: "1" },
-  { label: "Pitches booked", value: "6" },
-];
+const ROLE_LABEL: Record<TeamRole, string> = { OWNER: "Owner", ADMIN: "Admin", MEMBER: "Member" };
+
+const TOURNAMENT_STATUS_LABEL: Record<TournamentStatus, string> = {
+  registration_open: "Registration open",
+  upcoming: "Upcoming",
+  ongoing: "Ongoing",
+  completed: "Completed",
+};
+
+function initials(name: string) {
+  return name.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase();
+}
+
+function formatMatchDate(iso: string) {
+  const d = new Date(iso);
+  return {
+    day: d.toLocaleDateString(undefined, { day: "2-digit" }),
+    month: d.toLocaleDateString(undefined, { month: "short" }),
+  };
+}
 
 function getGreeting() {
   const h = new Date().getHours();
@@ -134,155 +43,163 @@ function getGreeting() {
 }
 
 export default function Home() {
-  const nav = useNavigate();
-
-  // Show cached user instantly (no flash of empty state) while the
-  // fresh fetch below confirms/updates it. getCurrentUser() reads from
-  // whatever was last saved to storage at login/signup.
-  const [user, setUser] = useState<SessionUser | null>(getCurrentUser());
-  const [loadingUser, setLoadingUser] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadUser() {
-      try {
-        // This call is what actually proves the session is valid:
-        // - api.ts's request interceptor checks/refreshes the access
-        //   token first if it's expired but the refresh token isn't.
-        // - The backend's SessionTokenAuthentication independently
-        //   re-validates the token server-side regardless of anything
-        //   the frontend claims.
-        const freshUser = await getHomeData();
-        if (!cancelled) setUser(freshUser);
-      } catch {
-        // If both tokens are dead, api.ts's interceptors already
-        // redirected to /login before this catch even runs. Nothing
-        // extra to do here.
-      } finally {
-        if (!cancelled) setLoadingUser(false);
-      }
-    }
-
-    loadUser();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  async function handleLogout() {
-    await logout();
-    nav("/login", { replace: true });
-  }
-
-  const displayName = user?.username || user?.full_name || "there";
-
   return (
     <div className={styles.page}>
-      <AppHeader variant="logout" onLogout={handleLogout} />
-
       <header className={styles.hero}>
-        <div className={styles.heroGlow} />
         <span className={styles.eyebrow}>{getGreeting()}</span>
-       <h1 className={styles.heroTitle}>
-  {loadingUser ? (
-    "Loading..."
-  ) : (
-    <>
-      Hello <em> {displayName}</em>, where are we
-    </>
-  )}{" "}
-  <em>playing</em> today?
-</h1>
-        <p className={styles.heroSubtitle}>Pick an action below to get started.</p>
-
-        <div className={styles.statsRow}>
-          {stats.map((s) => (
-            <div key={s.label} className={styles.statItem}>
-              <span className={styles.statValue}>{s.value}</span>
-              <span className={styles.statLabel}>{s.label}</span>
-            </div>
-          ))}
-        </div>
+        <h1 className={styles.heroTitle}>Here's what's going on.</h1>
       </header>
 
-      <main className={styles.main}>
-        <section className={styles.actionsSection}>
-          <span className={styles.sectionEyebrow}>Quick actions</span>
-          <div className={styles.actionsRow}>
-            {actions.map((a, i) => {
-              const Icon = a.icon;
+      {/* ---------------- QUICK ACTIONS ---------------- */}
+      <section className={styles.section}>
+        <div className={styles.sectionHead}>
+          <span className={styles.sectionTitle}>Quick actions</span>
+        </div>
+        <div className={styles.quickGrid}>
+          {quickActions.map((a) => {
+            const Icon = a.icon;
+            return (
+              <Link key={a.key} to={a.to} className={styles.quickBtn} data-accent={a.accent}>
+                <span className={styles.quickIconWrap}><Icon width={20} height={20} /></span>
+                <span className={styles.quickLabel}>{a.label}</span>
+                <ChevronRightIcon className={styles.quickChevron} width={15} height={15} />
+              </Link>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* ---------------- MY TEAMS ---------------- */}
+      <section className={styles.section}>
+        <div className={styles.sectionHead}>
+          <span className={styles.sectionTitle}>My teams</span>
+          <Link to="/teams" className={styles.seeAllLink}>See all <ChevronRightIcon width={13} height={13} /></Link>
+        </div>
+
+        {mockTeams.length === 0 ? (
+          <EmptyState
+            icon={UsersIcon}
+            text="You haven't joined a team yet."
+            ctaLabel="Create a team"
+            ctaTo="/team/create"
+          />
+        ) : (
+          <div className={styles.teamsRow}>
+            {mockTeams.map((team) => (
+              <Link key={team.id} to={`/teams/${team.id}`} className={styles.teamCard}>
+                <div className={styles.teamCardTop}>
+                  <span className={styles.teamLogo}>
+                    {team.logo ? <img src={team.logo} alt="" /> : initials(team.name)}
+                  </span>
+                  <span className={styles.roleBadge} data-role={team.role}>{ROLE_LABEL[team.role]}</span>
+                </div>
+                <div className={styles.teamName}>{team.name}</div>
+                <div className={styles.teamMeta}>{team.sport} · {team.location}</div>
+                <div className={styles.teamCapacity}>
+                  <div className={styles.capacityBar}>
+                    <div
+                      className={styles.capacityFill}
+                      style={{ width: `${Math.min((team.activeMembers / team.capacity) * 100, 100)}%` }}
+                    />
+                  </div>
+                  <span>{team.activeMembers}/{team.capacity} members</span>
+                </div>
+              </Link>
+            ))}
+            <Link to="/team/create" className={styles.teamCardAdd}>
+              <PlusIcon width={20} height={20} />
+              <span>Create team</span>
+            </Link>
+          </div>
+        )}
+      </section>
+
+      {/* ---------------- UPCOMING MATCHES ---------------- */}
+      <section className={styles.section}>
+        <div className={styles.sectionHead}>
+          <span className={styles.sectionTitle}>Upcoming matches</span>
+          <Link to="/matches" className={styles.seeAllLink}>See all <ChevronRightIcon width={13} height={13} /></Link>
+        </div>
+
+        {mockMatches.length === 0 ? (
+          <EmptyState
+            icon={VersusIcon}
+            text="No matches on your calendar yet."
+            ctaLabel="Make a match"
+            ctaTo="/match/create"
+          />
+        ) : (
+          <div className={styles.matchList}>
+            {mockMatches.map((m) => {
+              const { day, month } = formatMatchDate(m.date);
               return (
-                <Link
-                  key={a.key}
-                  to={a.to}
-                  className={styles.actionBtn}
-                  data-accent={a.accent}
-                  style={{ animationDelay: `${i * 0.09}s` }}
-                >
-                  <span className={styles.actionIconWrap}>
-                    <Icon width={22} height={22} />
+                <Link key={m.id} to={`/matches/${m.id}`} className={styles.matchRow}>
+                  <div className={styles.matchDateBlock}>
+                    <span className={styles.matchDay}>{day}</span>
+                    <span className={styles.matchMonth}>{month}</span>
+                  </div>
+                  <div className={styles.matchInfo}>
+                    <div className={styles.matchTitle}>{m.opponentLabel}</div>
+                    <div className={styles.matchMeta}>{m.pitchName} · {m.time}</div>
+                  </div>
+                  <span className={styles.statusPill} data-status={m.status}>
+                    {m.status === "confirmed" && "Confirmed"}
+                    {m.status === "pending_payment" && "Payment pending"}
+                    {m.status === "open" && "Open"}
                   </span>
-                  <span className={styles.actionLabel}>{a.label}</span>
-                  <span className={styles.actionOpenPill}>
-                    Open
-                    <ArrowRightIcon width={13} height={13} />
-                  </span>
+                  <ChevronRightIcon className={styles.matchChevron} width={16} height={16} />
                 </Link>
               );
             })}
           </div>
-        </section>
+        )}
+      </section>
 
-        <section className={styles.detailsSection}>
-          <span className={styles.sectionEyebrow}>What each one does</span>
-          <div className={styles.detailsGrid}>
-            {actions.map((a, i) => {
-              const Icon = a.icon;
-              return (
-                <div
-                  key={a.key}
-                  className={styles.detailCard}
-                  data-accent={a.accent}
-                  style={{ animationDelay: `${0.3 + i * 0.09}s` }}
-                >
-                  <div className={styles.detailTop}>
-                    <span className={styles.detailIconWrap}>
-                      <Icon width={19} height={19} />
-                    </span>
-                    <span className={styles.detailTag}>{a.label}</span>
-                  </div>
-
-                  <h3 className={styles.detailTitle}>{a.title}</h3>
-                  <p className={styles.detailText}>{a.text}</p>
-
-                  <ul className={styles.detailBullets}>
-                    {a.bullets.map((b) => (
-                      <li key={b}>
-                        <CheckIcon width={13} height={13} />
-                        <span>{b}</span>
-                      </li>
-                    ))}
-                  </ul>
-
-                  <Link to={a.to} className={styles.detailLink}>
-                    Open {a.title.toLowerCase()}
-                    <ArrowRightIcon width={14} height={14} />
-                  </Link>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-      </main>
-
-      <footer className={styles.footer}>
-        <div className={styles.footerBrand}>
-          <BallIcon width={14} height={14} />
-          Meda Plus
+      {/* ---------------- TOURNAMENT PREVIEW ---------------- */}
+      <section className={styles.section}>
+        <div className={styles.sectionHead}>
+          <span className={styles.sectionTitle}>Tournaments for you</span>
+          <Link to="/discover/tournaments" className={styles.seeAllLink}>See all <ChevronRightIcon width={13} height={13} /></Link>
         </div>
-        <div>© {new Date().getFullYear()} Meda Plus. All rights reserved.</div>
-      </footer>
+
+        {mockTournaments.length === 0 ? (
+          <EmptyState
+            icon={TrophyIcon}
+            text="No tournaments to show right now."
+            ctaLabel="Browse tournaments"
+            ctaTo="/discover/tournaments"
+          />
+        ) : (
+          <div className={styles.tournamentRow}>
+            {mockTournaments.map((t) => (
+              <Link key={t.id} to={`/discover/tournaments/${t.id}`} className={styles.tournamentCard}>
+                <div className={styles.tournamentTop}>
+                  <span className={styles.tournamentIconWrap}><TrophyIcon width={18} height={18} /></span>
+                  <span className={styles.statusPill} data-status={t.status}>{TOURNAMENT_STATUS_LABEL[t.status]}</span>
+                </div>
+                <div className={styles.tournamentName}>{t.name}</div>
+                <div className={styles.tournamentMeta}>{t.sport} · {t.location}</div>
+                <div className={styles.tournamentFoot}>
+                  <span>{t.teamsJoined}/{t.teamsMax} teams</span>
+                  <span>{new Date(t.startDate).toLocaleDateString(undefined, { day: "numeric", month: "short" })}</span>
+                </div>
+              </Link>
+            ))}
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function EmptyState({
+  icon: Icon, text, ctaLabel, ctaTo,
+}: { icon: React.ComponentType<React.SVGProps<SVGSVGElement>>; text: string; ctaLabel: string; ctaTo: string }) {
+  return (
+    <div className={styles.emptyState}>
+      <span className={styles.emptyIconWrap}><Icon width={22} height={22} /></span>
+      <p>{text}</p>
+      <Link to={ctaTo} className={styles.emptyCta}>{ctaLabel}</Link>
     </div>
   );
 }

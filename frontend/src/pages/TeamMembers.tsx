@@ -4,36 +4,30 @@ import styles from "./css/TeamMembers.module.css";
 import AppHeader from "./AppHeader";
 
 /*
- * Grounded in the proposal document:
- * - §3 "Team roles": Owner / Admin / Member permissions.
- * - §3 "Visibility and joining rules": public (join instantly), request to
- *   join (owner/admin approves each request), private (invite link, join
- *   code, or direct invitation).
- * - §3 "Membership business rules": exactly one owner at all times;
- *   ownership must be transferred before the owner can leave; a member in
- *   an active payment session can't leave until it ends; removing a member
- *   never deletes historical messages, payments, or bookings; a team can
- *   be deactivated but its financial/booking history stays available to
+ * Grounded in the "Team Creation & Membership" focused specification:
+ * - Team roles: Owner / Admin / Member permissions.
+ * - Visibility (2 types): Public — listed in search, players send a join
+ *   request that the owner/admin approves or rejects. Private — hidden
+ *   from search, no join requests accepted at all; membership only via
+ *   invite link, join code, or direct invitation.
+ * - Any invite (link, code, direct) adds the recipient as a member
+ *   immediately — sending the invite is the approval, no separate step.
+ * - Membership business rules: exactly one owner at all times; ownership
+ *   must be transferred before the owner can leave; a member in an active
+ *   payment session can't leave until it ends; removing a member never
+ *   deletes historical messages, payments, or bookings; a team can be
+ *   deactivated but its financial/booking history stays available to
  *   authorized users and admins.
  * - TM-02: "Owner/admin can invite, approve, reject, remove and promote
  *   members."
  *
  * This page intentionally has no "assign players" field on the create-team
- * form — the document treats team creation and membership as two separate
- * things, and TM-02 is its own requirement from team creation (TM-01).
+ * form — team creation and membership are two separate steps, and this
+ * page is where the roster actually gets built.
  */
 
 /* ---------- icons ---------- */
 
-function BallIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" {...props}>
-      <circle cx="12" cy="12" r="9" />
-      <path d="M12 8.2l3.4 2.5-1.3 4h-4.2l-1.3-4L12 8.2z" />
-      <path d="M12 3v5.2M4.5 8.5l3.5 2.7M19.5 8.5L16 11.2M6.3 18l1.6-4.8M17.7 18l-1.6-4.8" />
-    </svg>
-  );
-}
 function ArrowLeftIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" {...props}>
@@ -144,19 +138,21 @@ function DocIcon(props: React.SVGProps<SVGSVGElement>) {
    entities) once that API exists. */
 
 type Role = "owner" | "admin" | "member";
-type Visibility = "public" | "request" | "private";
+type Visibility = "public" | "private";
 
 interface Member {
   id: string;
   name: string;
   role: Role;
   isYou?: boolean;
+  photoUrl?: string; // profile photo — falls back to initials when absent
   inActiveSession?: boolean; // §3: can't leave/be removed mid payment session
 }
 
 interface JoinRequest {
   id: string;
   name: string;
+  photoUrl?: string;
   requestedAgo: string;
 }
 
@@ -196,6 +192,26 @@ const ROLE_INFO: Record<Role, { label: string; permissions: string }> = {
   },
 };
 
+function Avatar({
+  name,
+  photoUrl,
+  role,
+}: {
+  name: string;
+  photoUrl?: string;
+  role?: Role;
+}) {
+  return (
+    <span className={styles.avatar} data-role={role}>
+      {photoUrl ? (
+        <img src={photoUrl} alt="" className={styles.avatarImg} />
+      ) : (
+        initialsFromName(name)
+      )}
+    </span>
+  );
+}
+
 export default function TeamMembers() {
   const navigate = useNavigate();
   const { teamId: rawTeamId } = useParams();
@@ -208,7 +224,7 @@ export default function TeamMembers() {
       sport: "Football",
       homeArea: "Bole, Addis Ababa",
       capacity: 16,
-      visibility: "request" as Visibility,
+      visibility: "public" as Visibility,
     }),
     [teamId]
   );
@@ -435,13 +451,11 @@ export default function TeamMembers() {
           <section className={styles.card}>
             <h2 className={styles.cardTitle}>Add players</h2>
             <p className={styles.cardHint}>
-              How players join depends on this team's visibility ({team.visibility === "public"
-                ? "Public"
-                : team.visibility === "request"
-                  ? "Request to join"
-                  : "Private"}
-              ) — link, code, and direct invite always work; join requests only apply when
-              approval is required.
+              This team is <strong>{team.visibility === "public" ? "Public" : "Private"}</strong> —{" "}
+              {team.visibility === "public"
+                ? "it's listed in search, so players can also send a join request below."
+                : "it's hidden from search, so link, code, or direct invite are the only ways in."}{" "}
+              Any invite adds someone immediately — no separate approval step.
             </p>
 
             <div className={styles.inviteGrid}>
@@ -527,7 +541,7 @@ export default function TeamMembers() {
             )}
           </section>
 
-          {team.visibility === "request" && (
+          {team.visibility === "public" && (
             <section className={styles.card}>
               <h2 className={styles.cardTitle}>
                 Join requests
@@ -540,7 +554,7 @@ export default function TeamMembers() {
                   {requests.map((req) => (
                     <li key={req.id} className={styles.requestItem}>
                       <div className={styles.memberIdentity}>
-                        <span className={styles.avatar}>{initialsFromName(req.name)}</span>
+                        <Avatar name={req.name} photoUrl={req.photoUrl} />
                         <div>
                           <span className={styles.memberName}>{req.name}</span>
                           <span className={styles.mutedInline}> · requested {req.requestedAgo}</span>
@@ -595,9 +609,7 @@ export default function TeamMembers() {
                 return (
                   <li key={member.id} className={styles.memberItem}>
                     <div className={styles.memberIdentity}>
-                      <span className={styles.avatar} data-role={member.role}>
-                        {initialsFromName(member.name)}
-                      </span>
+                      <Avatar name={member.name} photoUrl={member.photoUrl} role={member.role} />
                       <div>
                         <span className={styles.memberName}>
                           {member.name}

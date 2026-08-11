@@ -5,6 +5,7 @@ import "leaflet/dist/leaflet.css";
 import "./lib/leafletFix";
 
 import RoleProtectedRoute from "./components/RoleProtectedRoute";
+import ProtectedRoute from "./components/ProtectedRoute";
 
 import Landing from "./pages/Landing";
 import Login from "./pages/Login";
@@ -14,12 +15,10 @@ import Owner from "./pages/Owner";
 import App from "./pages/App";
 import PitchDetail from "./pages/PitchDetail";
 import OtpVerify from "./pages/OtpVerify";
+
+// New pages from this build
 import Home from "./pages/Home";
-import CreateTeam from "./pages/CreateTeam";
-import CreateMatch from "./pages/CreateMatch";
-import Tournaments from "./pages/Tournaments";
-import TeamMembers from "./pages/TeamMembers";
-import ProtectedRoute from "./components/ProtectedRoute";
+import AppShell from "./pages/AppShell";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
@@ -30,16 +29,18 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
         <Route path="/verify-otp" element={<OtpVerify />} />
-        <Route path="/home" element={<Home />} />
+
+        {/* ── Main app shell — top nav / bottom tabs + notifications ──── */}
+        <Route element={<AppShell />}>
+          <Route path="/home" element={<Home />} />
+        </Route>
+
+        {/* ── Your existing pages (unchanged) ─────────────────────────── */}
+        <Route path="/app" element={<App />} />
+        <Route path="/app/pitches/:pitchId" element={<PitchDetail />} />
 
         {/* ── Protected routes — any authenticated user ───────────────── */}
         <Route element={<ProtectedRoute />}>
-          <Route path="/team/create" element={<CreateTeam />} />
-          <Route path="/match/create" element={<CreateMatch />} />
-          <Route path="/tournaments" element={<Tournaments />} />
-          <Route path="/team/:teamId/members" element={<TeamMembers />} />
-          <Route path="/app" element={<App />} />
-          <Route path="/app/pitches/:pitchId" element={<PitchDetail />} />
         </Route>
 
         {/* ── Admin-only route ─────────────────────────────────────────── */}
