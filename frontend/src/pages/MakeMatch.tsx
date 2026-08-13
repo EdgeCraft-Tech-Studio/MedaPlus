@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import styles from "./css/FormPage.module.css";
 import { BackArrowIcon, VersusIcon } from "./Icons";
 import {
@@ -69,6 +69,7 @@ function todayISO() {
 }
 
 export default function MakeMatch() {
+  const nav = useNavigate();
   const [form, setForm] = useState<FormState>(initialState);
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
   const [submitErr, setSubmitErr] = useState("");
@@ -146,12 +147,15 @@ export default function MakeMatch() {
       };
 
       // TODO: replace with the real API call, e.g.
-      // await createBooking(payload); // atomic hold + payment session on the backend
+      // const { bookingId } = await createBooking(payload); // atomic hold + payment session on the backend
       await new Promise((resolve) => setTimeout(resolve, 900));
       console.log("TODO: submit makeMatch payload", payload);
 
-      // TODO: navigate to the live payment/progress screen once the backend
-      // returns a booking hold id, e.g. nav(`/match/${bookingId}/pay`);
+      // No backend yet, so there's no real bookingId to route to — sending
+      // you back to Home so the flow doesn't dead-end. Replace with the real
+      // payment/progress screen once the backend exists:
+      // nav(`/matches/${bookingId}`);
+      nav("/home");
     } catch {
       setSubmitErr("Couldn't start the booking. Please try again.");
     } finally {

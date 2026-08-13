@@ -92,3 +92,43 @@ class PreferredPosition(models.TextChoices):
     DEFENDER = "def", "Defender"
     MIDFIELDER = "mid", "Midfielder"
     FORWARD = "fwd", "Forward"
+
+
+class InvitationType(models.TextChoices):
+    """Which of the three invitation pathways (§11-§14 of your spec)
+    this row represents. DIRECT targets one searched user; LINK/CODE
+    are reusable and target nobody in particular until redeemed.
+    """
+
+    DIRECT = "direct", "Direct (searched user)"
+    LINK = "link", "Shareable link / QR"
+    CODE = "code", "Short join code"
+
+
+class InvitationStatus(models.TextChoices):
+    """For DIRECT: the full lifecycle of a single-target invite. For
+    reusable LINK/CODE invitations, only PENDING/CANCELLED/EXPIRED
+    are ever used — ACCEPTED/DECLINED don't apply since many
+    different users can redeem the same reusable invitation without
+    it ever "closing."
+    """
+
+    PENDING = "pending", "Pending"
+    ACCEPTED = "accepted", "Accepted"
+    DECLINED = "declined", "Declined"
+    CANCELLED = "cancelled", "Cancelled"
+    EXPIRED = "expired", "Expired"
+
+
+class JoinRequestStatus(models.TextChoices):
+    """Lifecycle of a public-team join request (§16-17) — distinct
+    from InvitationStatus because a join request is initiated by the
+    player, not the team, and has no ACCEPTED/DECLINED states, only
+    APPROVED/REJECTED (by an owner/admin) or CANCELLED (by the
+    requester withdrawing it themselves).
+    """
+
+    PENDING = "pending", "Pending"
+    APPROVED = "approved", "Approved"
+    REJECTED = "rejected", "Rejected"
+    CANCELLED = "cancelled", "Cancelled"

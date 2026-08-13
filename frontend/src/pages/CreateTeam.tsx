@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import styles from "./css/FormPage.module.css";
 import { BackArrowIcon, UsersIcon } from "./Icons";
 import {
   FieldWrap, TextField, TextAreaField, SelectField, ChipGroup, SegmentedControl, LogoUpload,
 } from "../components/FormControls";
+import { createTeam } from "../lib/team";
 
 const SPORTS = [
   { value: "football", label: "Football" },
@@ -47,6 +48,7 @@ const VISIBILITY = [
 interface FormState {
   name: string;
   logo: string | null;
+  logoFile: File | null; 
   description: string;
   sport: string;
   sportOther: string;
@@ -60,12 +62,13 @@ interface FormState {
 }
 
 const initialState: FormState = {
-  name: "", logo: null, description: "", sport: "", sportOther: "",
+  name: "", logo: null,logoFile: null, description: "", sport: "", sportOther: "",
   homeArea: "", skillLevel: "", preferredDays: [], playTime: "",
   ageCategory: "", capacity: "", visibility: "public",
 };
 
 export default function CreateTeam() {
+  const nav = useNavigate();
   const [form, setForm] = useState<FormState>(initialState);
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
   const [submitErr, setSubmitErr] = useState("");
@@ -111,29 +114,31 @@ export default function CreateTeam() {
 
     setLoading(true);
     try {
-      const payload = {
+      const { slug } = await createTeam({
         name: form.name.trim(),
-        logo: form.logo,
         description: form.description.trim(),
         sport: form.sport === "other" ? form.sportOther.trim() : form.sport,
-        homeArea: form.homeArea.trim(),
+        area: form.homeArea.trim(),
         skillLevel: form.skillLevel,
         preferredDays: form.preferredDays,
         playTime: form.playTime,
         ageCategory: form.ageCategory,
-        capacity: Number(form.capacity),
+        maxRosterSize: Number(form.capacity),
         visibility: form.visibility,
-      };
-
-      // TODO: replace with the real API call, e.g.
-      // await createTeam(payload);
-      await new Promise((resolve) => setTimeout(resolve, 900));
-      console.log("TODO: submit createTeam payload", payload);
-
-      // TODO: navigate to the new team's page once the backend returns an id
-      // nav(`/team/${teamId}`);
-    } catch {
+        logoFile: form.logoFile,
+      });
+      nav(`/teams/${slug}`);
+    } catch (err: any) {
+      if (err.response?.status === 400) {
+      const raw = err.response.data as Record<string, string[]>;
+      const flat: Partial<Record<keyof FormState, string>> = {};
+      Object.entries(raw).forEach(([key, msgs]) => {
+        flat[key as keyof FormState] = Array.isArray(msgs) ? msgs[0] : String(msgs);
+      });
+      setErrors(flat);
+    } else {
       setSubmitErr("Couldn't create the team. Please try again.");
+    }
     } finally {
       setLoading(false);
     }
@@ -171,7 +176,11 @@ export default function CreateTeam() {
           </FieldWrap>
 
           <FieldWrap label="Team logo">
-            <LogoUpload value={form.logo} onChange={(v) => set("logo", v)} />
+            <LogoUpload
+  value={form.logo}
+  onChange={(v) => set("logo", v)}
+  onFileChange={(f) => set("logoFile", f)}   
+/>
           </FieldWrap>
 
           <FieldWrap label="Short description" htmlFor="t-desc" error={errors.description} hint="Optional — what makes your team, your team?">

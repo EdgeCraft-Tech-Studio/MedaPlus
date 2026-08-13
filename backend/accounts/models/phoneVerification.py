@@ -6,15 +6,6 @@ from django.utils import timezone
 
 from core.utils.base import TimeStampedModel
 
-# django-mongodb-backend==6.0.2
-# Same pattern as the other two files:
-#   - Meta.indexes (idx_phone_purpose_valid, idx_phone_expires) removed.
-#   - Meta.constraints (unique_active_verification, a partial UniqueConstraint
-#     on phone_number+purpose where is_used=False) removed.
-#   - db_index=True stripped from phone_number, user (FK), expires_at.
-# No field here had unique=True, so there's no version of the phone/user
-# contradiction from user.py to worry about — nothing to touch there.
-
 
 # ─────────────────────────────────────────────
 # QUERYSET
@@ -46,7 +37,7 @@ class PhoneVerificationManager(models.Manager):
 
     def get_queryset(self):
         return PhoneVerificationQuerySet(self.model, using=self._db)
-
+    
     def used(self):
         return self.get_queryset().used()
 
@@ -73,24 +64,25 @@ class PhoneVerification(TimeStampedModel):
         LOGIN = "login", "Login"
         PASSWORD_RESET = "password_reset", "Password Reset"
         PHONE_CHANGE = "phone_change", "Phone Change"
-        BID_CONFIRM = "bid_confirm", "Bid Confirm"
+        BID_CONFIRM = "bid_confirm", "Bid Confirm" 
 
     MAX_ATTEMPTS = 5
 
-    phone_number = models.CharField(max_length=20)
+    phone_number = models.CharField(max_length=20, db_index = True)
     user = models.ForeignKey(
         'accounts.User',
         on_delete=models.CASCADE,
         related_name='phone_verifications',
+        db_index=True,
         null=True,   # or backfill existing rows before making it non-null
     )
     otp_hash = models.CharField(max_length=255)
     purpose = models.CharField(max_length=20, choices=Purpose.choices)
-    expires_at = models.DateTimeField()
+    expires_at = models.DateTimeField(db_index = True)
     is_used = models.BooleanField(default=False)
-    attempts = models.PositiveSmallIntegerField(default=0)
+    attempts = models.PositiveSmallIntegerField(default=0) 
     attempts_locked_until = models.DateTimeField(null=True, blank=True)
-    used_at = models.DateTimeField(null=True, blank=True)
+    used_at = models.DateTimeField(null=True, blank=True) 
     resend_count = models.PositiveSmallIntegerField(default=0)
     resend_blocked_until = models.DateTimeField(null=True, blank=True)
 
@@ -105,13 +97,23 @@ class PhoneVerification(TimeStampedModel):
         verbose_name = 'Phone Verification'
         verbose_name_plural = 'Phone Verifications'
         ordering = ['-created_at']
-        # No indexes, no constraints — removed per your request.
-        # NOTE: the old partial UniqueConstraint (unique_active_verification)
-        # enforced "only one un-used OTP per phone_number+purpose at a time"
-        # at the DB level. Without it, nothing stops two active OTP rows for
-        # the same phone+purpose existing simultaneously unless your service
-        # layer explicitly invalidates/marks-used any prior valid() row
-        # before creating a new one on each OTP request.
+        indexes = [
+            models.Index(
+                fields=['phone_number','user', 'purpose', 'is_used'], 
+                name='idx_phone_purpose_valid'
+                ),
+            models.Index(
+                fields=['expires_at'], 
+                name='idx_phone_expires'
+                ),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['phone_number', 'purpose'],
+                condition=models.Q(is_used=False),
+                name='unique_active_verification'
+            )
+        ] 
 
     def set_otp(self, raw_code: str):
         """Hash before storing — never save the raw OTP code."""
@@ -122,7 +124,7 @@ class PhoneVerification(TimeStampedModel):
 
     def is_expired(self) -> bool:
         return timezone.now() >= self.expires_at
-
+    
     def mark_used(self) -> bool:
         if self.is_used or self.is_expired():
             return False
@@ -172,8 +174,8 @@ class PhoneVerification(TimeStampedModel):
             )
 
             self.refresh_from_db()
-
-    # resend rate limit lock to many times resend click
+        
+    # resend rate limit lock to many times resend click 
     def is_resend_locked(self) -> bool:
         if self.resend_blocked_until is None:
             return False
@@ -182,12 +184,12 @@ class PhoneVerification(TimeStampedModel):
     def increment_resend(self):
         if self.is_resend_locked():
             return False
-
+    
         self.resend_count += 1
         if self.resend_count >= 3:
             self.resend_blocked_until = timezone.now() + timedelta(hours=2)
         self.save(update_fields=['resend_count', 'resend_blocked_until'])
-        return True
+        return True 
 
     def reset_resend(self):
         """ call this on successful reset """

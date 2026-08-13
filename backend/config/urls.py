@@ -108,10 +108,11 @@ urlpatterns = [
     
  
     path("api/", include("pitches.urls")),
+    path("api/", include("team.urls")),
     # path("api/", include("bookings.urls")),
 
     # path("api/admin/owners/", admin_list_owners),
-    # path("api/admin/owners/pending/", admin_pending_owners),
+    # path("api/admin/owners/pending/", admin_pending_owners), 
     # path("api/admin/owners/<str:user_id>/approve/", admin_approve_owner),
 ]
 

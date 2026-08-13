@@ -1,7 +1,7 @@
-import { type TeamDetail, type RosterMember, type TeamInvitationItem, type JoinRequestItem } from "./teamTypes";
+import { type TeamDetail, type RosterMember, type TeamInvitationItem, type JoinRequestItem, type InvitationLookupResult } from "./teamTypes";
 
 // TODO: replace with real API calls
-// GET /teams/:id, GET /teams/:id/members, GET /teams/:id/invitations, GET /teams/:id/join-requests
+// GET /teams/:id, type GET /teams/:id/members, type GET /teams/:id/invitations, GET /teams/:id/join-requests
 
 export const mockTeamDetail: Record<string, TeamDetail> = {
   "bole-united": {
@@ -47,3 +47,34 @@ export const mockJoinRequests: Record<string, JoinRequestItem[]> = {
     { id: "jr2", requesterName: "Liya Tesfaye", requesterAvatar: null, message: "Friend of Dawit, looking for a regular team.", status: "PENDING", requestedAt: "2026-08-09" },
   ],
 };
+
+// TODO: replace with a real endpoint, e.g. GET /invitations/lookup?teamId=&code=
+// or GET /invitations/:invitationId when opened from a notification deep link.
+//
+// Real behavior to implement on the backend:
+//  - looking up an already-ACCEPTED/DECLINED/CANCELLED/EXPIRED invitation should
+//    return that status so the UI can show the right message instead of the
+//    accept/decline buttons.
+//  - an unknown team id or code should behave like "not found", not leak
+//    which part was wrong (avoids enumerating valid team ids / codes).
+export function mockLookupInvitation(teamId: string, code: string): InvitationLookupResult | null {
+  const team = mockTeamDetail[teamId];
+  if (!team) return null;
+  if (code.toUpperCase() !== team.inviteCode.toUpperCase()) return null;
+
+  return {
+    invitationId: "inv-demo-001",
+    status: "PENDING",
+    team: {
+      id: team.id,
+      name: team.name,
+      logo: team.logo,
+      sport: team.sport,
+      homeArea: team.homeArea,
+      activeCount: team.activeCount,
+      capacity: team.capacity,
+    },
+    invitedBy: "Yonas Tesfaye",
+    expiresAt: "2026-08-20",
+  };
+}

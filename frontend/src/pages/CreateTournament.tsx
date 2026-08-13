@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import styles from "./css/FormPage.module.css";
 import { BackArrowIcon, TrophyIcon } from "./Icons";
 import {
@@ -62,6 +62,7 @@ function todayISO() {
 }
 
 export default function CreateTournament() {
+  const nav = useNavigate();
   const [form, setForm] = useState<FormState>(initialState);
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
   const [submitErr, setSubmitErr] = useState("");
@@ -128,12 +129,15 @@ export default function CreateTournament() {
       };
 
       // TODO: replace with the real API call, e.g.
-      // await createTournament(payload);
+      // const { tournamentId } = await createTournament(payload);
       await new Promise((resolve) => setTimeout(resolve, 900));
       console.log("TODO: submit createTournament payload", payload);
 
-      // TODO: navigate to the new tournament's page once the backend returns an id
-      // nav(`/tournaments/${tournamentId}`);
+      // No backend yet, so there's no real tournamentId to route to —
+      // sending you back to Home so the flow doesn't dead-end. Replace once
+      // the backend exists:
+      // nav(`/discover/tournaments/${tournamentId}`);
+      nav("/home");
     } catch {
       setSubmitErr("Couldn't create the tournament. Please try again.");
     } finally {

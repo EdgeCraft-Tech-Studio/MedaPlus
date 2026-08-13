@@ -23,6 +23,9 @@ class MeView(APIView):
         return Response(
             {
                 "id": str(u.id),  # UUID -> string
+                "first_name": u.first_name,
+                "last_name": u.last_name,
+                "username": u.username,
                 "phone": u.phone,
                 "role": u.role,
                 "email": u.email,

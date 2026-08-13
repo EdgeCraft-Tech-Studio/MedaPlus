@@ -1,80 +1,131 @@
 import { useState } from "react";
 import styles from "./css/ManageRoster.module.css";
 import {
-  UserPlusIcon, SearchIcon, QrIcon, LinkIcon, HashIcon, CopyIcon, CheckIcon, XIcon, MoreIcon,
+  UserPlusIcon, SearchIcon, LinkIcon, HashIcon, CopyIcon, XIcon, MoreIcon,
 } from "./Icons";
-import { type TeamDetail, type RosterMember, type TeamInvitationItem, type JoinRequestItem } from "./teamTypes";
-import { type TeamRole } from "./types";
+import {
+  type RosterMember, type TeamInvitationItem, type JoinRequestItem, type TeamDashboardData,
+  promoteMember, demoteMember, removeMember, transferOwnership,
+  cancelInvitation, approveJoinRequest, rejectJoinRequest,
+  createLinkInvitation, createCodeInvitation,
+} from "../lib/team";
 
 type SubTab = "members" | "invitations" | "requests";
-type AddMethod = "search" | "qr" | "link" | "code";
-
-// TODO: replace with a real player search endpoint
-const MOCK_SEARCH_RESULTS = [
-  { id: "p1", name: "Kaleab Fikru", handle: "+251 91 234 5678" },
-  { id: "p2", name: "Rahel Assefa", handle: "@rahel_a" },
-  { id: "p3", name: "Tsion Haile", handle: "+251 93 456 7890" },
-];
+type AddMethod = "search" | "link" | "code";
 
 export default function ManageRoster({
-  team, roster, invitations, joinRequests, canManage,
+  team, roster, invitations, joinRequests, canManage, slug, onRosterChange,
 }: {
-  team: TeamDetail;
+  team: TeamDashboardData;
   roster: RosterMember[];
   invitations: TeamInvitationItem[];
   joinRequests: JoinRequestItem[];
   canManage: boolean;
+  slug: string;
+  onRosterChange: () => void; // parent re-fetches roster/invitations/requests after any action
 }) {
   const [subTab, setSubTab] = useState<SubTab>("members");
   const [modalOpen, setModalOpen] = useState(false);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState("");
 
-  const pendingInvites = invitations.filter((i) => i.status === "PENDING");
-  const pendingRequests = joinRequests.filter((r) => r.status === "PENDING");
+  const pendingInvites = invitations.filter((i) => i.status === "pending");
+  const pendingRequests = joinRequests.filter((r) => r.status === "pending");
 
-  async function handleRoleChange(memberId: string, newRole: TeamRole) {
+  async function handleRoleChange(memberId: string, newRole: "admin" | "member") {
     setOpenMenuId(null);
-    // TODO: await changeTeamMemberRole(team.id, memberId, newRole);
-    console.log("TODO: change role", memberId, newRole);
+    setActionError("");
+    try {
+      if (newRole === "admin") await promoteMember(slug, memberId);
+      else await demoteMember(slug, memberId);
+      onRosterChange();
+    } catch {
+      setActionError("Couldn't update this member's role. Try again.");
+    }
   }
 
   async function handleRemoveMember(memberId: string) {
     setOpenMenuId(null);
-    // TODO: await removeTeamMember(team.id, memberId);
-    console.log("TODO: remove member", memberId);
+    setActionError("");
+    try {
+      await removeMember(slug, memberId);
+      onRosterChange();
+    } catch {
+      setActionError("Couldn't remove this member. Try again.");
+    }
   }
 
   async function handleTransferOwnership(memberId: string) {
     setOpenMenuId(null);
-    // TODO: await transferTeamOwnership(team.id, memberId);
-    console.log("TODO: transfer ownership", memberId);
+    setActionError("");
+    try {
+      await transferOwnership(slug, memberId);
+      onRosterChange();
+    } catch {
+      setActionError("Couldn't transfer ownership. Try again.");
+    }
   }
 
   async function handleCancelInvite(inviteId: string) {
-    // TODO: await cancelTeamInvitation(team.id, inviteId);
-    console.log("TODO: cancel invitation", inviteId);
+    setActionError("");
+    try {
+      await cancelInvitation(slug, inviteId);
+      onRosterChange();
+    } catch {
+      setActionError("Couldn't cancel this invitation. Try again.");
+    }
   }
 
   async function handleApproveRequest(requestId: string) {
-    // TODO: await approveJoinRequest(team.id, requestId);
-    // Backend creates an ACTIVE TeamMembership on approval — never client-side.
-    console.log("TODO: approve join request", requestId);
+    setActionError("");
+    try {
+      await approveJoinRequest(slug, requestId);
+      onRosterChange();
+    } catch {
+      setActionError("Couldn't approve this request. Try again.");
+    }
   }
 
   async function handleRejectRequest(requestId: string) {
-    // TODO: await rejectJoinRequest(team.id, requestId);
-    console.log("TODO: reject join request", requestId);
+    setActionError("");
+    try {
+      await rejectJoinRequest(slug, requestId);
+      onRosterChange();
+    } catch {
+      setActionError("Couldn't reject this request. Try again.");
+    }
   }
+
+  function displayName(user: RosterMember["user"]) {
+  const name = `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim();
+
+  return name || user.username || "Unknown player";
+}
+
+  function initialsOf(name?: string | null) {
+  if (!name?.trim()) return "?";
+
+  return name
+    .trim()
+    .split(/\s+/)
+    .map((w) => w[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+}
 
   return (
     <div className={styles.wrap}>
+      {actionError && <div className={styles.emptyMini} style={{ color: "var(--danger)" }}>{actionError}</div>}
+
       <div className={styles.topRow}>
         <div className={styles.capacitySummary}>
           <div className={styles.capacityHeadline}>
-            <span>{roster.length}</span> / {team.capacity} active players
+            <span>{roster.length}</span> / {team.maxRosterSize} active players
           </div>
           <div className={styles.capBar}>
-            <div className={styles.capFill} style={{ width: `${Math.min((roster.length / team.capacity) * 100, 100)}%` }} />
+            <div className={styles.capFill} style={{ width: `${Math.min((roster.length / team.maxRosterSize) * 100, 100)}%` }} />
           </div>
         </div>
 
@@ -94,7 +145,7 @@ export default function ManageRoster({
           Invitations
           {pendingInvites.length > 0 && <span className={styles.subTabCount}>{pendingInvites.length}</span>}
         </button>
-        {team.visibility === "public" && (
+        {(team.visibility === "public" || team.visibility === "request") && (
           <button className={`${styles.subTab} ${subTab === "requests" ? styles.subTabActive : ""}`} onClick={() => setSubTab("requests")}>
             Join requests
             {pendingRequests.length > 0 && <span className={styles.subTabCount}>{pendingRequests.length}</span>}
@@ -107,44 +158,49 @@ export default function ManageRoster({
           <div className={styles.emptyMini}>No active players yet — add your first one above.</div>
         ) : (
           <div className={styles.list}>
-            {roster.map((m) => (
-              <div key={m.id} className={styles.memberRow}>
-                <span className={styles.avatar}>
-                  {m.avatar ? <img src={m.avatar} alt="" /> : m.name.split(" ").map((w) => w[0]).slice(0, 2).join("")}
-                </span>
-                <div className={styles.rowInfo}>
-                  <div className={styles.rowName}>
-                    {m.name}
-                    <span className={styles.roleTag} data-role={m.role}>
-                      {m.role === "OWNER" ? "Owner" : m.role === "ADMIN" ? "Admin" : "Member"}
-                    </span>
+            {roster.map((m) => {
+              const name = displayName(m.user);
+              return (
+                <div key={m.id} className={styles.memberRow}>
+                  <span className={styles.avatar}>
+                    {m.user.avatar ? <img src={m.user.avatar} alt="" /> : initialsOf(name)}
+                  </span>
+                  <div className={styles.rowInfo}>
+                    <div className={styles.rowName}>
+                      {name}
+                      <span className={styles.roleTag} data-role={m.role.toUpperCase()}>
+                        {m.role === "owner" ? "Owner" : m.role === "admin" ? "Admin" : "Member"}
+                      </span>
+                    </div>
+                    <div className={styles.rowMeta}>
+                      Joined {new Date(m.joinedAt).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}
+                    </div>
                   </div>
-                  <div className={styles.rowMeta}>Joined {new Date(m.joinedAt).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}</div>
-                </div>
 
-                {canManage && m.role !== "OWNER" && (
-                  <div className={styles.rowActions} style={{ position: "relative" }}>
-                    <button className={styles.iconBtn} onClick={() => setOpenMenuId(openMenuId === m.id ? null : m.id)} aria-label="Member actions">
-                      <MoreIcon width={16} height={16} />
-                    </button>
-                    {openMenuId === m.id && (
-                      <div className={styles.menuPanel}>
-                        {m.role === "MEMBER" && (
-                          <button className={styles.menuItem} onClick={() => handleRoleChange(m.id, "ADMIN")}>Make admin</button>
-                        )}
-                        {m.role === "ADMIN" && (
-                          <button className={styles.menuItem} onClick={() => handleRoleChange(m.id, "MEMBER")}>Remove admin</button>
-                        )}
-                        {team.myRole === "OWNER" && (
-                          <button className={styles.menuItem} onClick={() => handleTransferOwnership(m.id)}>Transfer ownership</button>
-                        )}
-                        <button className={`${styles.menuItem} ${styles.menuItemDanger}`} onClick={() => handleRemoveMember(m.id)}>Remove from team</button>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            ))}
+                  {canManage && m.role !== "owner" && (
+                    <div className={styles.rowActions} style={{ position: "relative" }}>
+                      <button className={styles.iconBtn} onClick={() => setOpenMenuId(openMenuId === m.id ? null : m.id)} aria-label="Member actions">
+                        <MoreIcon width={16} height={16} />
+                      </button>
+                      {openMenuId === m.id && (
+                        <div className={styles.menuPanel}>
+                          {m.role === "member" && (
+                            <button className={styles.menuItem} onClick={() => handleRoleChange(m.id, "admin")}>Make admin</button>
+                          )}
+                          {m.role === "admin" && (
+                            <button className={styles.menuItem} onClick={() => handleRoleChange(m.id, "member")}>Remove admin</button>
+                          )}
+                          {team.myRole === "owner" && (
+                            <button className={styles.menuItem} onClick={() => handleTransferOwnership(m.id)}>Transfer ownership</button>
+                          )}
+                          <button className={`${styles.menuItem} ${styles.menuItemDanger}`} onClick={() => handleRemoveMember(m.id)}>Remove from team</button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )
       )}
@@ -156,13 +212,13 @@ export default function ManageRoster({
           <div className={styles.list}>
             {invitations.map((inv) => (
               <div key={inv.id} className={styles.inviteRow}>
-                <span className={styles.avatar}>{inv.recipientName.split(" ").map((w) => w[0]).slice(0, 2).join("")}</span>
+                <span className={styles.avatar}>{initialsOf(inv.recipientName)}</span>
                 <div className={styles.rowInfo}>
                   <div className={styles.rowName}>{inv.recipientName}</div>
                   <div className={styles.rowMeta}>{inv.recipientHandle} · sent {new Date(inv.sentAt).toLocaleDateString(undefined, { day: "numeric", month: "short" })}</div>
                 </div>
                 <span className={styles.statusTag} data-status={inv.status}>{inv.status}</span>
-                {canManage && inv.status === "PENDING" && (
+                {canManage && inv.status === "pending" && (
                   <button className={styles.cancelBtn} onClick={() => handleCancelInvite(inv.id)}>Cancel</button>
                 )}
               </div>
@@ -171,7 +227,7 @@ export default function ManageRoster({
         )
       )}
 
-      {subTab === "requests" && team.visibility === "public" && (
+      {subTab === "requests" && (team.visibility === "public" || team.visibility === "request") && (
         joinRequests.length === 0 ? (
           <div className={styles.emptyMini}>No join requests right now.</div>
         ) : (
@@ -179,13 +235,13 @@ export default function ManageRoster({
             {joinRequests.map((req) => (
               <div key={req.id} className={styles.requestRow}>
                 <span className={styles.avatar}>
-                  {req.requesterAvatar ? <img src={req.requesterAvatar} alt="" /> : req.requesterName.split(" ").map((w) => w[0]).slice(0, 2).join("")}
+                  {req.requesterAvatar ? <img src={req.requesterAvatar} alt="" /> : initialsOf(req.requesterName)}
                 </span>
                 <div className={styles.rowInfo}>
                   <div className={styles.rowName}>{req.requesterName}</div>
                   <div className={styles.rowMeta}>{req.message}</div>
                 </div>
-                {req.status === "PENDING" ? (
+                {req.status === "pending" ? (
                   canManage && (
                     <div className={styles.rowActions}>
                       <button className={styles.approveBtn} onClick={() => handleApproveRequest(req.id)}>Approve</button>
@@ -202,51 +258,104 @@ export default function ManageRoster({
       )}
 
       {modalOpen && (
-        <AddPlayersModal team={team} onClose={() => setModalOpen(false)} />
-      )}
+  <AddPlayersModal
+    slug={slug}
+    onClose={(didChange) => {
+      setModalOpen(false);
+      if (didChange) {
+        onRosterChange(); // only refetches if something real happened
+      }
+    }}
+  />
+)}
     </div>
   );
 }
 
-function AddPlayersModal({ team, onClose }: { team: TeamDetail; onClose: () => void }) {
+function AddPlayersModal({ slug, onClose }: { slug: string; onClose: (didChange: boolean) => void }) {
   const [method, setMethod] = useState<AddMethod>("search");
-  const [query, setQuery] = useState("");
-  const [invitedIds, setInvitedIds] = useState<string[]>([]);
   const [linkCopied, setLinkCopied] = useState(false);
 
-  const inviteLink = `https://medaplus.app/join/${team.id}?code=${team.inviteCode}`;
+  // link state
+  const [linkInvite, setLinkInvite] = useState<{ id: string; inviteLink: string } | null>(null);
+  const [linkLoading, setLinkLoading] = useState(false);
+  const [confirmingLink, setConfirmingLink] = useState(false);
 
-  const results = query.trim()
-    ? MOCK_SEARCH_RESULTS.filter((p) => p.name.toLowerCase().includes(query.toLowerCase()) || p.handle.includes(query))
-    : MOCK_SEARCH_RESULTS;
+  // code state
+  const [codeInvite, setCodeInvite] = useState<{ id: string; code: string } | null>(null);
+  const [codeLoading, setCodeLoading] = useState(false);
+  const [confirmingCode, setConfirmingCode] = useState(false);
 
-  async function sendInvite(playerId: string) {
-    setInvitedIds((ids) => [...ids, playerId]);
-    // TODO: await sendTeamInvitation(team.id, { method: "search", playerId });
-    console.log("TODO: send invite (search)", team.id, playerId);
-  }
 
-  async function copyLink() {
+  const [hasChanges, setHasChanges] = useState(false);
+
+  async function generateLink() {
+    setLinkLoading(true);
+    setConfirmingLink(false);
     try {
-      await navigator.clipboard.writeText(inviteLink);
-      setLinkCopied(true);
-      setTimeout(() => setLinkCopied(false), 2000);
+      const result = await createLinkInvitation(slug);
+      setLinkInvite(result);
+      setHasChanges(true); 
     } catch {
-      // clipboard unavailable — silently ignore, link is still shown for manual copy
+      // leave linkInvite null — UI shows a retry state
+    } finally {
+      setLinkLoading(false);
     }
   }
 
-  async function regenerateLink() {
-    // TODO: await regenerateTeamInviteLink(team.id);
-    console.log("TODO: regenerate invite link", team.id);
+  async function cancelLink() {
+    if (!linkInvite) return;
+    try {
+      await cancelInvitation(slug, linkInvite.id);
+    } finally {
+      setLinkInvite(null);
+    }
+  }
+
+  async function generateCode() {
+    setCodeLoading(true);
+    setConfirmingCode(false);
+    try {
+      const result = await createCodeInvitation(slug);
+      setCodeInvite(result);
+      setHasChanges(true);
+    } catch {
+      // leave codeInvite null — UI shows a retry state
+    } finally {
+      setCodeLoading(false);
+    }
+  }
+
+  async function cancelCode() {
+    if (!codeInvite) return;
+    try {
+      await cancelInvitation(slug, codeInvite.id);
+    } finally {
+      setCodeInvite(null);
+    }
+  }
+
+  async function copyLink() {
+    if (!linkInvite) return;
+    try {
+      await navigator.clipboard.writeText(linkInvite.inviteLink);
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
+    } catch {
+      // clipboard unavailable — link is still shown for manual copy
+    }
+  }
+
+  function handleClose() {
+    onClose(hasChanges);
   }
 
   return (
-    <div className={styles.modalOverlay} onClick={onClose}>
+    <div className={styles.modalOverlay} onClick={handleClose}>
       <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
         <div className={styles.modalHead}>
           <span className={styles.modalTitle}>Add players</span>
-          <button className={styles.modalClose} onClick={onClose} aria-label="Close">
+          <button className={styles.modalClose} onClick={handleClose} aria-label="Close">
             <XIcon width={15} height={15} />
           </button>
         </div>
@@ -256,10 +365,7 @@ function AddPlayersModal({ team, onClose }: { team: TeamDetail; onClose: () => v
             <SearchIcon width={17} height={17} />
             Search
           </button>
-          <button className={`${styles.methodTab} ${method === "qr" ? styles.methodTabActive : ""}`} onClick={() => setMethod("qr")}>
-            <QrIcon width={17} height={17} />
-            QR code
-          </button>
+          {/* ✅ tab click ONLY switches the view — no API call */}
           <button className={`${styles.methodTab} ${method === "link" ? styles.methodTabActive : ""}`} onClick={() => setMethod("link")}>
             <LinkIcon width={17} height={17} />
             Link
@@ -272,62 +378,82 @@ function AddPlayersModal({ team, onClose }: { team: TeamDetail; onClose: () => v
 
         <div className={styles.methodBody}>
           {method === "search" && (
-            <>
-              <div className={styles.searchInputRow}>
-                <SearchIcon width={16} height={16} />
-                <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search by phone or username" autoFocus />
-              </div>
-              {results.map((p) => {
-                const invited = invitedIds.includes(p.id);
-                return (
-                  <div key={p.id} className={styles.searchResultRow}>
-                    <span className={styles.avatar} style={{ width: 34, height: 34, fontSize: 11 }}>
-                      {p.name.split(" ").map((w) => w[0]).slice(0, 2).join("")}
-                    </span>
-                    <div className={styles.searchResultInfo}>
-                      <div className={styles.searchResultName}>{p.name}</div>
-                      <div className={styles.searchResultHandle}>{p.handle}</div>
-                    </div>
-                    <button
-                      className={styles.inviteBtnSmall}
-                      onClick={() => sendInvite(p.id)}
-                      disabled={invited}
-                      style={invited ? { background: "var(--grass-soft)", color: "var(--green-700)" } : undefined}
-                    >
-                      {invited ? <><CheckIcon width={11} height={11} /> Invited</> : "Invite"}
-                    </button>
-                  </div>
-                );
-              })}
-            </>
-          )}
-
-          {method === "qr" && (
-            <div className={styles.qrBox}>
-              {/* TODO: replace with a real QR code render (e.g. qrcode.react) encoding inviteLink */}
-              <div className={styles.qrPlaceholder} aria-label="QR code placeholder" />
-              <p className={styles.qrHint}>Let a player scan this to open the invitation page and accept instantly.</p>
-            </div>
+            <div className={styles.emptyMini}>Player search is coming soon.</div>
           )}
 
           {method === "link" && (
             <>
-              <div className={styles.linkBox}>
-                <span className={styles.linkText}>{inviteLink}</span>
-                <button className={styles.copyBtn} onClick={copyLink} aria-label="Copy link">
-                  <CopyIcon width={15} height={15} />
-                </button>
-              </div>
-              {linkCopied && <div className={styles.copiedNote}>Link copied</div>}
-              <button className={styles.regenBtn} onClick={regenerateLink}>Regenerate link</button>
+              {!linkInvite && !linkLoading && !confirmingLink && (
+                <div className={styles.emptyMini}>
+                  <p>Generate a shareable link players can use to join this team.</p>
+                  <button className={styles.addBtn} onClick={() => setConfirmingLink(true)}>
+                    Generate link
+                  </button>
+                </div>
+              )}
+
+              {confirmingLink && (
+                <div className={styles.emptyMini}>
+                  <p>This will create a new join link for this team. Continue?</p>
+                  <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                    <button className={styles.addBtn} onClick={generateLink}>Yes, generate</button>
+                    <button className={styles.cancelBtn} onClick={() => setConfirmingLink(false)}>Cancel</button>
+                  </div>
+                </div>
+              )}
+
+              {linkLoading && <div className={styles.emptyMini}>Generating link…</div>}
+
+              {linkInvite && !linkLoading && (
+                <>
+                  <div className={styles.linkBox}>
+                    <span className={styles.linkText}>{linkInvite.inviteLink}</span>
+                    <button className={styles.copyBtn} onClick={copyLink} aria-label="Copy link">
+                      <CopyIcon width={15} height={15} />
+                    </button>
+                  </div>
+                  {linkCopied && <div className={styles.copiedNote}>Link copied</div>}
+                  <button className={styles.cancelBtn} onClick={cancelLink} style={{ marginTop: 8 }}>
+                    Cancel this link
+                  </button>
+                </>
+              )}
             </>
           )}
 
           {method === "code" && (
-            <div className={styles.codeBox}>
-              <div className={styles.codeValue}>{team.inviteCode}</div>
-              <p className={styles.codeHint}>Share this code — players enter it manually to send a join invitation.</p>
-            </div>
+            <>
+              {!codeInvite && !codeLoading && !confirmingCode && (
+                <div className={styles.emptyMini}>
+                  <p>Generate a code players can enter to request to join.</p>
+                  <button className={styles.addBtn} onClick={() => setConfirmingCode(true)}>
+                    Generate code
+                  </button>
+                </div>
+              )}
+
+              {confirmingCode && (
+                <div className={styles.emptyMini}>
+                  <p>This will create a new join code for this team. Continue?</p>
+                  <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                    <button className={styles.addBtn} onClick={generateCode}>Yes, generate</button>
+                    <button className={styles.cancelBtn} onClick={() => setConfirmingCode(false)}>Cancel</button>
+                  </div>
+                </div>
+              )}
+
+              {codeLoading && <div className={styles.emptyMini}>Generating code…</div>}
+
+              {codeInvite && !codeLoading && (
+                <div className={styles.codeBox}>
+                  <div className={styles.codeValue}>{codeInvite.code}</div>
+                  <p className={styles.codeHint}>Share this code — players enter it manually to send a join invitation.</p>
+                  <button className={styles.cancelBtn} onClick={cancelCode} style={{ marginTop: 8 }}>
+                    Cancel this code
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>

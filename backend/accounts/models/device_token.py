@@ -132,12 +132,11 @@ class DeviceToken(TimeStampedModel):
     )
 
     fcm_token = models.TextField(
-        unique=True,
-        help_text=(
-            'Raw Firebase Cloud Messaging token sent by Flutter on login. '
-            'FCM tokens can be long — use TextField not CharField.'
-        )
+    help_text=(
+        'Raw Firebase Cloud Messaging token sent by Flutter on login. '
+        'FCM tokens can be long — use TextField not CharField.'
     )
+)
 
     device_id = models.CharField(
         max_length=255,
@@ -226,16 +225,12 @@ class DeviceToken(TimeStampedModel):
         ]
 
         constraints = [
-            # one active token per device at a time —
-            # partial index so historical inactive tokens
-            # from the same device are not blocked
             models.UniqueConstraint(
-                fields=['device_id'],
+                fields=['user', 'device_id'],
                 condition=models.Q(is_active=True),
-                name='unique_active_token_per_device'
+                name='unique_active_token_per_user_device'
             )
         ]
-
     def __str__(self):
         # Uses device_id and user_id (FK integers) instead of
         # self.user.full_name to avoid a SELECT query on every __str__ call.
@@ -376,6 +371,7 @@ class DeviceToken(TimeStampedModel):
         with transaction.atomic():
             # Deactivate any existing active token for this device
             cls.objects.filter(
+                user_id=user_id,
                 device_id=device_id,
                 is_active=True
             ).update(

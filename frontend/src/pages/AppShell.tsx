@@ -6,7 +6,7 @@ import {
   BellIcon, XIcon, InboxEmptyIcon,
 } from "./Icons";
 import { mockNotifications } from "./mockData";
-import { type AppNotification, type NotificationCategory,  } from "./types";
+import { type AppNotification, type NotificationCategory } from "./types";
 
 const NAV_ITEMS = [
   { to: "/home", label: "Home", icon: HomeIcon, end: true },

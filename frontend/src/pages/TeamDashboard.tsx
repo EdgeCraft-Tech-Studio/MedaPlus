@@ -1,31 +1,67 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useParams, Navigate } from "react-router-dom";
 import styles from "./css/TeamDashboard.module.css";
 import {
-  BackArrowIcon, GlobeIcon, LockIcon, UsersIcon, VersusIcon, MapPinIcon, TrophyIcon, SettingsIcon,
+  BackArrowIcon, GlobeIcon, LockIcon, UsersIcon, VersusIcon,
+  MapPinIcon, TrophyIcon, SettingsIcon,
 } from "./Icons";
 import ManageRoster from "./ManageRoster";
-import { mockTeamDetail, mockRoster, mockInvitations, mockJoinRequests } from "./teamMockData";
+import {
+  getTeamDashboard, getRoster, getInvitations, getJoinRequests,
+  type TeamDashboardData, type RosterMember, type TeamInvitationItem, type JoinRequestItem,
+} from "../lib/team";
 
 type TabKey = "overview" | "roster" | "matches" | "bookings" | "tournaments" | "settings";
 
 export default function TeamDashboard() {
-  const { teamId } = useParams<{ teamId: string }>();
+  const { slug } = useParams<{ slug: string }>();
   const [tab, setTab] = useState<TabKey>("roster");
 
-  if (!teamId || !mockTeamDetail[teamId]) {
-    // TODO: replace with a real 404 / "team not found" page once available
+  const [team, setTeam] = useState<TeamDashboardData | null>(null);
+  const [roster, setRoster] = useState<RosterMember[]>([]);
+  const [invitations, setInvitations] = useState<TeamInvitationItem[]>([]);
+  const [joinRequests, setJoinRequests] = useState<JoinRequestItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [denied, setDenied] = useState(false);
+
+  async function loadDashboard(currentSlug: string) {
+    try {
+      const detail = await getTeamDashboard(currentSlug);
+      setTeam(detail);
+      const [rosterData, invitesData, requestsData] = await Promise.all([
+        getRoster(currentSlug),
+        getInvitations(currentSlug),
+        getJoinRequests(currentSlug),
+      ]);
+      setRoster(rosterData);
+      setInvitations(invitesData);
+      setJoinRequests(requestsData);
+    } catch (err) {
+      // 403 = not owner/admin (backend-enforced), 404 = team doesn't exist —
+      // either way, no access. This is the frontend reaction to the real
+      // server-side security check, not the check itself.
+      setDenied(true);
+      console.error("Failed to load team dashboard:", err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!slug) return;
+    loadDashboard(slug);
+  }, [slug]);
+
+  if (!slug || denied) {
     return <Navigate to="/teams" replace />;
   }
 
-  const team = mockTeamDetail[teamId];
-  const roster = mockRoster[teamId] || [];
-  const invitations = mockInvitations[teamId] || [];
-  const joinRequests = mockJoinRequests[teamId] || [];
+  if (loading || !team) {
+    return <div className={styles.page} aria-busy="true" />;
+  }
 
-  const canManage = team.myRole === "OWNER" || team.myRole === "ADMIN";
-  const pendingInvitesCount = invitations.filter((i) => i.status === "PENDING").length;
-  const pendingRequestsCount = joinRequests.filter((r) => r.status === "PENDING").length;
+  const pendingInvitesCount = invitations.filter((i) => i.status === "pending").length;
+  const pendingRequestsCount = joinRequests.filter((r) => r.status === "pending").length;
 
   const tabs: { key: TabKey; label: string; icon: React.ComponentType<React.SVGProps<SVGSVGElement>>; count?: number; ownerOnly?: boolean }[] = [
     { key: "overview", label: "Overview", icon: UsersIcon },
@@ -35,6 +71,10 @@ export default function TeamDashboard() {
     { key: "tournaments", label: "Tournaments", icon: TrophyIcon },
     { key: "settings", label: "Settings", icon: SettingsIcon, ownerOnly: true },
   ];
+
+  function handleLocationClick() {
+    // TODO: open map view / directions using team.latitude / team.longitude
+  }
 
   return (
     <div className={styles.page}>
@@ -56,25 +96,35 @@ export default function TeamDashboard() {
               <span className={styles.teamName}>{team.name}</span>
               <span className={styles.visBadge}>
                 {team.visibility === "public" ? <GlobeIcon width={11} height={11} /> : <LockIcon width={11} height={11} />}
-                {team.visibility === "public" ? "Public" : "Private"}
+                {team.visibility === "public" ? "Public" : team.visibility === "request" ? "Request to join" : "Private"}
               </span>
             </div>
             <div className={styles.metaRow}>
               <span>{team.sport}</span>
-              <span>{team.homeArea}</span>
-              <span>{team.activeCount}/{team.capacity} active players</span>
+              <span>{team.area || team.city}</span>
+              <span>{team.activeMemberCount}/{team.maxRosterSize} active players</span>
+              {team.latitude != null && team.longitude != null && (
+                <button
+                  type="button"
+                  onClick={handleLocationClick}
+                  title="View location"
+                  style={{ background: "none", border: "none", cursor: "pointer", display: "inline-flex", alignItems: "center", padding: 0 }}
+                >
+                  <MapPinIcon width={14} height={14} />
+                </button>
+              )}
             </div>
           </div>
 
           <span className={styles.roleBadgeHeader}>
-            {team.myRole === "OWNER" ? "Owner" : team.myRole === "ADMIN" ? "Admin" : "Member"}
+            {team.myRole === "owner" ? "Owner" : "Admin"}
           </span>
         </div>
       </div>
 
       <div className={styles.tabBar}>
         <div className={styles.tabBarInner}>
-          {tabs.filter((t) => !t.ownerOnly || team.myRole === "OWNER").map((t) => {
+          {tabs.filter((t) => !t.ownerOnly || team.myRole === "owner").map((t) => {
             const Icon = t.icon;
             return (
               <button
@@ -102,7 +152,9 @@ export default function TeamDashboard() {
             roster={roster}
             invitations={invitations}
             joinRequests={joinRequests}
-            canManage={canManage}
+            canManage={true}
+            slug={slug}
+            onRosterChange={() => loadDashboard(slug)}
           />
         )}
 
@@ -125,7 +177,7 @@ export default function TeamDashboard() {
 
 function OverviewTab({
   team, rosterCount, onGoToRoster,
-}: { team: ReturnType<typeof mockTeamDetail>[string]; rosterCount: number; onGoToRoster: () => void }) {
+}: { team: TeamDashboardData; rosterCount: number; onGoToRoster: () => void }) {
   return (
     <div>
       <div className={styles.statsGrid}>
@@ -134,7 +186,7 @@ function OverviewTab({
           <div className={styles.statLabel}>Active players</div>
         </div>
         <div className={styles.statCard}>
-          <div className={styles.statValue}>{team.capacity - rosterCount}</div>
+          <div className={styles.statValue}>{team.maxRosterSize - rosterCount}</div>
           <div className={styles.statLabel}>Open roster spots</div>
         </div>
         <div className={styles.statCard}>
@@ -166,7 +218,9 @@ function OverviewTab({
         </div>
         <div className={styles.infoItem}>
           <div className={styles.infoLabel}>Visibility</div>
-          <div className={styles.infoValue}>{team.visibility === "public" ? "Public" : "Private"}</div>
+          <div className={styles.infoValue}>
+            {team.visibility === "public" ? "Public" : team.visibility === "request" ? "Request to join" : "Private"}
+          </div>
         </div>
       </div>
 
@@ -185,6 +239,6 @@ function Placeholder({
       <span className={styles.placeholderIconWrap}><Icon width={22} height={22} /></span>
       <p>{text}</p>
       {ctaLabel && <Link to={ctaTo} style={{ color: "var(--grass)", fontWeight: 700, fontSize: 13, textDecoration: "none" }}>{ctaLabel}</Link>}
-    </div>
+    </div> 
   );
 }

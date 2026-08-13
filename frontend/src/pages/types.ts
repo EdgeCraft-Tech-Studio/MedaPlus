@@ -49,3 +49,75 @@ export interface AppNotification {
     to?: string;
   };
 }
+
+/* ---------------- Matches (Task 3) ---------------- */
+
+export type MatchStage = "upcoming" | "ongoing" | "completed";
+
+export interface MatchFull {
+  id: string;
+  sport: string;
+  opponentLabel: string;
+  teamName: string; // which of the user's teams this belongs to (or "Individual")
+  pitchName: string;
+  pitchAddress: string;
+  date: string;
+  time: string;
+  durationMinutes: number;
+  stage: MatchStage;
+  bookingStatus: "confirmed" | "pending_payment" | "open";
+  totalPriceEtb: number;
+  paidEtb: number;
+  shareCount: number;
+  sharePaidCount: number;
+  result?: { teamScore: number; opponentScore: number };
+}
+
+/* ---------------- Discover (Task 4) ---------------- */
+
+export interface PitchResult {
+  id: string;
+  name: string;
+  location: string;
+  sport: string[];
+  pricePerHourEtb: number;
+  rating: number;
+  nextAvailable: string; // human readable, e.g. "Today 6:00 PM"
+}
+
+export interface PublicTeamResult {
+  id: string;
+  name: string;
+  logo: string | null;
+  sport: string;
+  location: string;
+  activeMembers: number;
+  capacity: number;
+  skillLevel: string;
+  visibility: "public" | "request";
+  alreadyRequested?: boolean;
+}
+
+export interface TournamentFull {
+  id: string;
+  name: string;
+  sport: string;
+  location: string;
+  organizer: string;
+  status: TournamentStatus;
+  registrationDeadline: string;
+  startDate: string;
+  teamsJoined: number;
+  teamsMax: number;
+  entryFeeEtb: number;
+  description: string;
+}
+
+/* ---------------- Profile (Task 5) ---------------- */
+
+export interface UserProfile {
+  fullName: string;
+  phone: string;
+  email: string | null;
+  photo: string | null;
+}

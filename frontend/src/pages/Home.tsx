@@ -1,15 +1,18 @@
 import { Link } from "react-router-dom";
+import { useEffect, useState } from "react";
 import styles from "./css/Home.module.css";
 import {
-  MapPinIcon, VersusIcon, SearchIcon, UsersIcon, PlusIcon, ChevronRightIcon, TrophyIcon,
+  MapPinIcon, VersusIcon, UsersIcon, ChevronRightIcon, TrophyIcon,
 } from "./Icons";
-import { mockTeams, mockMatches, mockTournaments } from "./mockData";
-import {  type TournamentStatus, type TeamRole } from "./types";
+import { mockMatches, mockTournaments } from "./mockData";
+import { type TeamRole, type TournamentStatus } from "./types";
+import type { SessionUser } from "../lib/session";
+import { me } from "../lib/auth";
+import { getMyTeams, type MyTeam } from "../lib/team";
 
 const quickActions = [
   { key: "pitch", to: "/app", accent: "pitch", icon: MapPinIcon, label: "Find pitch" },
   { key: "match", to: "/match/create", accent: "match", icon: VersusIcon, label: "Make match" },
-  { key: "findteam", to: "/discover/teams", accent: "findteam", icon: SearchIcon, label: "Find team" },
   { key: "createteam", to: "/team/create", accent: "team", icon: UsersIcon, label: "Create team" },
 ];
 
@@ -43,11 +46,47 @@ function getGreeting() {
 }
 
 export default function Home() {
+  const [user, setUser] = useState<SessionUser | null>(null);
+  const [teams, setTeams] = useState<MyTeam[]>([]);
+  const [teamsLoading, setTeamsLoading] = useState(true);
+  const [teamsError, setTeamsError] = useState(false);
+
+  useEffect(() => {
+    async function loadUser() {
+      try {
+        const currentUser = await me();
+        setUser(currentUser);
+      } catch (error) {
+        console.error("Failed to load user:", error);
+      }
+    }
+
+    async function loadTeams() {
+      try {
+        const myTeams = await getMyTeams();
+        setTeams(myTeams);
+      } catch (error) {
+        console.error("Failed to load teams:", error);
+        setTeamsError(true);
+      } finally {
+        setTeamsLoading(false);
+      }
+    }
+
+    loadUser();
+    loadTeams();
+  }, []);
+
   return (
     <div className={styles.page}>
       <header className={styles.hero}>
-        <span className={styles.eyebrow}>{getGreeting()}</span>
-        <h1 className={styles.heroTitle}>Here's what's going on.</h1>
+        <span className={styles.eyebrow}>
+          {getGreeting()}
+        </span>
+
+        <h1 className={styles.heroTitle}>
+          <span className={styles.heroname}> Hello {user?.username ?? "User"}.</span>
+        </h1>
       </header>
 
       {/* ---------------- QUICK ACTIONS ---------------- */}
@@ -76,7 +115,17 @@ export default function Home() {
           <Link to="/teams" className={styles.seeAllLink}>See all <ChevronRightIcon width={13} height={13} /></Link>
         </div>
 
-        {mockTeams.length === 0 ? (
+        {teamsLoading ? (
+          <div className={styles.teamsRow} aria-busy="true">
+            {[0, 1].map((i) => (
+              <div key={i} className={styles.teamCard} style={{ opacity: 0.5 }} />
+            ))}
+          </div>
+        ) : teamsError ? (
+          <div className={styles.emptyState}>
+            <p>Couldn't load your teams. Pull to refresh or try again shortly.</p>
+          </div>
+        ) : teams.length === 0 ? (
           <EmptyState
             icon={UsersIcon}
             text="You haven't joined a team yet."
@@ -85,31 +134,35 @@ export default function Home() {
           />
         ) : (
           <div className={styles.teamsRow}>
-            {mockTeams.map((team) => (
-              <Link key={team.id} to={`/teams/${team.id}`} className={styles.teamCard}>
-                <div className={styles.teamCardTop}>
-                  <span className={styles.teamLogo}>
-                    {team.logo ? <img src={team.logo} alt="" /> : initials(team.name)}
-                  </span>
-                  <span className={styles.roleBadge} data-role={team.role}>{ROLE_LABEL[team.role]}</span>
-                </div>
-                <div className={styles.teamName}>{team.name}</div>
-                <div className={styles.teamMeta}>{team.sport} · {team.location}</div>
-                <div className={styles.teamCapacity}>
-                  <div className={styles.capacityBar}>
-                    <div
-                      className={styles.capacityFill}
-                      style={{ width: `${Math.min((team.activeMembers / team.capacity) * 100, 100)}%` }}
-                    />
+            {teams.map((team) => {
+              const roleKey = team.role.toUpperCase() as TeamRole;
+              return (
+                <Link key={team.id} to={`/teams/${team.slug}`} className={styles.teamCard}>
+                  <div className={styles.teamCardTop}>
+                    <span className={styles.teamLogo}>
+                      {team.logo ? <img src={team.logo} alt="" /> : initials(team.name)}
+                    </span>
+                    <span className={styles.roleBadge} data-role={roleKey}>{ROLE_LABEL[roleKey]}</span>
                   </div>
-                  <span>{team.activeMembers}/{team.capacity} members</span>
-                </div>
-              </Link>
-            ))}
-            <Link to="/team/create" className={styles.teamCardAdd}>
-              <PlusIcon width={20} height={20} />
-              <span>Create team</span>
-            </Link>
+                  <div className={styles.teamName}>{team.name}</div>
+                  <div className={styles.teamMeta}>{team.sport} · {team.area || team.city}</div>
+                  <div className={styles.teamCapacity}>
+                    <div className={styles.capacityBar}>
+                      <div
+                        className={styles.capacityFill}
+                        style={{
+                          width: `${Math.min(
+                            (team.activeMemberCount / team.maxRosterSize) * 100,
+                            100
+                          )}%`,
+                        }}
+                      />
+                    </div>
+                    <span>{team.activeMemberCount}/{team.maxRosterSize} members</span>
+                  </div>
+                </Link>
+              );
+            })}
           </div>
         )}
       </section>
@@ -200,6 +253,7 @@ function EmptyState({
       <span className={styles.emptyIconWrap}><Icon width={22} height={22} /></span>
       <p>{text}</p>
       <Link to={ctaTo} className={styles.emptyCta}>{ctaLabel}</Link>
+      <Link to={"/join"} className={styles.emptyCta}>Join Team</Link>
     </div>
   );
 }

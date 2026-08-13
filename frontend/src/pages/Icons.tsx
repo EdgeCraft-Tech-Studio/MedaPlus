@@ -280,16 +280,7 @@ export function UserPlusIcon(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
-export function QrIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" {...props}>
-      <rect x="3.5" y="3.5" width="6" height="6" rx="1" />
-      <rect x="14.5" y="3.5" width="6" height="6" rx="1" />
-      <rect x="3.5" y="14.5" width="6" height="6" rx="1" />
-      <path d="M14.5 14.5h3v3h-3zM20.5 14.5v2M14.5 20.5h3M20.5 20.5v-1.5" strokeLinecap="round" />
-    </svg>
-  );
-}
+
 
 export function LinkIcon(props: React.SVGProps<SVGSVGElement>) {
   return (

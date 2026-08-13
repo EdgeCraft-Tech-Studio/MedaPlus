@@ -4,23 +4,6 @@ from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, Permis
 from django.db import models
 from django.utils import timezone
 
-# django-mongodb-backend==6.0.2
-# Same rules as before: no Meta.indexes, no Meta.constraints, no db_index=True
-# anywhere. id stays a UUIDField primary key.
-#
-# Latest change: USERNAME_FIELD switched from 'phone' to 'username'.
-#   - Added `username` (unique=True) as the login identifier.
-#   - REQUIRED_FIELDS now includes 'phone' (was just first_name/last_name),
-#     since phone is still required/unique but is no longer USERNAME_FIELD,
-#     so Django won't collect it automatically without being told to.
-#   - get_by_natural_key() now looks up by username, not phone.
-#   - create_user()/create_superuser()/created_user() now take `username`
-#     as the primary identifier and `phone` as an explicit required arg
-#     (previously phone was the primary identifier).
-# Earlier fix, still in place: create_user()/create_superuser() set
-# role/is_approved from extra_fields so OWNER accounts can be created
-# through the manager, not just by hand-editing after create_user().
-
 
 class UserQueryset(models.QuerySet):
 
@@ -57,11 +40,11 @@ class UserManager(BaseUserManager):
     def get_queryset(self):
         return UserQueryset(self.model, using=self._db)
 
-    def get_by_natural_key(self, username):
+    def get_by_natural_key(self, phone):
         """Required by Django for createsuperuser command"""
-        return self.get(username=username)
+        return self.get(phone=phone)
 
-    def create_user(self, username, first_name, last_name, phone, password, **extra_fields):
+    def create_user(self,username, phone, first_name, last_name, password, **extra_fields):
         """Create and save a regular user"""
         if not username:
             raise ValueError('The username must be set')
@@ -73,13 +56,13 @@ class UserManager(BaseUserManager):
             raise ValueError('Last name must be set')
         if not password:
             raise ValueError('Password must be set')
-
+        
         user = self.model(
-            username=username,
-            phone=phone,
-            first_name=first_name,
-            last_name=last_name,
-            password=password
+                    username=username,
+                    phone=phone,
+                    first_name=first_name,
+                    last_name=last_name,
+                    password=password
         )
 
         # Set boolean/choice fields from extra_fields
@@ -90,11 +73,12 @@ class UserManager(BaseUserManager):
         user.active = extra_fields.get('active', True)
         user.must_change_password = extra_fields.get('must_change_password', True)
         user.is_superuser = extra_fields.get('is_superuser', False)
-
+        
         user.save(using=self._db)
         return user
 
-    def create_superuser(self, username, first_name, last_name, phone, password=None, **extra_fields):
+    
+    def create_super_user(self, username, first_name, last_name, phone, password, **extra_fields):
         """Create and save a superuser"""
         extra_fields.setdefault('role', UserRole.ADMIN)
         extra_fields.setdefault('is_approved', True)
@@ -113,15 +97,14 @@ class UserManager(BaseUserManager):
 
         return self.create_user(username, first_name, last_name, phone, password, **extra_fields)
 
-    def created_user(
-            self, first_name, last_name, username, phone, password, **extra_fields
-    ):
-        extra_fields.setdefault('platform_admin', False)
-        extra_fields.setdefault('is_staff', False)
-        extra_fields.setdefault('must_change_password', False)
-        return self.create_user(
-            username, first_name, last_name, phone, password, **extra_fields
-        )
+
+    def created_user(self, username, first_name, last_name, phone, password, **extra_fields):
+            extra_fields.setdefault('platform_admin', False)
+            extra_fields.setdefault('is_staff', False)
+            extra_fields.setdefault('must_change_password', False)
+            return self.create_user(
+                username, first_name, last_name, phone, password, **extra_fields
+            )
 
     def is_active(self):
         return self.get_queryset().is_active()
@@ -142,18 +125,20 @@ class UserRole(models.TextChoices):
     PLAYER = "PLAYER", "Player"
 
 
+
+
+
 class User(AbstractBaseUser, PermissionsMixin):
+   
 
     id = models.UUIDField(
         primary_key=True,
         default=uuid.uuid4,
         editable=False,
+        db_index=True
     )
 
-    role = models.CharField(max_length=20, choices=UserRole.choices, default=UserRole.PLAYER)
 
-    # Owners must be approved by admin before their pitches show publicly
-    is_approved = models.BooleanField(default=False)
 
     first_name = models.CharField(max_length=50, null=False)
     last_name = models.CharField(max_length=50, null=False)
@@ -161,9 +146,17 @@ class User(AbstractBaseUser, PermissionsMixin):
         max_length=20,
         unique=True,
     )
+    
+
+    role = models.CharField(max_length=20, choices=UserRole.choices, default=UserRole.PLAYER)
+
+    # Owners must be approved by admin before their pitches show publicly
+    is_approved = models.BooleanField(default=False)
+
     phone = models.CharField(
         max_length=20,
         unique=True,
+        db_index=True,
     )
     email = models.EmailField(null=True, blank=True, unique=True)
     profile_photo = models.ImageField(
@@ -175,18 +168,21 @@ class User(AbstractBaseUser, PermissionsMixin):
     password = models.CharField(max_length=128, blank=True, null=False)
     active = models.BooleanField(
         default=True,
+        db_index=True,
         help_text=(
             'check if user can access our system'
         )
     )
     platform_admin = models.BooleanField(
         default=False,
+        db_index=True,
         help_text=(
             'access everything bypass all thing'
         )
     )
     is_staff = models.BooleanField(
         default=False,
+        db_index=True,
         help_text=(
             'Designates whether the user can log into this admin site.'
         )
@@ -201,6 +197,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     blocked_until = models.DateTimeField(
         null=True,
         blank=True,
+        db_index=True,
         help_text=(
             'login blocked until - auto-expire'
         )
@@ -227,6 +224,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     deleted_at = models.DateTimeField(
         null=True,
         blank=True,
+        db_index=True,
         help_text='soft delete data preserve, but user hidden from queries'
     )
 
@@ -240,13 +238,41 @@ class User(AbstractBaseUser, PermissionsMixin):
         verbose_name = 'User'
         verbose_name_plural = 'Users'
         ordering = ['first_name']
-        # No indexes and no constraints — removed per your request.
-        # NOTE: `username` is now unique=True because Django's auth system
-        # requires USERNAME_FIELD to be unique (auth.E003) — not optional.
-        # `phone` keeps unique=True too since you added it that way; it's
-        # no longer forced by Django though, since it's not USERNAME_FIELD
-        # anymore — drop it if you want soft-deleted users' phone numbers
-        # to become reusable again.
+        indexes = [
+            # login lookup: phone is looked on every login
+            models.Index(
+                fields=['phone'],
+                name='idx_users_phone_org'
+            ),
+
+            # admin : list all active admins
+            models.Index(
+                fields=['phone', 'active'],
+                name='idx_user_active'
+            ),
+
+            # block check on every login
+            models.Index(
+                fields=['blocked_until'],
+                name='idx_user_blocked'
+            ),
+
+            # soft delete filter for every query
+            models.Index(
+                fields=['phone', 'deleted_at'],
+                name='idx_user_deleted'
+            )
+
+        ]
+
+        constraints = [
+            # phone must be unique
+            models.UniqueConstraint(
+                fields=['phone','username'],
+                condition=models.Q(deleted_at__isnull=True),
+                name='unique_phone_and_username'
+            )
+        ]
 
     def __str__(self):
         try:
@@ -254,15 +280,15 @@ class User(AbstractBaseUser, PermissionsMixin):
         except:
             return f'{self.phone}'
 
-    # ---- overrides ----
+    # ---- properties ----
 
+    
     def save(self, *args, **kwargs):
         if self.is_superuser:
             self.role = UserRole.ADMIN
             self.is_approved = True
         super().save(*args, **kwargs)
 
-    # ---- properties ----
 
     @property
     def get_short_name(self):
@@ -295,6 +321,7 @@ class User(AbstractBaseUser, PermissionsMixin):
             return False
         return timezone.now() < self.blocked_until
 
+
     # ------- methods -------
     def soft_delete(self):
         """ data preserved but not exist on queries search """
@@ -324,7 +351,7 @@ class User(AbstractBaseUser, PermissionsMixin):
         self.last_failed_at = timezone.now()
         if self.failed_attempts >= 5:
             self.block(until=timezone.now() + timedelta(minutes=10))
-        self.save(update_fields=["failed_attempts", "last_failed_at"])
+        self.save(update_fields=["failed_attempts","last_failed_at",])
 
     def reset_failed_attempts(self):
         """  """
@@ -337,7 +364,7 @@ class User(AbstractBaseUser, PermissionsMixin):
         self.last_login_ip = ip_address
         self.reset_failed_attempts()
         self.un_block()
-        self.save(update_fields=['last_login_at', 'last_login_ip', 'failed_attempts'])
+        self.save(update_fields=['last_login_at', 'last_login_ip','failed_attempts'])
 
     def force_password_change(self):
         """ force new password change for admin """

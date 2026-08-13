@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import styles from "../pages/css/FormPage.module.css";
+import styles from "../pages/FormPage.module.css";
 import { AlertIcon, ChevronDownIcon, UploadIcon, CheckIcon } from "../pages/Icons";
 
 /* ---------------- shared wrapper ---------------- */
@@ -215,9 +215,10 @@ export function CheckboxRow(props: {
 export function LogoUpload(props: {
   value: string | null;
   onChange: (dataUrl: string | null) => void;
+  onFileChange?: (file: File | null) => void;   // ✅ add this line
   error?: string;
 }) {
-  const { value, onChange, error } = props;
+  const { value, onChange, onFileChange, error } = props;   // ✅ add onFileChange here
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
 
@@ -225,6 +226,7 @@ export function LogoUpload(props: {
     if (!file) return;
     if (!file.type.startsWith("image/")) return;
     if (file.size > 4 * 1024 * 1024) return; // 4MB cap
+    onFileChange?.(file);                    // ✅ add this line
     const reader = new FileReader();
     reader.onload = () => onChange(reader.result as string);
     reader.readAsDataURL(file);
@@ -262,10 +264,14 @@ export function LogoUpload(props: {
         onChange={(e) => handleFile(e.target.files?.[0])}
       />
       {value && (
-        <button type="button" className={styles.uploadRemove} onClick={() => onChange(null)}>
-          Remove logo
-        </button>
-      )}
+  <button
+    type="button"
+    className={styles.uploadRemove}
+    onClick={() => { onChange(null); onFileChange?.(null); }}   // ✅ clear file on remove
+  >
+    Remove logo
+  </button>
+)}
     </div>
   );
 }

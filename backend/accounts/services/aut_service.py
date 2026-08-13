@@ -321,8 +321,8 @@ class AuthService:
         # step 3 — create user
         # password is already hashed — pass directly to avoid double-hashing
         user = User.objects.create_user(
-            phone=phone,
             username=username,
+            phone=phone,
             first_name=first_name,
             last_name=last_name,
             password=hashed_password,

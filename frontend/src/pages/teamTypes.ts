@@ -49,3 +49,21 @@ export interface JoinRequestItem {
   status: JoinRequestStatus;
   requestedAt: string; // ISO date
 }
+
+/* ---------------- Invitation lookup (for the accept-invite page) ---------------- */
+
+export interface InvitationLookupResult {
+  invitationId: string;
+  status: InvitationStatus;
+  team: {
+    id: string;
+    name: string;
+    logo: string | null;
+    sport: string;
+    homeArea: string;
+    activeCount: number;
+    capacity: number;
+  };
+  invitedBy: string; // name of the person who sent the invite
+  expiresAt: string; // ISO date
+}
