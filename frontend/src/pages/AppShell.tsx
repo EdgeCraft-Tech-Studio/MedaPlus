@@ -2,16 +2,18 @@ import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, Link, useNavigate } from "react-router-dom";
 import styles from "./css/AppShell.module.css";
 import {
-  BallIcon, HomeIcon, UsersIcon, VersusIcon, CompassIcon, UserCircleIcon,
+  BallIcon, HomeIcon, UsersIcon, CompassIcon, UserCircleIcon,
   BellIcon, XIcon, InboxEmptyIcon,
 } from "./Icons";
 import { mockNotifications } from "./mockData";
 import { type AppNotification, type NotificationCategory } from "./types";
+import { me } from "../lib/auth";
+import type { SessionUser } from "../lib/session";
 
 const NAV_ITEMS = [
   { to: "/home", label: "Home", icon: HomeIcon, end: true },
   { to: "/teams", label: "Teams", icon: UsersIcon },
-  { to: "/matches", label: "Matches", icon: VersusIcon },
+  { to: "/app", label: "pitchs", icon: BallIcon },
   { to: "/discover", label: "Discover", icon: CompassIcon },
   { to: "/profile", label: "Profile", icon: UserCircleIcon },
 ];
@@ -24,12 +26,35 @@ function timeAgoColor(read: boolean) {
   return read ? "var(--muted)" : "var(--grass)";
 }
 
+/** First letter of first_name, uppercased. Falls back to full_name, then "–". */
+function avatarFallback(user: SessionUser | null): string {
+  if (!user) return "–";
+  const source = user.first_name?.trim() || user.full_name?.trim();
+  if (!source) return "–";
+  return source[0].toUpperCase();
+}
+
 export default function AppShell() {
   const nav = useNavigate();
   const [notifications, setNotifications] = useState<AppNotification[]>(mockNotifications);
   const [panelOpen, setPanelOpen] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
   const bellRef = useRef<HTMLButtonElement>(null);
+
+  const [user, setUser] = useState<SessionUser | null>(null);
+
+  useEffect(() => {
+    async function loadUser() {
+      try {
+        const u = await me();
+        setUser(u);
+      } catch (err) {
+        console.error("Failed to load user for topbar avatar:", err);
+        setUser(null);
+      }
+    }
+    loadUser();
+  }, []);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
@@ -154,7 +179,17 @@ export default function AppShell() {
           </div>
 
           <Link to="/profile" className={styles.avatarLink} aria-label="Profile">
-            <span className={styles.avatarCircle}>Y</span>
+            <span className={styles.avatarCircle}>
+              {user?.profile_photo_url ? (
+                <img
+                  src={user.profile_photo_url}
+                  alt=""
+                  style={{ width: "100%", height: "100%", borderRadius: "inherit", objectFit: "cover" }}
+                />
+              ) : (
+                avatarFallback(user)
+              )}
+            </span>
           </Link>
         </div>
       </header>

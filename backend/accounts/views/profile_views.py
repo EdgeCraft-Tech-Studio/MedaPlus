@@ -289,12 +289,9 @@ class ChangePasswordView(APIView):
                 new_password=serializer.validated_data['new_password'],
                 current_session_id=request.current_session.id,
             )
-        except e as e:
-            # bypass guard — serializer catches this but service double-checks
-            return Response(
-                {'detail': str(e)},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        except Exception as e:
+            logger.warning('Password change failed at service layer', extra={'user_id': str(request.user.id)}, exc_info=True)
+            return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
         logger.info(
             'Password changed — other sessions revoked',

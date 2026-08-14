@@ -6,18 +6,20 @@ User = get_user_model()
 
 class UserSummarySerializer(serializers.ModelSerializer):
     """Minimal, read-only representation of a user for embedding
-    inside team/membership/invitation payloads. Deliberately NOT the
-    full user profile serializer — nobody requesting a team roster
-    needs a teammate's email or auth internals.
-
-    NOTE: `username` is assumed here as the display field. If your
-    custom User model doesn't have `username` (e.g. it's phone-number
-    only auth), replace the `fields` list below with whatever your
-    User model actually exposes (e.g. `phone_number`, `full_name`).
-    This file only needs a one-line edit to match your actual model.
+    inside team/membership/invitation payloads.
     """
+
+    profile_photo_url = serializers.SerializerMethodField()
 
     class Meta:
         model = User
-        fields = ["id", "username", "first_name", "last_name"]
+        fields = ["id", "username", "first_name", "last_name", "profile_photo_url"]
         read_only_fields = fields
+
+    def get_profile_photo_url(self, obj: User) -> str | None:
+        if not obj.profile_photo:
+            return None
+        request = self.context.get('request')
+        if request:
+            return request.build_absolute_uri(obj.profile_photo.url)
+        return obj.profile_photo.url

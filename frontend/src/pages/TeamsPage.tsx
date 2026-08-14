@@ -88,13 +88,19 @@ export default function TeamsPage() {
               <Link key={team.id} to={`/teams/${team.slug}`} className={styles.card}>
                 <div className={styles.cardTop}>
                   <span className={styles.logo}>
-                    {team.logo ? (
-                      <img src={team.logo} alt="" />
-                    ) : (
-                      team.name.split(" ").map((w) => w[0]).slice(0, 2).join("")
-                    )}
-                  </span>
-                  <span className={styles.roleBadge} data-role={team.role.toUpperCase()}>
+                  {team.logo ? (
+                    <img
+                      src={team.logo}
+                      alt=""
+                      onError={(e) => {
+                        e.currentTarget.remove();
+                      }}
+                    />
+                  ) : (
+                    team.name.split(" ").map((w) => w[0]).slice(0, 2).join("")
+                  )}
+                </span>
+                  <span className={styles.roleBadge} data-role={(team.role ?? "member").toUpperCase()}>
                     {roleLabel}
                   </span>
                 </div>
@@ -106,13 +112,13 @@ export default function TeamsPage() {
                       className={styles.capFill}
                       style={{
                         width: `${Math.min(
-                          (team.activeMemberCount / team.maxRosterSize) * 100,
+                          (team.active_member_count / team.max_roster_size) * 100,
                           100
                         )}%`,
                       }}
                     />
                   </div>
-                  <span>{team.activeMemberCount}/{team.maxRosterSize} active players</span>
+                  <span>{team.active_member_count}/{team.max_roster_size} active players</span>
                 </div>
               </Link>
             );

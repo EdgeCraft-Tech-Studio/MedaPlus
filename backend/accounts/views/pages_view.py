@@ -1,10 +1,12 @@
+from venv import logger
 from xml.dom import ValidationErr
-
+from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
 from accounts.models.user import User, UserRole
+from accounts.serializer.user_serializer import UpdateProfileSerializer, UserSerializer
 from pitches.models import Tenant
 
 
@@ -13,27 +15,35 @@ def _require_admin(request):
     return request.user.is_authenticated and request.user.role == "ADMIN"
 
 
-
 class MeView(APIView):
-    
+    """
+    GET   /auth/me/   Full authenticated user data.
+    PATCH /auth/me/   Update first_name and/or last_name.
+    """
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        u = request.user
         return Response(
-            {
-                "id": str(u.id),  # UUID -> string
-                "first_name": u.first_name,
-                "last_name": u.last_name,
-                "username": u.username,
-                "phone": u.phone,
-                "role": u.role,
-                "email": u.email,
-                "is_superuser": u.is_superuser,
-                "is_staff": u.is_staff,
-                "is_approved": getattr(u, "is_approved", False),
-            }
+            UserSerializer(request.user, context={'request': request}).data,
+            status=status.HTTP_200_OK
         )
+
+    def patch(self, request):
+        serializer = UpdateProfileSerializer(
+            instance=request.user, data=request.data,
+            partial=True, context={'request': request}
+        )
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        user = serializer.save()
+        logger.info('Profile updated', extra={'user_id': str(user.id)})
+        return Response(
+            UserSerializer(user, context={'request': request}).data,
+            status=status.HTTP_200_OK
+        )
+
+# DELETE the old standalone UpdateProfileView class entirely
+
 
 
 class HealthView(APIView):

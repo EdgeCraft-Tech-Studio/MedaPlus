@@ -11,10 +11,14 @@ import { me } from "../lib/auth";
 import { getMyTeams, type MyTeam } from "../lib/team";
 
 const quickActions = [
-  { key: "pitch", to: "/app", accent: "pitch", icon: MapPinIcon, label: "Find pitch" },
   { key: "match", to: "/match/create", accent: "match", icon: VersusIcon, label: "Make match" },
   { key: "createteam", to: "/team/create", accent: "team", icon: UsersIcon, label: "Create team" },
+  { key: "pitch", to: "/app", accent: "pitch", icon: MapPinIcon, label: "Manage pitch" },
+  { key: "match", to: "/match/create", accent: "match", icon: VersusIcon, label: "Make match" },
 ];
+
+ 
+
 
 const ROLE_LABEL: Record<TeamRole, string> = { OWNER: "Owner", ADMIN: "Admin", MEMBER: "Member" };
 
@@ -135,7 +139,7 @@ export default function Home() {
         ) : (
           <div className={styles.teamsRow}>
             {teams.map((team) => {
-              const roleKey = team.role.toUpperCase() as TeamRole;
+              const roleKey = (team.role ?? "member").toUpperCase() as TeamRole;
               return (
                 <Link key={team.id} to={`/teams/${team.slug}`} className={styles.teamCard}>
                   <div className={styles.teamCardTop}>
@@ -152,13 +156,13 @@ export default function Home() {
                         className={styles.capacityFill}
                         style={{
                           width: `${Math.min(
-                            (team.activeMemberCount / team.maxRosterSize) * 100,
+                            (team.active_member_count / team.max_roster_size) * 100,
                             100
                           )}%`,
                         }}
                       />
                     </div>
-                    <span>{team.activeMemberCount}/{team.maxRosterSize} members</span>
+                    <span>{team.active_member_count}/{team.max_roster_size} members</span>
                   </div>
                 </Link>
               );

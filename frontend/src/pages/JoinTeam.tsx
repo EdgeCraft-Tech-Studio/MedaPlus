@@ -1,122 +1,75 @@
-import { useEffect, useState } from "react";
-import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import styles from "./css/JoinTeam.module.css";
-import { BallIcon, HashIcon, CheckCircleIcon, XIcon, ClockIcon } from "./Icons";
-import { mockLookupInvitation } from "./teamMockData";
-import { type InvitationLookupResult } from "./teamTypes";
+import { BallIcon, HashIcon, XIcon, ClockIcon } from "./Icons";
+import { lookupInvitationByCode, requestJoinViaCode, type InvitationPreview } from "../lib/team";
 
-type ViewState = "loading" | "code_entry" | "preview" | "not_found" | "already_handled" | "accepted" | "declined";
+type ViewState = "code_entry" | "loading" | "preview" | "requesting" | "requested" | "not_found";
 
-/**
- * Handles three of the four "Add Players" pathways from the spec:
- *  - QR code:      QR encodes this same URL, e.g. /join/bole-united?code=BOLE-7X2K
- *  - Shared link:   identical URL, just sent as a link instead of a QR image
- *  - Join code:     opened with no params (e.g. from a "Have a code?" button
- *                    elsewhere in the app) -> shows a manual code entry form
- *
- * The 4th pathway, "Search existing player", doesn't land here — that
- * invitation can be accepted directly from the notification bell in
- * AppShell.tsx, since the recipient is already inside the app.
- */
 export default function JoinTeam() {
   const nav = useNavigate();
-  const { teamId } = useParams<{ teamId?: string }>();
-  const [searchParams] = useSearchParams();
-  const codeFromUrl = searchParams.get("code") || "";
-
-  const [view, setView] = useState<ViewState>(teamId ? "loading" : "code_entry");
+  const [view, setView] = useState<ViewState>("code_entry");
   const [manualCode, setManualCode] = useState("");
-  const [invitation, setInvitation] = useState<InvitationLookupResult | null>(null);
-  const [actionLoading, setActionLoading] = useState(false);
+  const [invitation, setInvitation] = useState<InvitationPreview | null>(null);
+  const [error, setError] = useState("");
 
-  // TODO: check real auth state here. If the person isn't logged in, this
-  // whole page should redirect to /login?redirect=<current url> and bounce
-  // them back here after they sign in/register, e.g.:
-  //
-  // const { user } = useAuth();
-  // if (!user) return <Navigate to={`/login?redirect=${encodeURIComponent(location.pathname + location.search)}`} replace />;
-
-  useEffect(() => {
-    if (!teamId) return;
-    lookup(teamId, codeFromUrl);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [teamId, codeFromUrl]);
-
-  async function lookup(id: string, code: string) {
-    setView("loading");
-    // TODO: replace with a real API call, e.g.
-    // const result = await lookupInvitation(id, code);
-    await new Promise((r) => setTimeout(r, 500));
-    const result = mockLookupInvitation(id, code);
-
-    if (!result) {
-      setView("not_found");
-      return;
-    }
-    if (result.status !== "PENDING") {
-      setInvitation(result);
-      setView("already_handled");
-      return;
-    }
-    setInvitation(result);
-    setView("preview");
+  function resetToCodeEntry() {
+    setManualCode("");
+    setInvitation(null);
+    setError("");
+    setView("code_entry");
   }
 
-  function handleCodeSubmit(e: React.FormEvent) {
+  async function handleCodeSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!manualCode.trim()) return;
-    // The code alone doesn't tell us which team it belongs to in this demo
-    // setup, so we look it up against the one team we have mock data for.
-    // TODO: replace with a real "resolve code -> team + invitation" endpoint
-    // that doesn't require knowing the team id up front.
-    lookup("bole-united", manualCode.trim());
-  }
+    const code = manualCode.trim();
+    if (!code) return;
 
-  async function handleAccept() {
-    if (!invitation) return;
-    setActionLoading(true);
+    setView("loading");
+    setError("");
     try {
-      // TODO: replace with the real API call, e.g.
-      // await acceptTeamInvitation(invitation.invitationId);
-      // The backend — not this page — is what actually creates the ACTIVE
-      // TeamMembership row, per the spec's invitation-vs-membership rule.
-      await new Promise((r) => setTimeout(r, 700));
-      console.log("TODO: accept invitation", invitation.invitationId);
-      setView("accepted");
-    } catch {
-      setView("not_found"); // TODO: replace with a proper inline error state
-    } finally {
-      setActionLoading(false);
+      const result = await lookupInvitationByCode(code);
+      setInvitation(result);
+      setView("preview");
+    } catch (err) {
+      console.error("Failed to look up invitation code:", err);
+      setView("not_found");
     }
   }
 
-  async function handleDecline() {
+  async function handleRequestJoin() {
     if (!invitation) return;
-    setActionLoading(true);
+    setView("requesting");
     try {
-      // TODO: await declineTeamInvitation(invitation.invitationId);
-      await new Promise((r) => setTimeout(r, 500));
-      console.log("TODO: decline invitation", invitation.invitationId);
-      setView("declined");
-    } finally {
-      setActionLoading(false);
+      await requestJoinViaCode(manualCode.trim());
+      setView("requested");
+    } catch (err: any) {
+      console.error("Failed to request join:", err);
+      setError(
+        err.response?.data?.detail ||
+        "Couldn't send your join request. The code may have expired."
+      );
+      setView("preview");
     }
   }
 
   return (
     <div className={styles.page}>
       <div className={styles.card}>
-        <Link to="/home" className={styles.brand}>
-          <span className={styles.brandMark}><BallIcon /></span>
-          <span className={styles.brandName}>MedaPlus</span>
-        </Link>
-
-        {view === "loading" && (
-          <div className={styles.stateBlock}>
-            <div className={styles.spinner} />
-            <p>Checking your invitation...</p>
-          </div>
-        )}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <Link to="/home" className={styles.brand}>
+            <span className={styles.brandMark}><BallIcon /></span>
+            <span className={styles.brandName}>MedaPlus</span>
+          </Link>
+          <button
+            type="button"
+            onClick={() => nav("/home")}
+            aria-label="Close"
+            style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}
+          >
+            <XIcon width={18} height={18} />
+          </button>
+        </div>
 
         {view === "code_entry" && (
           <>
@@ -129,7 +82,7 @@ export default function JoinTeam() {
                 className={styles.codeInput}
                 value={manualCode}
                 onChange={(e) => setManualCode(e.target.value)}
-                placeholder="e.g. BOLE-7X2K"
+                placeholder="e.g. 82KF"
                 autoFocus
                 autoCapitalize="characters"
               />
@@ -140,6 +93,13 @@ export default function JoinTeam() {
           </>
         )}
 
+        {view === "loading" && (
+          <div className={styles.stateBlock}>
+            <div className={styles.spinner} />
+            <p>Looking up your code...</p>
+          </div>
+        )}
+
         {view === "preview" && invitation && (
           <>
             <span className={styles.teamLogo}>
@@ -147,74 +107,71 @@ export default function JoinTeam() {
                 ? <img src={invitation.team.logo} alt="" />
                 : invitation.team.name.split(" ").map((w) => w[0]).slice(0, 2).join("")}
             </span>
-            <h1 className={styles.title}>You're invited to join</h1>
+            <h1 className={styles.title}>Request to join</h1>
             <div className={styles.teamName}>{invitation.team.name}</div>
             <div className={styles.teamMeta}>
-              {invitation.team.sport} · {invitation.team.homeArea} · {invitation.team.activeCount}/{invitation.team.capacity} players
+              {invitation.team.sport} · {invitation.team.area || invitation.team.city} ·{" "}
+              {invitation.team.active_member_count}/{invitation.team.max_roster_size} players
             </div>
-            <p className={styles.invitedBy}>Invited by <strong>{invitation.invitedBy}</strong></p>
+            <p className={styles.invitedBy}>
+              Invited by{" "}
+              <strong>
+                {`${invitation.invited_by.first_name ?? ""} ${invitation.invited_by.last_name ?? ""}`.trim() ||
+                  invitation.invited_by.username}
+              </strong>
+            </p>
+            <p className={styles.subtitle}>
+              Your request will need to be approved by the team's owner or an admin before you join.
+            </p>
+
+            {!invitation.is_redeemable && (
+              <p className={styles.subtitle} style={{ color: "var(--danger)" }}>
+                {invitation.is_expired ? "This code has expired." : "This code is no longer available."}
+              </p>
+            )}
+
+            {error && <p className={styles.subtitle} style={{ color: "var(--danger)" }}>{error}</p>}
 
             <div className={styles.actionsRow}>
-              <button className={styles.declineBtn} onClick={handleDecline} disabled={actionLoading}>
-                Decline
+              <button className={styles.declineBtn} onClick={resetToCodeEntry}>
+                Try another code
               </button>
-              <button className={styles.primaryBtn} onClick={handleAccept} disabled={actionLoading}>
-                {actionLoading ? "Joining..." : "Accept & join"}
+              <button
+                className={styles.primaryBtn}
+                onClick={handleRequestJoin}
+                disabled={!invitation.is_redeemable}
+              >
+                Request to join
               </button>
             </div>
           </>
         )}
 
-        {view === "accepted" && invitation && (
+        {view === "requesting" && (
           <div className={styles.stateBlock}>
-            <div className={styles.successIconWrap}><CheckCircleIcon width={30} height={30} /></div>
-            <h1 className={styles.title}>You're in!</h1>
-            <p className={styles.subtitle}>You're now an active member of {invitation.team.name}.</p>
-            <Link to={`/teams/${invitation.team.id}`} className={styles.primaryBtn} style={{ textDecoration: "none", display: "inline-block" }}>
-              Go to team
-            </Link>
+            <div className={styles.spinner} />
+            <p>Sending your request...</p>
           </div>
         )}
 
-        {view === "declined" && (
+        {view === "requested" && invitation && (
           <div className={styles.stateBlock}>
-            <div className={styles.mutedIconWrap}><XIcon width={26} height={26} /></div>
-            <h1 className={styles.title}>Invitation declined</h1>
-            <p className={styles.subtitle}>No hard feelings — you can always join later with a new invite.</p>
-            <Link to="/home" className={styles.ghostBtn}>Back to home</Link>
-          </div>
-        )}
-
-        {view === "already_handled" && invitation && (
-          <div className={styles.stateBlock}>
-            <div className={styles.mutedIconWrap}><ClockIcon width={26} height={26} /></div>
-            <h1 className={styles.title}>
-              {invitation.status === "ACCEPTED" && "Already accepted"}
-              {invitation.status === "DECLINED" && "Already declined"}
-              {invitation.status === "CANCELLED" && "Invitation cancelled"}
-              {invitation.status === "EXPIRED" && "Invitation expired"}
-            </h1>
+            <div className={styles.successIconWrap}><ClockIcon width={30} height={30} /></div>
+            <h1 className={styles.title}>Request sent</h1>
             <p className={styles.subtitle}>
-              {invitation.status === "ACCEPTED"
-                ? `You're already a member of ${invitation.team.name}.`
-                : "This invitation is no longer valid. Ask for a new one if you still want to join."}
+              Your request to join {invitation.team.name} is pending approval from the team's owner or an admin.
+              You'll be notified once they respond.
             </p>
-            {invitation.status === "ACCEPTED" ? (
-              <Link to={`/teams/${invitation.team.id}`} className={styles.primaryBtn} style={{ textDecoration: "none", display: "inline-block" }}>
-                Go to team
-              </Link>
-            ) : (
-              <Link to="/home" className={styles.ghostBtn}>Back to home</Link>
-            )}
+            <Link to="/home" className={styles.ghostBtn}>Back to home</Link>
           </div>
         )}
 
         {view === "not_found" && (
           <div className={styles.stateBlock}>
             <div className={styles.errorIconWrap}><XIcon width={26} height={26} /></div>
-            <h1 className={styles.title}>Invite not found</h1>
-            <p className={styles.subtitle}>This link or code doesn't match an invitation. Double-check it, or ask for a new one.</p>
-            <button className={styles.ghostBtn} onClick={() => { setManualCode(""); setView("code_entry"); }}>
+            <h1 className={styles.title}>Code not found</h1>
+            <p className={styles.subtitle}>This code doesn't match any invitation. Double-check it, or ask for a new one.</p>
+            <button className={styles.ghostBtn} onClick={resetToCodeEntry}>
               Try a different code
             </button>
           </div>

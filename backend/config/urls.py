@@ -6,6 +6,7 @@ from django.urls import path, include
 from accounts.views.auth_view import ForgotPasswordVerifyOTPView, ForgotPasswordView, HomeDataView, LoginView, LogoutView, ResendOTPView, ResetPasswordView, SignupVerifyOTPView, SignupView, TokenRefreshsView
 from accounts.views.otp_view import OTPStatusView
 from accounts.views.pages_view import AdminApproveOwnerView, AdminListOwnersView, AdminPendingOwnersView, MeView
+from accounts.views.profile_views import ChangePasswordView, ConfirmPhoneChangeView, RequestPhoneChangeView, UpdateEmailView, UpdateFCMTokenView, UpdatePhotoView
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -33,11 +34,13 @@ urlpatterns = [
     ),
 
     
-    path(
-        'api/auth/me/',
-        MeView.as_view(),
-        name='auth_me',
-    ),
+    path('api/auth/me/', MeView.as_view(), name='auth_me'),                       # already existed, now correct
+    path('api/auth/me/photo/', UpdatePhotoView.as_view(), name='auth-me-photo'),
+    path('api/auth/me/email/', UpdateEmailView.as_view(), name='auth-me-email'),
+    path('api/auth/me/change-password/', ChangePasswordView.as_view(), name='auth-me-change-password'),
+    path('api/auth/me/phone/request/', RequestPhoneChangeView.as_view(), name='auth-me-phone-request'),
+    path('api/auth/me/phone/confirm/', ConfirmPhoneChangeView.as_view(), name='auth-me-phone-confirm'),
+    path('api/auth/me/fcm-token/', UpdateFCMTokenView.as_view(), name='auth-me-fcm-token'),
 
     path(
         'api/auth/home/',

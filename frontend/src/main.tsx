@@ -26,23 +26,23 @@ import Home from "./pages/Home";
 import AppShell from "./pages/AppShell";
 
 // Teams
-import TeamsPage from "./pages/TeamsPage";
-import TeamDashboard from "./pages/TeamDashboard";
-import CreateTeam from "./pages/CreateTeam";
-import JoinTeam from "./pages/JoinTeam";
+// import TeamsPage from "./pages/TeamsPage";
+// import TeamDashboard from "./pages/TeamDashboard";
+// import CreateTeam from "./pages/CreateTeam";
+// import JoinTeam from "./pages/JoinTeam";
 
-// Matches
-import MatchesPage from "./pages/MatchesPage";
-import MatchDetail from "./pages/MatchDetail";
-import MakeMatch from "./pages/MakeMatch";
+// // Matches
+// import MatchesPage from "./pages/MatchesPage";
+// import MatchDetail from "./pages/MatchDetail";
+// import MakeMatch from "./pages/MakeMatch";
 
-// Discover
-import DiscoverPage from "./pages/DiscoverPage";
-import TournamentDetail from "./pages/TournamentDetail";
-import CreateTournament from "./pages/CreateTournament";
+// // Discover
+// import DiscoverPage from "./pages/DiscoverPage";
+// import TournamentDetail from "./pages/TournamentDetail";
+// import CreateTournament from "./pages/CreateTournament";
 
-// Profile
-import ProfilePage from "./pages/ProfilePage";
+// // Profile
+// import ProfilePage from "./pages/ProfilePage";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
@@ -68,7 +68,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           {/* ---------------------------------------------------------
               Team invitation
           --------------------------------------------------------- */}
-          {/* <Route path="/join" element={<JoinTeam />} /> 
+          {/* <Route path="/join" element={<JoinTeam />} />
           <Route path="/join/:teamId" element={<JoinTeam />} /> */}
 
 
@@ -111,7 +111,13 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
             /> */}
 
             {/* Profile */}
-            {/* <Route path="/profile" element={<ProfilePage />} /> */}
+            {/* <Route path="/profile" element={<ProfilePage />} />
+            <Route path="/app" element={<App />} /> */}
+          {/* <Route
+            path="/app/pitches/:pitchId"
+            element={<PitchDetail />}
+          /> */}
+
 
           </Route>
 

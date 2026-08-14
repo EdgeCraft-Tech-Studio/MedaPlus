@@ -13,6 +13,28 @@ import {
 type SubTab = "members" | "invitations" | "requests";
 type AddMethod = "search" | "link" | "code";
 
+const SOURCE_LABEL: Record<string, string> = {
+  team_creation: "Created the team",
+  direct_invitation: "Direct invite",
+  link_invitation: "Invite link",
+  code_invitation: "Join code",
+  join_request: "Approved join request",
+  ownership_transfer: "Ownership transfer",
+};
+
+const POSITION_LABEL: Record<string, string> = {
+  gk: "Goalkeeper", def: "Defender", mid: "Midfielder", fwd: "Forward",
+};
+
+// real DB status → display label + color tone, no invented statuses
+const STATUS_STYLE: Record<string, { label: string; tone: "green" | "gray" | "red" }> = {
+  pending: { label: "Pending", tone: "green" },
+  accepted: { label: "Accepted", tone: "green" },
+  declined: { label: "Declined", tone: "red" },
+  cancelled: { label: "Cancelled", tone: "red" },
+  expired: { label: "Expired", tone: "red" },
+};
+
 export default function ManageRoster({
   team, roster, invitations, joinRequests, canManage, slug, onRosterChange,
 }: {
@@ -22,14 +44,14 @@ export default function ManageRoster({
   joinRequests: JoinRequestItem[];
   canManage: boolean;
   slug: string;
-  onRosterChange: () => void; // parent re-fetches roster/invitations/requests after any action
+  onRosterChange: () => void;
 }) {
   const [subTab, setSubTab] = useState<SubTab>("members");
   const [modalOpen, setModalOpen] = useState(false);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [actionError, setActionError] = useState("");
 
-  const pendingInvites = invitations.filter((i) => i.status === "pending");
+  const pendingInvites = invitations.filter((i) => i.status === "pending" && !i.is_expired);
   const pendingRequests = joinRequests.filter((r) => r.status === "pending");
 
   async function handleRoleChange(memberId: string, newRole: "admin" | "member") {
@@ -97,23 +119,19 @@ export default function ManageRoster({
   }
 
   function displayName(user: RosterMember["user"]) {
-  const name = `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim();
+    const name = `${user.first_name ?? ""} ${user.last_name ?? ""}`.trim();
+    return name || user.username || "Unknown player";
+  }
 
-  return name || user.username || "Unknown player";
+ function firstLetter(user: RosterMember["user"] | JoinRequestItem["user"], fallbackName: string) {
+  const source = user.first_name?.trim() || fallbackName?.trim();
+  if (!source) return "–";
+  return source[0].toUpperCase();
 }
-
-  function initialsOf(name?: string | null) {
-  if (!name?.trim()) return "?";
-
-  return name
-    .trim()
-    .split(/\s+/)
-    .map((w) => w[0])
-    .filter(Boolean)
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
-}
+  function formatShortDate(iso: string | null) {
+    if (!iso) return null;
+    return new Date(iso).toLocaleDateString(undefined, { month: "numeric", day: "numeric", year: "2-digit" });
+  }
 
   return (
     <div className={styles.wrap}>
@@ -122,10 +140,10 @@ export default function ManageRoster({
       <div className={styles.topRow}>
         <div className={styles.capacitySummary}>
           <div className={styles.capacityHeadline}>
-            <span>{roster.length}</span> / {team.maxRosterSize} active players
+            <span>{roster.length}</span> / {team.max_roster_size} active players
           </div>
           <div className={styles.capBar}>
-            <div className={styles.capFill} style={{ width: `${Math.min((roster.length / team.maxRosterSize) * 100, 100)}%` }} />
+            <div className={styles.capFill} style={{ width: `${Math.min((roster.length / team.max_roster_size) * 100, 100)}%` }} />
           </div>
         </div>
 
@@ -145,7 +163,7 @@ export default function ManageRoster({
           Invitations
           {pendingInvites.length > 0 && <span className={styles.subTabCount}>{pendingInvites.length}</span>}
         </button>
-        {(team.visibility === "public" || team.visibility === "request") && (
+        {team.visibility === "public" && (
           <button className={`${styles.subTab} ${subTab === "requests" ? styles.subTabActive : ""}`} onClick={() => setSubTab("requests")}>
             Join requests
             {pendingRequests.length > 0 && <span className={styles.subTabCount}>{pendingRequests.length}</span>}
@@ -160,20 +178,28 @@ export default function ManageRoster({
           <div className={styles.list}>
             {roster.map((m) => {
               const name = displayName(m.user);
+              const positionLabel = m.preferred_position ? POSITION_LABEL[m.preferred_position] ?? m.preferred_position : null;
               return (
                 <div key={m.id} className={styles.memberRow}>
                   <span className={styles.avatar}>
-                    {m.user.avatar ? <img src={m.user.avatar} alt="" /> : initialsOf(name)}
+                    {m.user.profile_photo_url ? (
+                      <img src={m.user.profile_photo_url} alt="" />
+                    ) : (
+                      firstLetter(m.user, name)
+                    )}
                   </span>
                   <div className={styles.rowInfo}>
                     <div className={styles.rowName}>
                       {name}
+                      {m.jersey_number != null && <span className={styles.roleTag}>#{m.jersey_number}</span>}
                       <span className={styles.roleTag} data-role={m.role.toUpperCase()}>
                         {m.role === "owner" ? "Owner" : m.role === "admin" ? "Admin" : "Member"}
                       </span>
                     </div>
                     <div className={styles.rowMeta}>
-                      Joined {new Date(m.joinedAt).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}
+                      {positionLabel && <>{positionLabel} · </>}
+                      Joined {formatShortDate(m.joined_at)}
+                      {m.source && <> · {SOURCE_LABEL[m.source] ?? m.source}</>}
                     </div>
                   </div>
 
@@ -190,7 +216,7 @@ export default function ManageRoster({
                           {m.role === "admin" && (
                             <button className={styles.menuItem} onClick={() => handleRoleChange(m.id, "member")}>Remove admin</button>
                           )}
-                          {team.myRole === "owner" && (
+                          {team.my_role === "owner" && (
                             <button className={styles.menuItem} onClick={() => handleTransferOwnership(m.id)}>Transfer ownership</button>
                           )}
                           <button className={`${styles.menuItem} ${styles.menuItemDanger}`} onClick={() => handleRemoveMember(m.id)}>Remove from team</button>
@@ -210,24 +236,35 @@ export default function ManageRoster({
           <div className={styles.emptyMini}>No invitations sent yet.</div>
         ) : (
           <div className={styles.list}>
-            {invitations.map((inv) => (
-              <div key={inv.id} className={styles.inviteRow}>
-                <span className={styles.avatar}>{initialsOf(inv.recipientName)}</span>
-                <div className={styles.rowInfo}>
-                  <div className={styles.rowName}>{inv.recipientName}</div>
-                  <div className={styles.rowMeta}>{inv.recipientHandle} · sent {new Date(inv.sentAt).toLocaleDateString(undefined, { day: "numeric", month: "short" })}</div>
+            {invitations.map((inv) => {
+              // Per spec: code type shows the real code; everything else
+              // (link, direct) just says "Link" — no icon, no avatar box.
+              const displayLabel = inv.invitation_type === "code" && inv.code
+                ? inv.code
+                : "Link";
+              const statusStyle = STATUS_STYLE[inv.status] ?? { label: inv.status, tone: "gray" };
+              const dateRange = inv.expires_at
+                ? `${formatShortDate(inv.created_at)} - ${formatShortDate(inv.expires_at)}`
+                : `${formatShortDate(inv.created_at)} - No expiry`;
+
+              return (
+                <div key={inv.id} className={styles.inviteRow}>
+                  <div className={styles.rowInfo}>
+                    <div className={styles.rowName}>{displayLabel}</div>
+                    <div className={styles.rowMeta}>{dateRange}</div>
+                  </div>
+                  <span className={styles.statusTag} data-tone={statusStyle.tone}>{statusStyle.label}</span>
+                  {canManage && inv.status === "pending" && !inv.is_expired && (
+                    <button className={styles.cancelBtn} onClick={() => handleCancelInvite(inv.id)}>Cancel</button>
+                  )}
                 </div>
-                <span className={styles.statusTag} data-status={inv.status}>{inv.status}</span>
-                {canManage && inv.status === "pending" && (
-                  <button className={styles.cancelBtn} onClick={() => handleCancelInvite(inv.id)}>Cancel</button>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
         )
       )}
 
-      {subTab === "requests" && (team.visibility === "public" || team.visibility === "request") && (
+      {subTab === "requests" && team.visibility === "public" && (
         joinRequests.length === 0 ? (
           <div className={styles.emptyMini}>No join requests right now.</div>
         ) : (
@@ -235,11 +272,20 @@ export default function ManageRoster({
             {joinRequests.map((req) => (
               <div key={req.id} className={styles.requestRow}>
                 <span className={styles.avatar}>
-                  {req.requesterAvatar ? <img src={req.requesterAvatar} alt="" /> : initialsOf(req.requesterName)}
+                  {req.user.profile_photo_url ? (
+                    <img src={req.user.profile_photo_url} alt="" />
+                  ) : (
+                    firstLetter(req.user, displayName(req.user))
+                  )}
                 </span>
                 <div className={styles.rowInfo}>
-                  <div className={styles.rowName}>{req.requesterName}</div>
-                  <div className={styles.rowMeta}>{req.message}</div>
+                  <div className={styles.rowName}>{displayName(req.user)}</div>
+                  <div className={styles.rowMeta}>
+                    {req.message ? `"${req.message}"` : "No message"} · requested {formatShortDate(req.created_at)}
+                    {req.reviewed_at && req.reviewed_by && (
+                      <> · reviewed by {displayName(req.reviewed_by)} on {formatShortDate(req.reviewed_at)}</>
+                    )}
+                  </div>
                 </div>
                 {req.status === "pending" ? (
                   canManage && (
@@ -258,16 +304,14 @@ export default function ManageRoster({
       )}
 
       {modalOpen && (
-  <AddPlayersModal
-    slug={slug}
-    onClose={(didChange) => {
-      setModalOpen(false);
-      if (didChange) {
-        onRosterChange(); // only refetches if something real happened
-      }
-    }}
-  />
-)}
+        <AddPlayersModal
+          slug={slug}
+          onClose={(didChange) => {
+            setModalOpen(false);
+            if (didChange) onRosterChange();
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -276,16 +320,13 @@ function AddPlayersModal({ slug, onClose }: { slug: string; onClose: (didChange:
   const [method, setMethod] = useState<AddMethod>("search");
   const [linkCopied, setLinkCopied] = useState(false);
 
-  // link state
-  const [linkInvite, setLinkInvite] = useState<{ id: string; inviteLink: string } | null>(null);
+  const [linkInvite, setLinkInvite] = useState<TeamInvitationItem | null>(null);
   const [linkLoading, setLinkLoading] = useState(false);
   const [confirmingLink, setConfirmingLink] = useState(false);
 
-  // code state
-  const [codeInvite, setCodeInvite] = useState<{ id: string; code: string } | null>(null);
+  const [codeInvite, setCodeInvite] = useState<TeamInvitationItem | null>(null);
   const [codeLoading, setCodeLoading] = useState(false);
   const [confirmingCode, setConfirmingCode] = useState(false);
-
 
   const [hasChanges, setHasChanges] = useState(false);
 
@@ -295,7 +336,7 @@ function AddPlayersModal({ slug, onClose }: { slug: string; onClose: (didChange:
     try {
       const result = await createLinkInvitation(slug);
       setLinkInvite(result);
-      setHasChanges(true); 
+      setHasChanges(true);
     } catch {
       // leave linkInvite null — UI shows a retry state
     } finally {
@@ -307,6 +348,7 @@ function AddPlayersModal({ slug, onClose }: { slug: string; onClose: (didChange:
     if (!linkInvite) return;
     try {
       await cancelInvitation(slug, linkInvite.id);
+      setHasChanges(true);
     } finally {
       setLinkInvite(null);
     }
@@ -330,15 +372,20 @@ function AddPlayersModal({ slug, onClose }: { slug: string; onClose: (didChange:
     if (!codeInvite) return;
     try {
       await cancelInvitation(slug, codeInvite.id);
+      setHasChanges(true);
     } finally {
       setCodeInvite(null);
     }
   }
 
   async function copyLink() {
-    if (!linkInvite) return;
+    // NOTE: your backend only stores `token`, not a full URL — this builds
+    // a placeholder link. Confirm the real join-link URL structure and
+    // update this to match (e.g. what InvitationByTokenView expects).
+    const link = linkInvite?.token ? `https://medaplus.app/join/${slug}?token=${linkInvite.token}` : null;
+    if (!link) return;
     try {
-      await navigator.clipboard.writeText(linkInvite.inviteLink);
+      await navigator.clipboard.writeText(link);
       setLinkCopied(true);
       setTimeout(() => setLinkCopied(false), 2000);
     } catch {
@@ -365,7 +412,6 @@ function AddPlayersModal({ slug, onClose }: { slug: string; onClose: (didChange:
             <SearchIcon width={17} height={17} />
             Search
           </button>
-          {/* ✅ tab click ONLY switches the view — no API call */}
           <button className={`${styles.methodTab} ${method === "link" ? styles.methodTabActive : ""}`} onClick={() => setMethod("link")}>
             <LinkIcon width={17} height={17} />
             Link
@@ -386,12 +432,9 @@ function AddPlayersModal({ slug, onClose }: { slug: string; onClose: (didChange:
               {!linkInvite && !linkLoading && !confirmingLink && (
                 <div className={styles.emptyMini}>
                   <p>Generate a shareable link players can use to join this team.</p>
-                  <button className={styles.addBtn} onClick={() => setConfirmingLink(true)}>
-                    Generate link
-                  </button>
+                  <button className={styles.addBtn} onClick={() => setConfirmingLink(true)}>Generate link</button>
                 </div>
               )}
-
               {confirmingLink && (
                 <div className={styles.emptyMini}>
                   <p>This will create a new join link for this team. Continue?</p>
@@ -401,21 +444,19 @@ function AddPlayersModal({ slug, onClose }: { slug: string; onClose: (didChange:
                   </div>
                 </div>
               )}
-
               {linkLoading && <div className={styles.emptyMini}>Generating link…</div>}
-
               {linkInvite && !linkLoading && (
                 <>
                   <div className={styles.linkBox}>
-                    <span className={styles.linkText}>{linkInvite.inviteLink}</span>
+                    <span className={styles.linkText}>
+                      {linkInvite.token ? `https://medaplus.app/join/${slug}?token=${linkInvite.token}` : "No link available"}
+                    </span>
                     <button className={styles.copyBtn} onClick={copyLink} aria-label="Copy link">
                       <CopyIcon width={15} height={15} />
                     </button>
                   </div>
                   {linkCopied && <div className={styles.copiedNote}>Link copied</div>}
-                  <button className={styles.cancelBtn} onClick={cancelLink} style={{ marginTop: 8 }}>
-                    Cancel this link
-                  </button>
+                  <button className={styles.cancelBtn} onClick={cancelLink} style={{ marginTop: 8 }}>Cancel this link</button>
                 </>
               )}
             </>
@@ -426,12 +467,9 @@ function AddPlayersModal({ slug, onClose }: { slug: string; onClose: (didChange:
               {!codeInvite && !codeLoading && !confirmingCode && (
                 <div className={styles.emptyMini}>
                   <p>Generate a code players can enter to request to join.</p>
-                  <button className={styles.addBtn} onClick={() => setConfirmingCode(true)}>
-                    Generate code
-                  </button>
+                  <button className={styles.addBtn} onClick={() => setConfirmingCode(true)}>Generate code</button>
                 </div>
               )}
-
               {confirmingCode && (
                 <div className={styles.emptyMini}>
                   <p>This will create a new join code for this team. Continue?</p>
@@ -441,16 +479,12 @@ function AddPlayersModal({ slug, onClose }: { slug: string; onClose: (didChange:
                   </div>
                 </div>
               )}
-
               {codeLoading && <div className={styles.emptyMini}>Generating code…</div>}
-
               {codeInvite && !codeLoading && (
                 <div className={styles.codeBox}>
                   <div className={styles.codeValue}>{codeInvite.code}</div>
                   <p className={styles.codeHint}>Share this code — players enter it manually to send a join invitation.</p>
-                  <button className={styles.cancelBtn} onClick={cancelCode} style={{ marginTop: 8 }}>
-                    Cancel this code
-                  </button>
+                  <button className={styles.cancelBtn} onClick={cancelCode} style={{ marginTop: 8 }}>Cancel this code</button>
                 </div>
               )}
             </>

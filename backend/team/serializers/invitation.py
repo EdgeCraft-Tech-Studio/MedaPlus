@@ -3,6 +3,8 @@ from datetime import timedelta
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
+from team.serializers.team import TeamListSerializer
+
 from ..models import TeamInvitation, TeamInvitationRedemption
 from .common import UserSummarySerializer
 
@@ -136,3 +138,41 @@ class TeamInvitationRedemptionSerializer(serializers.ModelSerializer):
         model = TeamInvitationRedemption
         fields = ["id", "invitation_id", "redeemed_by", "redeemed_at"]
         read_only_fields = fields
+
+
+# serializers/invitation.py — add this class
+class InvitationPreviewSerializer(serializers.ModelSerializer):
+    """Preview shown before a user commits to redeeming a link/code —
+    includes the target team's basic info so the person can see what
+    they're about to join.
+    """
+
+    team = TeamListSerializer(read_only=True)
+    invited_by = UserSummarySerializer(read_only=True) 
+
+    class Meta:
+        model = TeamInvitation
+        fields = [
+            "id", "invitation_type", "team", "invited_by",
+            "status", "is_expired", "is_exhausted", "is_redeemable", "expires_at",
+        ]
+        read_only_fields = fields
+
+
+
+# serializers/invitation.py — add
+class JoinRequestViaCodeSerializer(serializers.Serializer):
+    """Input for requesting to join a team using a join code, WITHOUT
+    instantly redeeming it (unlike InvitationRedeemByCodeSerializer).
+    Creates a TeamJoinRequest for owner/admin review instead of
+    immediate membership — the code only proves the requester knows
+    about this team; it doesn't bypass approval.
+    """
+
+    code = serializers.CharField(max_length=20)
+    message = serializers.CharField(
+        max_length=500, required=False, allow_blank=True, default=""
+    )
+
+    def validate_code(self, value: str) -> str:
+        return value.strip().upper()

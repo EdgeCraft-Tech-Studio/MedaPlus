@@ -40,8 +40,18 @@ class TeamViewSet(viewsets.GenericViewSet):
 
     def get_queryset(self):
         base = Team.objects.select_related("created_by").with_active_member_count()
+
         if self.action == "list":
+            # Public discovery (§18/§19): only operable, PUBLIC teams,
+            # AND never a team the requesting user already belongs to —
+            # "find a team to join" has no business surfacing teams
+            # you're already on. This is enforced here, server-side,
+            # not just hidden by the frontend.
             base = base.discoverable()
+            base = base.exclude(
+                memberships__user=self.request.user,
+                memberships__status="active"
+            )
             base = self._apply_discovery_filters(base)
         return base
 
@@ -61,8 +71,10 @@ class TeamViewSet(viewsets.GenericViewSet):
         return queryset
 
     def get_serializer_class(self):
-        if self.action == "list" or self.action == "my":
+        if self.action == "list":
             return TeamListSerializer
+        if self.action == "my":
+            return TeamMyListSerializer
         if self.action == "create":
             return TeamCreateSerializer
         if self.action == "partial_update":
@@ -144,7 +156,7 @@ class TeamViewSet(viewsets.GenericViewSet):
             .distinct()
         )
         page = self.paginate_queryset(queryset)
-        serializer = TeamMyListSerializer(page, many=True)
+        serializer = self.get_serializer(page, many=True)
         return self.get_paginated_response(serializer.data)
 
     @action(detail=True, methods=["post"], url_path="leave")

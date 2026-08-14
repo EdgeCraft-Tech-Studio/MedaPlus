@@ -1,5 +1,8 @@
 from rest_framework import serializers
 
+from team.models.invitation import TeamInvitation
+from team.models.join_request import TeamJoinRequest
+
 from ..models import Team
 from .common import UserSummarySerializer
 
@@ -114,3 +117,52 @@ class TeamUpdateSerializer(serializers.ModelSerializer):
         instance.version = instance.version + 1
         instance.save(update_fields=[*validated_data.keys(), "version", "updated_at"])
         return instance
+
+
+
+
+class TeamInvitationSerializer(serializers.ModelSerializer):
+    """Read representation for a single invitation row — covers all
+    three shapes (DIRECT/LINK/CODE) since they share one table.
+    `invite_link` is built server-side so the frontend never has to
+    know the URL structure.
+    """
+
+    invited_user = UserSummarySerializer(read_only=True)
+    invited_by = UserSummarySerializer(read_only=True)
+    is_expired = serializers.BooleanField(read_only=True)
+    is_redeemable = serializers.BooleanField(read_only=True)
+    remaining_uses = serializers.IntegerField(read_only=True)
+    invite_link = serializers.SerializerMethodField()
+
+    class Meta:
+        model = TeamInvitation
+        fields = [
+            "id", "invitation_type", "invited_user", "invited_by",
+            "token", "code", "invite_link", "status",
+            "max_uses", "redemption_count", "remaining_uses",
+            "is_expired", "is_redeemable",
+            "created_at", "expires_at", "responded_at",
+        ]
+        read_only_fields = fields
+
+    def get_invite_link(self, obj: TeamInvitation):
+        if obj.invitation_type != "link" or not obj.token:
+            return None
+        # TODO: pull the frontend base URL from settings instead of hardcoding
+        return f"https://medaplus.app/join/{obj.team.slug}?token={obj.token}"
+
+
+class TeamJoinRequestSerializer(serializers.ModelSerializer):
+    """Read representation for a public-team join request.""" 
+
+    user = UserSummarySerializer(read_only=True)
+    reviewed_by = UserSummarySerializer(read_only=True)
+
+    class Meta:
+        model = TeamJoinRequest
+        fields = [
+            "id", "user", "message", "status",
+            "created_at", "reviewed_at", "reviewed_by", "version",
+        ]
+        read_only_fields = fields

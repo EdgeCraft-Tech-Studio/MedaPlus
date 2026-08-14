@@ -4,7 +4,6 @@ from .invitation import (
     InvitationByTokenView,
     InvitationDeclineByIdView,
     InvitationDeclineByTokenView,
-    InvitationRedeemByCodeView,
     MyInvitationsView,
     TeamInvitationManagementViewSet,
 )
@@ -22,7 +21,6 @@ __all__ = [
     "InvitationDeclineByTokenView",
     "InvitationAcceptByIdView",
     "InvitationDeclineByIdView",
-    "InvitationRedeemByCodeView",
     "TeamJoinRequestViewSet",
     "MyJoinRequestsView",
 ]

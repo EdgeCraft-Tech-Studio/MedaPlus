@@ -13,6 +13,31 @@ import {
 
 type TabKey = "overview" | "roster" | "matches" | "bookings" | "tournaments" | "settings";
 
+const SKILL_LABEL: Record<string, string> = {
+  beginner: "Beginner",
+  intermediate: "Intermediate",
+  advanced: "Advanced",
+  competitive: "Competitive",
+};
+
+const AGE_LABEL: Record<string, string> = {
+  open: "Open — no age limit",
+  u18: "Under 18",
+  u21: "Under 21",
+  adult: "Adult",
+  other: "Other",
+};
+
+const DAY_LABEL: Record<string, string> = {
+  mon: "Mon", tue: "Tue", wed: "Wed", thu: "Thu", fri: "Fri", sat: "Sat", sun: "Sun",
+};
+
+const PLAY_TIME_LABEL: Record<string, string> = {
+  morning: "Morning (6–11)",
+  afternoon: "Afternoon (11–5)",
+  evening: "Evening (5–10)",
+};
+
 export default function TeamDashboard() {
   const { slug } = useParams<{ slug: string }>();
   const [tab, setTab] = useState<TabKey>("roster");
@@ -37,9 +62,6 @@ export default function TeamDashboard() {
       setInvitations(invitesData);
       setJoinRequests(requestsData);
     } catch (err) {
-      // 403 = not owner/admin (backend-enforced), 404 = team doesn't exist —
-      // either way, no access. This is the frontend reaction to the real
-      // server-side security check, not the check itself.
       setDenied(true);
       console.error("Failed to load team dashboard:", err);
     } finally {
@@ -96,13 +118,13 @@ export default function TeamDashboard() {
               <span className={styles.teamName}>{team.name}</span>
               <span className={styles.visBadge}>
                 {team.visibility === "public" ? <GlobeIcon width={11} height={11} /> : <LockIcon width={11} height={11} />}
-                {team.visibility === "public" ? "Public" : team.visibility === "request" ? "Request to join" : "Private"}
+                {team.visibility === "public" ? "Public" : "Private"}
               </span>
             </div>
             <div className={styles.metaRow}>
               <span>{team.sport}</span>
               <span>{team.area || team.city}</span>
-              <span>{team.activeMemberCount}/{team.maxRosterSize} active players</span>
+              <span>{team.active_member_count}/{team.max_roster_size} active players</span>
               {team.latitude != null && team.longitude != null && (
                 <button
                   type="button"
@@ -117,14 +139,14 @@ export default function TeamDashboard() {
           </div>
 
           <span className={styles.roleBadgeHeader}>
-            {team.myRole === "owner" ? "Owner" : "Admin"}
+            {team.my_role === "owner" ? "Owner" : "Admin"}
           </span>
         </div>
       </div>
 
       <div className={styles.tabBar}>
         <div className={styles.tabBarInner}>
-          {tabs.filter((t) => !t.ownerOnly || team.myRole === "owner").map((t) => {
+          {tabs.filter((t) => !t.ownerOnly || team.my_role === "owner").map((t) => {
             const Icon = t.icon;
             return (
               <button
@@ -178,6 +200,19 @@ export default function TeamDashboard() {
 function OverviewTab({
   team, rosterCount, onGoToRoster,
 }: { team: TeamDashboardData; rosterCount: number; onGoToRoster: () => void }) {
+  const skillLabel = team.skill_level ? SKILL_LABEL[team.skill_level] ?? team.skill_level : "Not set";
+  const ageLabel = AGE_LABEL[team.age_category] ?? (team.age_category || "Open — no age limit");
+  const daysLabel = team.preferred_days.length > 0
+    ? team.preferred_days.map((d) => DAY_LABEL[d] ?? d).join(", ")
+    : "Not set";
+  const playTimeLabel = team.play_time ? PLAY_TIME_LABEL[team.play_time] ?? team.play_time : "Not set";
+  const ownerName = team.owner
+    ? (`${team.owner.first_name ?? ""} ${team.owner.last_name ?? ""}`.trim() || team.owner.username)
+    : "Unknown";
+  const createdLabel = new Date(team.created_at).toLocaleDateString(undefined, {
+    day: "numeric", month: "short", year: "numeric",
+  });
+
   return (
     <div>
       <div className={styles.statsGrid}>
@@ -186,7 +221,7 @@ function OverviewTab({
           <div className={styles.statLabel}>Active players</div>
         </div>
         <div className={styles.statCard}>
-          <div className={styles.statValue}>{team.maxRosterSize - rosterCount}</div>
+          <div className={styles.statValue}>{team.available_slots}</div>
           <div className={styles.statLabel}>Open roster spots</div>
         </div>
         <div className={styles.statCard}>
@@ -209,18 +244,44 @@ function OverviewTab({
       <div className={styles.sectionTitle}>Team details</div>
       <div className={styles.infoGrid}>
         <div className={styles.infoItem}>
+          <div className={styles.infoLabel}>Sport</div>
+          <div className={styles.infoValue}>{team.sport}</div>
+        </div>
+        <div className={styles.infoItem}>
           <div className={styles.infoLabel}>Skill level</div>
-          <div className={styles.infoValue}>{team.skillLevel}</div>
+          <div className={styles.infoValue}>{skillLabel}</div>
         </div>
         <div className={styles.infoItem}>
           <div className={styles.infoLabel}>Age category</div>
-          <div className={styles.infoValue}>{team.ageCategory || "No preference"}</div>
+          <div className={styles.infoValue}>{ageLabel}</div>
         </div>
         <div className={styles.infoItem}>
           <div className={styles.infoLabel}>Visibility</div>
-          <div className={styles.infoValue}>
-            {team.visibility === "public" ? "Public" : team.visibility === "request" ? "Request to join" : "Private"}
-          </div>
+          <div className={styles.infoValue}>{team.visibility === "public" ? "Public" : "Private"}</div>
+        </div>
+        <div className={styles.infoItem}>
+          <div className={styles.infoLabel}>Location</div>
+          <div className={styles.infoValue}>{team.area ? `${team.area}, ${team.city}` : team.city}</div>
+        </div>
+        <div className={styles.infoItem}>
+          <div className={styles.infoLabel}>Roster capacity</div>
+          <div className={styles.infoValue}>{team.max_roster_size} players max</div>
+        </div>
+        <div className={styles.infoItem}>
+          <div className={styles.infoLabel}>Preferred days</div>
+          <div className={styles.infoValue}>{daysLabel}</div>
+        </div>
+        <div className={styles.infoItem}>
+          <div className={styles.infoLabel}>Usual play time</div>
+          <div className={styles.infoValue}>{playTimeLabel}</div>
+        </div>
+        <div className={styles.infoItem}>
+          <div className={styles.infoLabel}>Owner</div>
+          <div className={styles.infoValue}>{ownerName}</div>
+        </div>
+        <div className={styles.infoItem}>
+          <div className={styles.infoLabel}>Team since</div>
+          <div className={styles.infoValue}>{createdLabel}</div>
         </div>
       </div>
 
@@ -239,6 +300,6 @@ function Placeholder({
       <span className={styles.placeholderIconWrap}><Icon width={22} height={22} /></span>
       <p>{text}</p>
       {ctaLabel && <Link to={ctaTo} style={{ color: "var(--grass)", fontWeight: 700, fontSize: 13, textDecoration: "none" }}>{ctaLabel}</Link>}
-    </div> 
+    </div>
   );
 }

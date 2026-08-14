@@ -425,3 +425,7 @@
 .codeHint { font-size: 12px; color: var(--muted); }
 
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+
+.statusTag[data-status="active"] { background: var(--grass-soft); color: var(--green-700); }
+.statusTag[data-status="inactive"] { background: #f1f1f1; color: #888; }

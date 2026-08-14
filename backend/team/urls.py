@@ -1,12 +1,13 @@
 from django.urls import path
 
+from team.views.invitation import InvitationByCodeView, JoinRequestViaCodeView
+
 from .views import (
     InvitationAcceptByIdView,
     InvitationAcceptByTokenView,
     InvitationByTokenView,
     InvitationDeclineByIdView,
     InvitationDeclineByTokenView,
-    InvitationRedeemByCodeView,
     MyInvitationsView,
     MyJoinRequestsView,
     TeamInvitationManagementViewSet,
@@ -92,6 +93,13 @@ invitation_urlpatterns = [
         TeamInvitationManagementViewSet.as_view({"post": "create_link"}),
         name="invitation-create-link",
     ),
+
+    
+    path(
+    "invitations/code/request/",
+        JoinRequestViaCodeView.as_view(),
+        name="invitation-request-by-code",
+),
     path(
         "teams/<slug:team_slug>/invitations/code/",
         TeamInvitationManagementViewSet.as_view({"post": "create_code"}),
@@ -133,9 +141,9 @@ invitation_urlpatterns = [
         name="invitation-decline-by-id",
     ),
     path(
-        "invitations/redeem-code/",
-        InvitationRedeemByCodeView.as_view(),
-        name="invitation-redeem-code",
+        "invitations/code/<str:code>/",
+        InvitationByCodeView.as_view(),
+        name="invitation-by-code",
     ),
 ]
 

@@ -9,6 +9,10 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from team.serializers.join_request import TeamJoinRequestSerializer
+from team.services.join_request_service import create_join_request
+from team.serializers.invitation import InvitationPreviewSerializer, JoinRequestViaCodeSerializer
+
 from ..models import TeamInvitation
 from team.pagination import DefaultPagination
 from .permissions import IsTeamManager
@@ -56,7 +60,7 @@ class TeamInvitationManagementViewSet(TeamLookupMixin, viewsets.GenericViewSet):
     reusable links.
     """
 
-    serializer_class = TeamInvitationSerializer
+    serializer_class = TeamInvitationShareSerializer
     pagination_class = DefaultPagination
     permission_classes = [IsAuthenticated, IsTeamManager]
 
@@ -211,6 +215,23 @@ class InvitationDeclineByTokenView(InvitationByTokenView):
         return Response(TeamInvitationSerializer(invitation).data)
 
 
+
+# views.py — add alongside InvitationByTokenView
+class InvitationByCodeView(APIView):
+    """GET /invitations/code/{code}/ — preview before redeeming (§14).
+    Read-only: does NOT redeem. Mirrors InvitationByTokenView but for
+    the code pathway, which previously had no preview step at all.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, code: str):
+        invitation = get_object_or_404(
+            TeamInvitation.objects.select_related("team", "invited_by"),
+            code=code.strip().upper(),
+        )
+        return Response(InvitationPreviewSerializer(invitation).data)
+
 class InvitationAcceptByIdView(APIView):
     """POST /invitations/{id}/accept/ — for DIRECT invitations, which
     (unlike LINK/CODE) have no token to accept-by-URL: the recipient
@@ -243,25 +264,41 @@ class InvitationDeclineByIdView(APIView):
         return Response(TeamInvitationSerializer(invitation).data)
 
 
-class InvitationRedeemByCodeView(APIView):
-    """POST /invitations/redeem-code/ — Method 4 (§14): the player
-    types a code into the app rather than opening a link. Heavily
-    throttled (CodeRedemptionThrottle) — see that class's docstring
-    for why short human-typeable codes need their own, tighter,
-    per-user rate limit as the platform's number of active codes
-    grows: this endpoint is the one place a brute-force guessing
-    attack would actually happen.
+
+
+class JoinRequestViaCodeView(APIView):
+    """POST /invitations/code/request/ — look up a team by its join
+    code and submit a JOIN REQUEST for owner/admin approval, rather
+    than redeeming the code for instant membership. Distinct from
     """
 
     permission_classes = [IsAuthenticated]
     throttle_classes = [CodeRedemptionThrottle]
 
     def post(self, request):
-        serializer = InvitationRedeemByCodeSerializer(data=request.data)
+        serializer = JoinRequestViaCodeSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+
         invitation = get_object_or_404(
             TeamInvitation.objects.select_related("team"),
             code=serializer.validated_data["code"],
         )
-        accept_invitation(invitation=invitation, accepting_user=request.user)
-        return Response(TeamInvitationSerializer(invitation).data)
+        if not invitation.is_redeemable:
+            return Response(
+                {"detail": "This code is no longer valid."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # NOTE: create_join_request() may need a flag to bypass the
+        # normal "team must be PUBLIC" rule, since a valid code is
+        # itself sufficient authorization to request a private team.
+        # Confirm this against your actual join_request_service.
+        join_request = create_join_request(
+            team=invitation.team,
+            user=request.user,
+            message=serializer.validated_data["message"],
+        )
+        return Response(
+            TeamJoinRequestSerializer(join_request).data,
+            status=status.HTTP_201_CREATED,
+        )

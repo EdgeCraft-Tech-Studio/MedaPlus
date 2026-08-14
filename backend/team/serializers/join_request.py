@@ -15,12 +15,14 @@ class TeamJoinRequestSerializer(serializers.ModelSerializer):
     user = UserSummarySerializer(read_only=True)
     reviewed_by = UserSummarySerializer(read_only=True)
     team_id = serializers.UUIDField(source="team.id", read_only=True)
+    team_slug = serializers.SlugField(source="team.slug", read_only=True) 
 
     class Meta:
         model = TeamJoinRequest
         fields = [
             "id",
             "team_id",
+            "team_slug",
             "user",
             "message",
             "status",
