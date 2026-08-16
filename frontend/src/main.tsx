@@ -25,24 +25,24 @@ import Owner from "./pages/Owner";
 import Home from "./pages/Home";
 import AppShell from "./pages/AppShell";
 
-// Teams
-// import TeamsPage from "./pages/TeamsPage";
-// import TeamDashboard from "./pages/TeamDashboard";
-// import CreateTeam from "./pages/CreateTeam";
-// import JoinTeam from "./pages/JoinTeam";
+//Teams
+import TeamsPage from "./pages/TeamsPage";
+import TeamDashboard from "./pages/TeamDashboard";
+import CreateTeam from "./pages/CreateTeam";
+import JoinTeam from "./pages/JoinTeam";
 
-// // Matches
-// import MatchesPage from "./pages/MatchesPage";
-// import MatchDetail from "./pages/MatchDetail";
-// import MakeMatch from "./pages/MakeMatch";
+// Matches
+import MatchesPage from "./pages/MatchesPage";
+import MatchDetail from "./pages/MatchDetail";
+import MakeMatch from "./pages/MakeMatch";
 
-// // Discover
-// import DiscoverPage from "./pages/DiscoverPage";
-// import TournamentDetail from "./pages/TournamentDetail";
-// import CreateTournament from "./pages/CreateTournament";
+// Discover
+import DiscoverPage from "./pages/DiscoverPage";
+import TournamentDetail from "./pages/TournamentDetail";
+import CreateTournament from "./pages/CreateTournament";
 
-// // Profile
-// import ProfilePage from "./pages/ProfilePage";
+// Profile
+import ProfilePage from "./pages/ProfilePage";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
@@ -68,19 +68,19 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           {/* ---------------------------------------------------------
               Team invitation
           --------------------------------------------------------- */}
-          {/* <Route path="/join" element={<JoinTeam />} />
-          <Route path="/join/:teamId" element={<JoinTeam />} /> */}
+          <Route path="/join" element={<JoinTeam />} />
+          <Route path="/join/:teamId" element={<JoinTeam />} />
 
 
           {/* ---------------------------------------------------------
               Full-screen authenticated forms
           --------------------------------------------------------- */}
-          {/* <Route path="/team/create" element={<CreateTeam />} />
+          <Route path="/team/create" element={<CreateTeam />} />
           <Route path="/match/create" element={<MakeMatch />} />
           <Route
             path="/tournaments/create"
             element={<CreateTournament />}
-          /> */}
+          />
 
 
           {/* ---------------------------------------------------------
@@ -93,44 +93,35 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
             <Route path="/home" element={<Home />} />
 
             {/* Teams */}
-            {/* <Route path="/teams" element={<TeamsPage />} />
-            <Route path="/teams/:slug" element={<TeamDashboard />} /> */}
+            <Route path="/teams" element={<TeamsPage />} />
+            <Route path="/teams/:slug" element={<TeamDashboard />} />
 
             {/* Matches */}
-            {/* <Route path="/matches" element={<MatchesPage />} />
+            <Route path="/matches" element={<MatchesPage />} />
             <Route
               path="/matches/:matchId"
               element={<MatchDetail />}
-            /> */}
+            />
 
             {/* Discover */}
-            {/* <Route path="/discover" element={<DiscoverPage />} />
+            <Route path="/discover" element={<DiscoverPage />} />
             <Route
               path="/discover/tournaments/:tournamentId"
               element={<TournamentDetail />}
-            /> */}
+            />
 
             {/* Profile */}
-            {/* <Route path="/profile" element={<ProfilePage />} />
-            <Route path="/app" element={<App />} /> */}
-          {/* <Route
-            path="/app/pitches/:pitchId"
-            element={<PitchDetail />}
-          /> */}
-
-
-          </Route>
-
-
-          {/* ---------------------------------------------------------
-              Existing application pages
-              Any authenticated user
-          --------------------------------------------------------- */}
-          <Route path="/app" element={<App />} />
-          <Route
+            <Route path="/profile" element={<ProfilePage />} />
+            <Route path="/app" element={<App />} /> 
+         <Route
             path="/app/pitches/:pitchId"
             element={<PitchDetail />}
           />
+
+
+
+
+         
 
 
           {/* =========================================================
@@ -159,8 +150,12 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           >
             <Route path="/owner" element={<Owner />} />
           </Route>
+          
+          </Route>
 
         </Route>
+
+
 
       </Routes>
     </BrowserRouter>

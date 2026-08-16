@@ -348,3 +348,76 @@ export function EyeOffIcon(props: React.SVGProps<SVGSVGElement>) {
     </svg>
   );
 }
+
+
+
+export function FootballPitchIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      {...props}
+    >
+      <rect x="3" y="4" width="18" height="16" rx="1" />
+      <line x1="12" y1="4" x2="12" y2="20" />
+      <circle cx="12" cy="12" r="2.5" />
+      
+      <path d="M3 8h4v8H3" />
+      <path d="M21 8h-4v8h4" />
+    </svg>
+  );
+}
+
+
+
+export function PitchManagementIcon2(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      {...props}
+    >
+      <rect x="2.5" y="4" width="14" height="16" rx="1" />
+      <line x1="9.5" y1="4" x2="9.5" y2="20" />
+      <circle cx="9.5" cy="12" r="2.2" />
+
+      <path d="M2.5 8h3v8h-3" />
+      <path d="M16.5 8h-3v8h3" />
+
+      <circle cx="19" cy="18" r="2.5" />
+      <path d="M19 14.5v1M19 20.5v1M15.5 18h1M21.5 18h1" />
+    </svg>
+  );
+}
+
+export function PitchManagementIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      {...props}
+    >
+      {/* Football pitch */}
+      <rect x="2.5" y="4" width="15" height="16" rx="1" />
+      <line x1="10" y1="4" x2="10" y2="20" />
+      <circle cx="10" cy="12" r="2.5" />
+
+      {/* Penalty areas */}
+      <path d="M2.5 8h3v8h-3" />
+      <path d="M17.5 8h-3v8h3" />
+
+      {/* Management gear */}
+      <circle cx="19" cy="18" r="2.5" />
+      <path
+        d="M19 14.5v1M19 20.5v1M15.5 18h1M21.5 18h1"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}

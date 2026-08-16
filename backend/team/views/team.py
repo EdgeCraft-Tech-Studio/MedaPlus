@@ -138,11 +138,11 @@ class TeamViewSet(viewsets.GenericViewSet):
         if not membership or membership.role not in (
             MembershipRole.OWNER,
             MembershipRole.ADMIN,
+            MembershipRole.MEMBER,
         ):
             raise PermissionDenied(
                 "Only the team owner or an admin can view this dashboard."
             )
-
         serializer = TeamDetailSerializer(team, context=self.get_serializer_context())
         return Response(serializer.data)
 

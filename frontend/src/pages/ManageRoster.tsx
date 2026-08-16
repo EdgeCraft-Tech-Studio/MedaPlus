@@ -159,11 +159,13 @@ export default function ManageRoster({
         <button className={`${styles.subTab} ${subTab === "members" ? styles.subTabActive : ""}`} onClick={() => setSubTab("members")}>
           Active members
         </button>
-        <button className={`${styles.subTab} ${subTab === "invitations" ? styles.subTabActive : ""}`} onClick={() => setSubTab("invitations")}>
-          Invitations
-          {pendingInvites.length > 0 && <span className={styles.subTabCount}>{pendingInvites.length}</span>}
-        </button>
-        {team.visibility === "public" && (
+        {canManage && (
+          <button className={`${styles.subTab} ${subTab === "invitations" ? styles.subTabActive : ""}`} onClick={() => setSubTab("invitations")}>
+            Invitations
+            {pendingInvites.length > 0 && <span className={styles.subTabCount}>{pendingInvites.length}</span>}
+          </button>
+        )}
+        {canManage && team.visibility === "public" && (
           <button className={`${styles.subTab} ${subTab === "requests" ? styles.subTabActive : ""}`} onClick={() => setSubTab("requests")}>
             Join requests
             {pendingRequests.length > 0 && <span className={styles.subTabCount}>{pendingRequests.length}</span>}

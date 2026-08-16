@@ -53,14 +53,26 @@ export default function TeamDashboard() {
     try {
       const detail = await getTeamDashboard(currentSlug);
       setTeam(detail);
-      const [rosterData, invitesData, requestsData] = await Promise.all([
-        getRoster(currentSlug),
-        getInvitations(currentSlug),
-        getJoinRequests(currentSlug),
-      ]);
-      setRoster(rosterData);
-      setInvitations(invitesData);
-      setJoinRequests(requestsData);
+      const isManager = detail.my_role === "owner" || detail.my_role === "admin";
+
+      if (isManager) {
+        const [rosterData, invitesData, requestsData] = await Promise.all([
+          getRoster(currentSlug),
+          getInvitations(currentSlug),
+          getJoinRequests(currentSlug),
+        ]);
+        setRoster(rosterData);
+        setInvitations(invitesData);
+        setJoinRequests(requestsData);
+      } else {
+        // Members: only fetch the active roster. Invitations and join
+        // requests are owner/admin-only data — don't request them for
+        // a role that can't see or act on them.
+        const rosterData = await getRoster(currentSlug);
+        setRoster(rosterData);
+        setInvitations([]);
+        setJoinRequests([]);
+      }
     } catch (err) {
       setDenied(true);
       console.error("Failed to load team dashboard:", err);
@@ -85,15 +97,16 @@ export default function TeamDashboard() {
   const pendingInvitesCount = invitations.filter((i) => i.status === "pending").length;
   const pendingRequestsCount = joinRequests.filter((r) => r.status === "pending").length;
 
-  const tabs: { key: TabKey; label: string; icon: React.ComponentType<React.SVGProps<SVGSVGElement>>; count?: number; ownerOnly?: boolean }[] = [
+  const isManager = team.my_role === "owner" || team.my_role === "admin";
+
+  const tabs: { key: TabKey; label: string; icon: React.ComponentType<React.SVGProps<SVGSVGElement>>; count?: number; ownerOnly?: boolean; managerOnly?: boolean }[] = [
     { key: "overview", label: "Overview", icon: UsersIcon },
     { key: "roster", label: "Manage roster", icon: UsersIcon, count: pendingInvitesCount + pendingRequestsCount || undefined },
     { key: "matches", label: "Matches", icon: VersusIcon },
-    { key: "bookings", label: "Bookings", icon: MapPinIcon },
-    { key: "tournaments", label: "Tournaments", icon: TrophyIcon },
+    { key: "bookings", label: "Bookings", icon: MapPinIcon, managerOnly: true },
+    { key: "tournaments", label: "Tournaments", icon: TrophyIcon, managerOnly: true },
     { key: "settings", label: "Settings", icon: SettingsIcon, ownerOnly: true },
   ];
-
   function handleLocationClick() {
     // TODO: open map view / directions using team.latitude / team.longitude
   }
@@ -146,7 +159,10 @@ export default function TeamDashboard() {
 
       <div className={styles.tabBar}>
         <div className={styles.tabBarInner}>
-          {tabs.filter((t) => !t.ownerOnly || team.my_role === "owner").map((t) => {
+          {tabs
+            .filter((t) => !t.managerOnly || isManager)
+            .filter((t) => !t.ownerOnly || team.my_role === "owner")
+            .map((t) => {
             const Icon = t.icon;
             return (
               <button
@@ -174,7 +190,7 @@ export default function TeamDashboard() {
             roster={roster}
             invitations={invitations}
             joinRequests={joinRequests}
-            canManage={true}
+            canManage={isManager}
             slug={slug}
             onRosterChange={() => loadDashboard(slug)}
           />

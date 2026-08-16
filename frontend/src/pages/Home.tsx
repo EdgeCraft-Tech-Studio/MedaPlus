@@ -2,7 +2,8 @@ import { Link } from "react-router-dom";
 import { useEffect, useState } from "react";
 import styles from "./css/Home.module.css";
 import {
-  MapPinIcon, VersusIcon, UsersIcon, ChevronRightIcon, TrophyIcon,
+   VersusIcon, UsersIcon, ChevronRightIcon, TrophyIcon,
+   FootballPitchIcon,
 } from "./Icons";
 import { mockMatches, mockTournaments } from "./mockData";
 import { type TeamRole, type TournamentStatus } from "./types";
@@ -10,14 +11,16 @@ import type { SessionUser } from "../lib/session";
 import { me } from "../lib/auth";
 import { getMyTeams, type MyTeam } from "../lib/team";
 
-const quickActions = [
+const PITCH_OWNER_ROLE = "OWNER"; // ⚠️ set this to whatever value your backend's User.role field actually uses for a pitch owner
+
+const baseQuickActions = [
   { key: "match", to: "/match/create", accent: "match", icon: VersusIcon, label: "Make match" },
   { key: "createteam", to: "/team/create", accent: "team", icon: UsersIcon, label: "Create team" },
-  { key: "pitch", to: "/app", accent: "pitch", icon: MapPinIcon, label: "Manage pitch" },
-  { key: "match", to: "/match/create", accent: "match", icon: VersusIcon, label: "Make match" },
 ];
 
- 
+const pitchOwnerAction = {
+  key: "pitch", to: "/owner", accent: "pitch", icon: FootballPitchIcon, label: "Manage pitch",
+};
 
 
 const ROLE_LABEL: Record<TeamRole, string> = { OWNER: "Owner", ADMIN: "Admin", MEMBER: "Member" };
@@ -51,6 +54,9 @@ function getGreeting() {
 
 export default function Home() {
   const [user, setUser] = useState<SessionUser | null>(null);
+  const quickActions = user?.role === PITCH_OWNER_ROLE
+    ? [...baseQuickActions, pitchOwnerAction]
+    : baseQuickActions;
   const [teams, setTeams] = useState<MyTeam[]>([]);
   const [teamsLoading, setTeamsLoading] = useState(true);
   const [teamsError, setTeamsError] = useState(false);
