@@ -12,11 +12,13 @@ export default function JoinTeam() {
   const [manualCode, setManualCode] = useState("");
   const [invitation, setInvitation] = useState<InvitationPreview | null>(null);
   const [error, setError] = useState("");
+  const [logoFailed, setLogoFailed] = useState(false);
 
   function resetToCodeEntry() {
     setManualCode("");
     setInvitation(null);
     setError("");
+    setLogoFailed(false);
     setView("code_entry");
   }
 
@@ -30,6 +32,7 @@ export default function JoinTeam() {
     try {
       const result = await lookupInvitationByCode(code);
       setInvitation(result);
+      setLogoFailed(false);
       setView("preview");
     } catch (err) {
       console.error("Failed to look up invitation code:", err);
@@ -103,9 +106,15 @@ export default function JoinTeam() {
         {view === "preview" && invitation && (
           <>
             <span className={styles.teamLogo}>
-              {invitation.team.logo
-                ? <img src={invitation.team.logo} alt="" />
-                : invitation.team.name.split(" ").map((w) => w[0]).slice(0, 2).join("")}
+              {invitation.team.logo && !logoFailed ? (
+                <img
+                  src={invitation.team.logo}
+                  alt=""
+                  onError={() => setLogoFailed(true)}
+                />
+              ) : (
+                invitation.team.name.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase()
+              )}
             </span>
             <h1 className={styles.title}>Request to join</h1>
             <div className={styles.teamName}>{invitation.team.name}</div>

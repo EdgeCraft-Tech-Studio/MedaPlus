@@ -71,11 +71,10 @@
 /* ---------- header ---------- */
 
 .header {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  column-gap: 20px;
   padding-bottom: 22px;
   margin-bottom: 22px;
   border-bottom: 1px solid var(--border);
@@ -85,6 +84,8 @@
   display: flex;
   align-items: center;
   gap: 10px;
+  justify-self: start;
+  min-width: 0;
 }
 
 .brandMark {
@@ -93,7 +94,6 @@
   border-radius: 9px;
   background: var(--accent);
   color: #fff;
-  display: grid;
   display: none;
   place-items: center;
   flex-shrink: 0;
@@ -116,6 +116,7 @@
   font-size: 12.5px;
   color: var(--text-muted);
   margin-top: 1px;
+  white-space: nowrap;
 }
 
 .statPill {
@@ -126,6 +127,7 @@
   border-radius: 999px;
   background: var(--surface);
   border: 1px solid var(--border);
+  justify-self: end;
 }
 
 .statValue {
@@ -140,15 +142,7 @@
   color: var(--text-muted);
 }
 
-/* ---------- filter bar ---------- */
-
-.filterBar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin-bottom: 20px;
-}
+/* ---------- tabs (Map / Nearby / Top rated) ---------- */
 
 .tabRow {
   display: inline-flex;
@@ -158,10 +152,14 @@
   border: 1px solid var(--border);
   border-radius: 10px;
   flex-shrink: 0;
+  justify-self: center;
 }
 
 .tab {
-  padding: 7px 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 16px;
   border-radius: 7px;
   border: none;
   background: transparent;
@@ -171,6 +169,13 @@
   cursor: pointer;
   font-family: var(--font);
   transition: background 0.2s var(--ease), color 0.2s var(--ease), box-shadow 0.2s var(--ease);
+  white-space: nowrap;
+}
+
+.tabIcon {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
 }
 
 .tab:hover {
@@ -179,118 +184,211 @@
 
 .tabActive {
   background: var(--surface);
-  color: var(--text);
+  color: var(--accent-hover);
   box-shadow: var(--shadow-sm);
   font-weight: 600;
 }
 
-.searchWrap {
-  position: relative;
-  flex: 1;
-  min-width: 200px;
+/* ---------- filter bar ----------
+   A single pill-shaped, minimal control strip, centered on the page,
+   with hairline dividers instead of separate boxed inputs. Only shown
+   for the "nearby" and "best" tabs. */
+
+.filterZone {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 24px;
+}
+
+.filterBar {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  box-shadow: var(--shadow-sm);
+  max-width: 100%;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.divider {
+  width: 1px;
+  height: 22px;
+  background: var(--border);
+  flex-shrink: 0;
+}
+
+/* search: compact, grows only as much as needed, no dead space */
+
+.searchField {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 6px 7px 12px;
+  border-radius: 999px;
+  min-width: 0;
+  transition: background 0.15s ease;
+}
+
+.searchField:focus-within {
+  background: var(--surface-alt);
 }
 
 .searchIcon {
-  position: absolute;
-  left: 11px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 15px;
-  height: 15px;
+  width: 14px;
+  height: 14px;
   color: var(--text-faint);
-  pointer-events: none;
+  flex-shrink: 0;
 }
 
 .searchInput {
-  width: 100%;
-  padding: 8.5px 12px 8.5px 32px;
-}
-
-.input {
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--text);
-  font-size: 13.5px;
-  font-family: var(--font);
+  border: none;
+  background: transparent;
   outline: none;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  font-family: var(--font);
+  font-size: 13.5px;
+  color: var(--text);
+  width: 148px;
+  padding: 0;
 }
 
-.input:not(.searchInput) {
-  padding: 8.5px 12px;
-}
-
-.input:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-soft);
-}
-
-.input::placeholder {
+.searchInput::placeholder {
   color: var(--text-faint);
 }
 
-.priceInput {
-  width: 118px;
-  flex-shrink: 0;
-}
-
-.amenities {
-  display: flex;
-  gap: 6px;
-  flex-shrink: 0;
-}
-
-.amenityChip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 11px;
+.searchClear {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
   border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--surface);
+  border: none;
+  background: var(--surface-alt);
   color: var(--text-muted);
-  font-size: 12.5px;
-  font-weight: 500;
   cursor: pointer;
-  user-select: none;
-  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
-  white-space: nowrap;
+  flex-shrink: 0;
+  padding: 0;
 }
 
-.amenityChip:hover {
-  border-color: var(--border-strong);
+.searchClear svg {
+  width: 10px;
+  height: 10px;
+}
+
+.searchClear:hover {
+  background: var(--border);
   color: var(--text);
 }
 
-.amenityChip:has(:checked) {
-  border-color: var(--accent);
+/* max price: label + tight numeric field, no giant empty box */
+
+.priceField {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  transition: background 0.15s ease;
+}
+
+.priceField:focus-within {
+  background: var(--surface-alt);
+}
+
+.priceLabel {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.priceInput {
+  border: none;
+  background: transparent;
+  outline: none;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  width: 56px;
+  padding: 0;
+}
+
+.priceInput::placeholder {
+  font-family: var(--font);
+  font-weight: 400;
+  color: var(--text-faint);
+}
+
+/* amenities: icon-first compact toggles, label only shows on hover/active
+   via width transition so the whole bar stays tight */
+
+.amenityGroup {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 4px;
+}
+
+.amenityToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 9px;
+  border-radius: 999px;
+  border: none;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-family: var(--font);
+  font-size: 12.5px;
+  font-weight: 500;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.amenityToggleIcon {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+}
+
+.amenityToggleLabel {
+  display: none;
+  white-space: nowrap;
+}
+
+.amenityToggle:hover {
+  background: var(--surface-alt);
+  color: var(--text-muted);
+}
+
+.amenityToggleOn {
   background: var(--accent-soft);
   color: var(--accent-hover);
 }
 
-.amenityIcon {
-  width: 13.5px;
-  height: 13.5px;
-  flex-shrink: 0;
+.amenityToggleOn:hover {
+  background: var(--accent-soft);
+  color: var(--accent-hover);
 }
 
-.checkbox {
-  position: absolute;
-  opacity: 0;
-  width: 0;
-  height: 0;
-  pointer-events: none;
+.amenityToggleOn .amenityToggleLabel {
+  display: inline;
 }
+
+/* clear: quiet text action at the end of the pill */
 
 .clearBtn {
-  padding: 8.5px 14px;
-  border-radius: var(--radius-sm);
-  border: 1px solid transparent;
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: none;
   background: transparent;
   color: var(--text-muted);
   font-weight: 500;
-  font-size: 13px;
+  font-size: 12.5px;
   cursor: pointer;
   font-family: var(--font);
   flex-shrink: 0;
@@ -337,6 +435,7 @@
   margin-top: 10px;
   font-size: 12.5px;
   color: var(--text-faint);
+  text-align: center;
 }
 
 .cardGrid {
@@ -391,7 +490,6 @@
   transform: translateY(-1px) scale(0.99);
 }
 
-/* Card image — matches the Admin page's sizing. */
 .cardImage {
   height: clamp(180px, 20vw, 200px);
   background: var(--surface-alt);
@@ -457,9 +555,6 @@
   margin-top: 1.5px;
   color: var(--text-faint);
 }
-
-/* ---------- short-description card mechanism (hours/prices + amenity tags),
-   same pattern used on the Admin/Owner listing cards ---------- */
 
 .metaGrid {
   display: grid;
@@ -601,22 +696,51 @@
     padding: 20px 16px 40px;
   }
 
+  .header {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    text-align: center;
+    row-gap: 12px;
+  }
+
+  .headerLeft {
+    justify-self: center;
+  }
+
+  .statPill {
+    justify-self: center;
+  }
+
   .filterBar {
-    flex-direction: column;
-    align-items: stretch;
+    border-radius: var(--radius-lg);
+    width: 100%;
   }
 
-  .searchWrap {
-    order: 1;
-  }
-
-  .tabRow {
+  .searchField {
+    flex: 1 1 100%;
     order: 0;
   }
 
-  .amenities {
+  .searchInput {
+    width: 100%;
+  }
+
+  .divider {
+    display: none;
+  }
+
+  .priceField {
+    order: 1;
+  }
+
+  .amenityGroup {
     order: 2;
     flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .clearBtn {
+    order: 3;
   }
 }
 

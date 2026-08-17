@@ -421,3 +421,42 @@ export function PitchManagementIcon(props: React.SVGProps<SVGSVGElement>) {
     </svg>
   );
 }
+
+export function EditIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      {...props}
+    >
+      <path
+        d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17v3z"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path d="m13.5 7.5 3 3" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function TrashIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      {...props}
+    >
+      <path d="M4 7h16" strokeLinecap="round" />
+      <path d="M10 11v5M14 11v5" strokeLinecap="round" />
+      <path
+        d="M6 7l1 13h10l1-13M9 7V4h6v3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}

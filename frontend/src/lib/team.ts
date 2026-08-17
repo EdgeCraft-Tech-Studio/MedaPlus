@@ -23,6 +23,10 @@ export async function createTeam(payload: CreateTeamPayload) {
       if (value) form.append("logo", value as File);
       return;
     }
+    if (key === "preferred_days") {
+      form.append(key, JSON.stringify(value ?? []));
+      return;
+    }
     if (Array.isArray(value)) {
       value.forEach((v) => form.append(key, v));
     } else if (value !== "" && value !== null && value !== undefined) {
@@ -35,6 +39,7 @@ export async function createTeam(payload: CreateTeamPayload) {
   });
   return res.data as { slug: string; id: string; name: string };
 }
+
 
 // ---------- My teams list ----------
 
@@ -211,13 +216,31 @@ export async function rejectJoinRequest(slug: string, requestId: string) {
   await api.post(`/teams/${slug}/join-requests/${requestId}/reject/`);
 }
 
-export async function createLinkInvitation(slug: string): Promise<TeamInvitationItem> {
-  const res = await api.post(`/teams/${slug}/invitations/link/`);
+// replace createLinkInvitation / createCodeInvitation with these:
+
+export interface CreateInvitationPayload {
+  expires_in_days: number; // 1–3, required
+  max_uses?: number | null;
+}
+
+export async function createLinkInvitation(slug: string, payload: CreateInvitationPayload): Promise<TeamInvitationItem> {
+  const res = await api.post(`/teams/${slug}/invitations/link/`, payload);
   return res.data;
 }
 
-export async function createCodeInvitation(slug: string): Promise<TeamInvitationItem> {
-  const res = await api.post(`/teams/${slug}/invitations/code/`);
+export async function createCodeInvitation(slug: string, payload: CreateInvitationPayload): Promise<TeamInvitationItem> {
+  const res = await api.post(`/teams/${slug}/invitations/code/`, payload);
+  return res.data;
+}
+
+export interface UpdateInvitationPayload {
+  max_uses?: number | null;
+  expires_in_days?: number;
+  regenerate?: boolean;
+}
+
+export async function updateInvitation(slug: string, inviteId: string, payload: UpdateInvitationPayload): Promise<TeamInvitationItem> {
+  const res = await api.patch(`/teams/${slug}/invitations/${inviteId}/update/`, payload);
   return res.data;
 }
 

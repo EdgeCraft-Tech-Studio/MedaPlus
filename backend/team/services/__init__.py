@@ -8,6 +8,7 @@ from .invitation_service import (
     decline_invitation,
     get_invitation_by_code,
     get_invitation_by_token,
+    update_invitation,
 )
 from .join_request_service import (
     approve_join_request,

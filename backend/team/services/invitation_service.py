@@ -182,6 +182,56 @@ def decline_invitation(*, invitation: TeamInvitation, declining_user) -> TeamInv
     return invitation
 
 
+
+@transaction.atomic
+def update_invitation(
+    *,
+    invitation: TeamInvitation,
+    updated_by,
+    max_uses: Optional[int],
+    expires_in: timedelta,
+    regenerate: bool = False,
+) -> TeamInvitation:
+    """Edits an existing LINK/CODE invitation's expiry/capacity, and
+    optionally regenerates its token/code. Regenerating invalidates
+    the previous value immediately and resets redemption_count to 0,
+    since a freshly generated code/link starts its usage count over.
+
+    Locks the invitation row for the duration of this transaction so
+    a regenerate can't interleave with someone redeeming the invite
+    at the same moment — same rationale as accept_invitation's lock.
+    """
+    _require_management_permission(invitation.team, updated_by)
+
+    locked = TeamInvitation.objects.select_for_update().get(pk=invitation.pk)
+
+    if locked.invitation_type not in (InvitationType.LINK, InvitationType.CODE):
+        raise InvitationNotRedeemableError("Only link and code invitations can be edited.")
+
+    if not locked.is_pending or locked.is_expired:
+        raise InvitationNotRedeemableError(
+            "This invitation is no longer active and cannot be edited."
+        )
+
+    fields = ["max_uses", "expires_at"]
+    locked.max_uses = max_uses
+    locked.expires_at = timezone.now() + expires_in
+
+    if regenerate:
+        if locked.invitation_type == InvitationType.LINK:
+            locked.token = generate_invite_token()
+            fields.append("token")
+        else:
+            prefix = slugify(locked.team.name)[:10].upper().replace("-", "")
+            locked.code = f"{prefix}-{generate_join_code()}"
+            fields.append("code")
+        locked.redemption_count = 0
+        fields.append("redemption_count")
+
+    locked.save(update_fields=fields)
+    return locked
+
+
 def cancel_invitation(*, invitation: TeamInvitation, cancelled_by) -> TeamInvitation:
     _require_management_permission(invitation.team, cancelled_by)
     if not invitation.is_pending:

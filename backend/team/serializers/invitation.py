@@ -95,18 +95,23 @@ class TeamLinkInvitationCreateSerializer(serializers.Serializer):
     """
 
     max_uses = serializers.IntegerField(required=False, min_value=1, allow_null=True)
-    expires_in_days = serializers.IntegerField(
-        required=False, min_value=1, max_value=MAX_INVITATION_TTL.days
-    )
+    expires_in_days = serializers.IntegerField(required=True, min_value=1, max_value=3)
 
 
 class TeamCodeInvitationCreateSerializer(serializers.Serializer):
     """Input for Method 4 — a short human-typeable join code (§14)."""
 
     max_uses = serializers.IntegerField(required=False, min_value=1, allow_null=True)
-    expires_in_days = serializers.IntegerField(
-        required=False, min_value=1, max_value=MAX_INVITATION_TTL.days
-    )
+    expires_in_days = serializers.IntegerField(required=True, min_value=1, max_value=3)
+
+class TeamInvitationUpdateSerializer(serializers.Serializer):
+    """Input for editing an existing LINK/CODE invitation — expiry,
+    usage cap, and optionally regenerating the token/code itself
+    (invalidating the old one immediately)."""
+
+    max_uses = serializers.IntegerField(required=False, min_value=1, allow_null=True)
+    expires_in_days = serializers.IntegerField(required=False, min_value=1, max_value=3)
+    regenerate = serializers.BooleanField(required=False, default=False)
 
 
 class InvitationRedeemByCodeSerializer(serializers.Serializer):

@@ -145,7 +145,12 @@ invitation_urlpatterns = [
         InvitationByCodeView.as_view(),
         name="invitation-by-code",
     ),
-]
+    path( 
+    "teams/<slug:team_slug>/invitations/<uuid:pk>/update/",
+    TeamInvitationManagementViewSet.as_view({"patch": "update_invitation"}),
+    name="invitation-update",
+),
+] 
 
 join_request_urlpatterns = [
     path(

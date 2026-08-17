@@ -1,6 +1,11 @@
 from datetime import timedelta
 from typing import Optional
 
+from django.utils import timezone
+from ..models.invitation import generate_invite_token, generate_join_code, InvitationType
+
+
+
 from django.shortcuts import get_object_or_404
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -11,7 +16,7 @@ from rest_framework.views import APIView
 
 from team.serializers.join_request import TeamJoinRequestSerializer
 from team.services.join_request_service import create_join_request
-from team.serializers.invitation import InvitationPreviewSerializer, JoinRequestViaCodeSerializer
+from team.serializers.invitation import InvitationPreviewSerializer, JoinRequestViaCodeSerializer, TeamInvitationUpdateSerializer
 
 from ..models import TeamInvitation
 from team.pagination import DefaultPagination
@@ -21,7 +26,7 @@ from ..serializers import (
     TeamCodeInvitationCreateSerializer,
     TeamDirectInvitationCreateSerializer,
     TeamInvitationSerializer,
-    TeamInvitationShareSerializer,
+    TeamInvitationShareSerializer, 
     TeamLinkInvitationCreateSerializer,
 )
 from ..services import (
@@ -33,10 +38,27 @@ from ..services import (
     decline_invitation,
     get_invitation_by_code,
     get_invitation_by_token,
+    update_invitation as update_invitation_service,
 )
 from ..services.exceptions import InsufficientPermissionError
 from .throttling import CodeRedemptionThrottle, InvitationCreateThrottle
 from .mixins import TeamLookupMixin
+
+
+from rest_framework.exceptions import ValidationError
+
+def _check_max_uses_not_below_redemptions(invitation, max_uses):
+    if max_uses is not None and max_uses < invitation.redemption_count:
+        raise ValidationError({
+            "max_uses": f"Cannot be less than the current redemption count ({invitation.redemption_count})."
+        })
+
+
+def _check_max_uses_within_capacity(team, max_uses):
+    if max_uses is not None and max_uses > team.available_slots:
+        raise ValidationError({
+            "max_uses": f"Cannot exceed available roster slots ({team.available_slots})."
+        })
 
 
 def _expires_in(validated_data) -> Optional[timedelta]:
@@ -111,38 +133,59 @@ class TeamInvitationManagementViewSet(TeamLookupMixin, viewsets.GenericViewSet):
         team = self.get_team()
         serializer = TeamLinkInvitationCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        _check_max_uses_within_capacity(team, serializer.validated_data.get("max_uses"))
         invitation = create_link_invitation(
             team=team,
             invited_by=request.user,
+            max_uses=serializer.validated_data.get("max_uses"),
             expires_in=_expires_in(serializer.validated_data),
         )
-        # Returned with the token exposed (TeamInvitationShareSerializer)
-        # because the caller — who just created it — is the only
-        # person who should see it. See that serializer's docstring.
-        return Response(
-            TeamInvitationShareSerializer(invitation).data, status=status.HTTP_201_CREATED
-        )
+        return Response(TeamInvitationShareSerializer(invitation).data, status=status.HTTP_201_CREATED)
 
     @action(detail=False, methods=["post"], url_path="code", throttle_classes=[InvitationCreateThrottle])
     def create_code(self, request, *args, **kwargs):
         team = self.get_team()
         serializer = TeamCodeInvitationCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        _check_max_uses_within_capacity(team, serializer.validated_data.get("max_uses"))
         invitation = create_code_invitation(
             team=team,
             invited_by=request.user,
+            max_uses=serializer.validated_data.get("max_uses"),
             expires_in=_expires_in(serializer.validated_data),
         )
-        return Response(
-            TeamInvitationShareSerializer(invitation).data, status=status.HTTP_201_CREATED
-        )
+        return Response(TeamInvitationShareSerializer(invitation).data, status=status.HTTP_201_CREATED)
 
+  
     @action(detail=True, methods=["post"])
     def cancel(self, request, *args, **kwargs):
         invitation = get_object_or_404(self.get_queryset(), pk=kwargs["pk"])
         cancel_invitation(invitation=invitation, cancelled_by=request.user)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
+    @action(detail=True, methods=["patch"], url_path="update")
+    def update_invitation(self, request, *args, **kwargs):
+        invitation = get_object_or_404(self.get_queryset(), pk=kwargs["pk"])
+
+        if invitation.invitation_type not in (InvitationType.LINK, InvitationType.CODE):
+            raise ValidationError({"detail": "Only link and code invitations can be edited."})
+
+        serializer = TeamInvitationUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        team = self.get_team()
+        _check_max_uses_within_capacity(team, data.get("max_uses"))
+        _check_max_uses_not_below_redemptions(invitation, data.get("max_uses"))
+
+        updated = update_invitation_service(
+            invitation=invitation,
+            updated_by=request.user,
+            max_uses=data.get("max_uses"),
+            expires_in=timedelta(days=data["expires_in_days"]),
+            regenerate=data.get("regenerate", False),
+        )
+        return Response(TeamInvitationShareSerializer(updated).data)
 
 class MyInvitationsView(viewsets.ReadOnlyModelViewSet):
     """GET /invitations/my/ — DIRECT invitations addressed to the

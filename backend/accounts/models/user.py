@@ -78,7 +78,7 @@ class UserManager(BaseUserManager):
         return user
 
     
-    def create_super_user(self, username, first_name, last_name, phone, password, **extra_fields):
+    def create_superuser(self, username, first_name, last_name, phone, password, **extra_fields):
         """Create and save a superuser"""
         extra_fields.setdefault('role', UserRole.ADMIN)
         extra_fields.setdefault('is_approved', True)

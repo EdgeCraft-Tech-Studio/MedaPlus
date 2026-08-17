@@ -145,7 +145,14 @@ export async function listPendingOwners() {
     last_name: string;
     phone: string;
     email: string;
+    profile_photo: string | null; // ⚠️ backend must add this field
   }>;
+}
+
+export async function declineOwner(ownerId: string) {
+  
+  const res = await api.post(`/admin/owners/${ownerId}/decline/`);
+  return res.data;
 }
 
 export async function listOwners() {

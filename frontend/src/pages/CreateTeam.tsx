@@ -31,12 +31,13 @@ const PLAY_TIMES = [
   { value: "evening", label: "Evening (5–10)" },
 ];
 
+
 const AGE_CATEGORIES = [
-  { value: "", label: "No preference" },
+  { value: "open", label: "Open" },
   { value: "u18", label: "Under 18" },
-  { value: "18-30", label: "18–30" },
-  { value: "30+", label: "30 and above" },
-  { value: "veterans", label: "Veterans (35+)" },
+  { value: "u21", label: "Under 21" },
+  { value: "adult", label: "Adult" },
+  { value: "other", label: "Other" },
 ];
 
 const VISIBILITY = [
@@ -62,9 +63,9 @@ interface FormState {
 }
 
 const initialState: FormState = {
-  name: "", logo: null,logoFile: null, description: "", sport: "", sportOther: "",
+  name: "", logo: null, logoFile: null, description: "", sport: "", sportOther: "",
   homeArea: "", skillLevel: "", preferredDays: [], playTime: "",
-  ageCategory: "", capacity: "", visibility: "public",
+  ageCategory: "open", capacity: "", visibility: "public",
 };
 
 export default function CreateTeam() {

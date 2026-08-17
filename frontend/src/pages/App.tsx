@@ -1,24 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { MapContainer, Marker, TileLayer } from "react-leaflet";
 import type { Pitch } from "../lib/pitches";
 import { listPitches } from "../lib/pitches";
 import styles from "./css/Dashboard.module.css";
 import LoadingBall from "./LoadingBall";
-import { logout } from "../lib/auth";
 
 type TabKey = "map" | "nearby" | "best";
 
 const ADDIS_ABABA = { lat: 8.9806, lng: 38.7578 };
 
 
-function ArrowLeftIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" {...props}>
-      <path d="M19 12H5M11 6l-6 6 6 6" />
-    </svg>
-  );
-}
 
 function distanceKm(aLat: number, aLng: number, bLat: number, bLng: number) {
   const R = 6371;
@@ -110,6 +102,14 @@ function SearchIcon(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
+function CloseIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" {...props}>
+      <path d="M6 6l12 12M18 6L6 18" />
+    </svg>
+  );
+}
+
 function ShirtIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" {...props}>
@@ -183,6 +183,34 @@ function PinIcon(props: React.SVGProps<SVGSVGElement>) {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" {...props}>
       <path d="M12 21s7-6.1 7-11.5A7 7 0 105 9.5C5 14.9 12 21 12 21z" />
       <circle cx="12" cy="9.5" r="2.3" />
+    </svg>
+  );
+}
+
+/* ---------- tab icons ---------- */
+
+function MapTabIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" {...props}>
+      <path d="M9 4.5 4 6.5v13l5-2 6 2 5-2v-13l-5 2-6-2z" strokeLinejoin="round" />
+      <path d="M9 4.5v13M15 6.5v13" />
+    </svg>
+  );
+}
+
+function NearbyTabIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" {...props}>
+      <path d="M12 21s7-6.1 7-11.5A7 7 0 105 9.5C5 14.9 12 21 12 21z" />
+      <circle cx="12" cy="9.5" r="2.3" />
+    </svg>
+  );
+}
+
+function TopRatedTabIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" {...props}>
+      <path d="M12 3.5l2.47 5.13 5.53.8-4 4 .94 5.57L12 16.4l-4.94 2.6.94-5.57-4-4 5.53-.8L12 3.5z" />
     </svg>
   );
 }
@@ -271,6 +299,17 @@ function PitchCard({
   );
 }
 
+const AMENITY_DEFS: Array<{
+  key: "dressing" | "showers" | "parking" | "lighting";
+  label: string;
+  icon: (p: React.SVGProps<SVGSVGElement>) => React.ReactElement;
+}> = [
+  { key: "dressing", label: "Dressing room", icon: ShirtIcon },
+  { key: "showers", label: "Showers", icon: ShowerIcon },
+  { key: "parking", label: "Parking", icon: ParkingIcon },
+  { key: "lighting", label: "Lighting", icon: LightIcon },
+];
+
 export default function App() {
   const navigate = useNavigate();
 
@@ -355,10 +394,29 @@ export default function App() {
     navigate(`/app/pitches/${pitchId}`);
   }
 
-   async function handleLogout() {
-        await logout();
-        navigate("/login", { replace: true });
-      }
+   
+
+  const TABS: { key: TabKey; label: string; icon: (p: React.SVGProps<SVGSVGElement>) => React.ReactElement }[] = [
+    { key: "map", label: "Map", icon: MapTabIcon },
+    { key: "nearby", label: "Nearby", icon: NearbyTabIcon },
+    { key: "best", label: "Top rated", icon: TopRatedTabIcon },
+  ];
+
+  const showFilters = tab !== "map";
+  const hasActiveFilters =
+    search.trim() !== "" ||
+    maxPrice.trim() !== "" ||
+    Object.values(amenities).some(Boolean);
+
+  function toggleAmenity(key: keyof typeof amenities) {
+    setAmenities((prev) => ({ ...prev, [key]: !prev[key] }));
+  }
+
+  function clearFilters() {
+    setSearch("");
+    setMaxPrice("");
+    setAmenities({ dressing: false, showers: false, parking: false, lighting: false });
+  }
 
   return (
     <div>
@@ -366,15 +424,25 @@ export default function App() {
       <div className={styles.shell}>
         <div className={styles.header}>
           <div className={styles.headerLeft}>
-            <div className={styles.brandMark}>
-              <LogoIcon />
-            </div>
             <div>
               <div className={styles.title}>Pitch Finder</div>
               <div className={styles.subtitle}>
-                Search, compare, and book a game near you
+                compare and book a game near you
               </div>
             </div>
+          </div>
+
+          <div className={styles.tabRow}>
+            {TABS.map(({ key, label, icon: TabIcon }) => (
+              <button
+                key={key}
+                onClick={() => setTab(key)}
+                className={`${styles.tab} ${tab === key ? styles.tabActive : ""}`}
+              >
+                <TabIcon className={styles.tabIcon} />
+                {label}
+              </button>
+            ))}
           </div>
 
           <div className={styles.statPill}>
@@ -383,103 +451,71 @@ export default function App() {
           </div>
         </div>
 
-        <div className={styles.filterBar}>
-          <div className={styles.tabRow}>
-            {(["map", "nearby", "best"] as TabKey[]).map((key) => (
-              <button
-                key={key}
-                onClick={() => setTab(key)}
-                className={`${styles.tab} ${tab === key ? styles.tabActive : ""}`}
-              >
-                {key === "map" ? "Map" : key === "nearby" ? "Nearby" : "Top rated"}
-              </button>
-            ))}
+        {showFilters && (
+          <div className={styles.filterZone}>
+            <div className={styles.filterBar}>
+              <div className={styles.searchField}>
+                <SearchIcon className={styles.searchIcon} />
+                <input
+                  className={styles.searchInput}
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search pitches"
+                />
+                {search && (
+                  <button
+                    type="button"
+                    className={styles.searchClear}
+                    onClick={() => setSearch("")}
+                    aria-label="Clear search"
+                  >
+                    <CloseIcon />
+                  </button>
+                )}
+              </div>
+
+              <div className={styles.divider} />
+
+              <div className={styles.priceField}>
+                <span className={styles.priceLabel}>Max price</span>
+                <input
+                  className={styles.priceInput}
+                  value={maxPrice}
+                  onChange={(e) => setMaxPrice(e.target.value)}
+                  placeholder="Any"
+                  inputMode="numeric"
+                />
+              </div>
+
+              <div className={styles.divider} />
+
+              <div className={styles.amenityGroup}>
+                {AMENITY_DEFS.map(({ key, label, icon: AIcon }) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => toggleAmenity(key)}
+                    className={`${styles.amenityToggle} ${amenities[key] ? styles.amenityToggleOn : ""}`}
+                    title={label}
+                    aria-pressed={amenities[key]}
+                  >
+                    <AIcon className={styles.amenityToggleIcon} />
+                    <span className={styles.amenityToggleLabel}>{label}</span>
+                  </button>
+                ))}
+              </div>
+
+              {hasActiveFilters && (
+                <>
+                  <div className={styles.divider} />
+                  <button className={styles.clearBtn} onClick={clearFilters}>
+                    Clear
+                  </button>
+                </>
+              )}
+            </div>
           </div>
-
-          <div className={styles.searchWrap}>
-            <SearchIcon className={styles.searchIcon} />
-            <input
-              className={`${styles.input} ${styles.searchInput}`}
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by pitch name or address"
-            />
-          </div>
-
-          <input
-            className={`${styles.input} ${styles.priceInput}`}
-            value={maxPrice}
-            onChange={(e) => setMaxPrice(e.target.value)}
-            placeholder="Max price"
-          />
-
-          <div className={styles.amenities}>
-            <label className={styles.amenityChip}>
-              <input
-                className={styles.checkbox}
-                type="checkbox"
-                checked={amenities.dressing}
-                onChange={(e) =>
-                  setAmenities((prev) => ({ ...prev, dressing: e.target.checked }))
-                }
-              />
-              <ShirtIcon className={styles.amenityIcon} />
-              Dressing room
-            </label>
-            <label className={styles.amenityChip}>
-              <input
-                className={styles.checkbox}
-                type="checkbox"
-                checked={amenities.showers}
-                onChange={(e) =>
-                  setAmenities((prev) => ({ ...prev, showers: e.target.checked }))
-                }
-              />
-              <ShowerIcon className={styles.amenityIcon} />
-              Showers
-            </label>
-            <label className={styles.amenityChip}>
-              <input
-                className={styles.checkbox}
-                type="checkbox"
-                checked={amenities.parking}
-                onChange={(e) =>
-                  setAmenities((prev) => ({ ...prev, parking: e.target.checked }))
-                }
-              />
-              <ParkingIcon className={styles.amenityIcon} />
-              Parking
-            </label>
-            <label className={styles.amenityChip}>
-              <input
-                className={styles.checkbox}
-                type="checkbox"
-                checked={amenities.lighting}
-                onChange={(e) =>
-                  setAmenities((prev) => ({ ...prev, lighting: e.target.checked }))
-                }
-              />
-              <LightIcon className={styles.amenityIcon} />
-              Lighting
-            </label>
-          </div>
-
-          <button
-            className={styles.clearBtn}
-            onClick={() => {
-              setSearch("");
-              setMaxPrice("");
-              setAmenities({
-                dressing: false,
-                showers: false,
-                parking: false,
-                lighting: false,
-              });
-            }}
-          >
-            Clear filters
-          </button>
-        </div>
+        )}
 
         <div className={styles.content}>
           {loading ? (

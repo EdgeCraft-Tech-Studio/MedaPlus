@@ -104,6 +104,8 @@ class UserSerializer(serializers.ModelSerializer):
 
             # photo
             'profile_photo_url',
+            
+            'is_approved',
 
             # account state
             'active',

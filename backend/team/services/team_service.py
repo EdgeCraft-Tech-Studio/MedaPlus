@@ -3,6 +3,7 @@ from django.db import transaction
 from ..models import MembershipRole, MembershipSource, MembershipStatus, Team, TeamMembership
 
 
+
 @transaction.atomic
 def create_team(
     *,
@@ -15,6 +16,8 @@ def create_team(
     city: str = "",
     skill_level: str = "",
     age_category: str = None,
+    preferred_days: list | None = None,
+    play_time: str = "",
     max_roster_size: int = None,
     logo=None,
 ) -> Team:
@@ -32,6 +35,10 @@ def create_team(
         team_kwargs["max_roster_size"] = max_roster_size
     if age_category is not None:
         team_kwargs["age_category"] = age_category
+    if preferred_days is not None:
+        team_kwargs["preferred_days"] = preferred_days
+    if play_time:
+        team_kwargs["play_time"] = play_time
 
     team = Team.objects.create(
         description=description,

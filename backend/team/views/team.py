@@ -22,6 +22,7 @@ from .permissions import IsTeamOwner
 
 
 class TeamViewSet(viewsets.GenericViewSet):
+
     """
     list        GET    /teams/                       — public discovery
     create      POST   /teams/                        — create a team
@@ -184,3 +185,5 @@ class TeamViewSet(viewsets.GenericViewSet):
         from ..serializers import TeamMembershipSerializer
 
         return Response(TeamMembershipSerializer(new_membership).data) 
+
+    

@@ -37,7 +37,7 @@ export default function TeamsPage() {
           <h1 className={styles.heroTitle}>Teams</h1>
         </div>
         <div className={styles.heroActions}>
-          <Link to="/discover/teams" className={styles.btnGhost}>
+          <Link to="/discover" className={styles.btnGhost}>
             <SearchIcon width={15} height={15} />
             Find teams
           </Link>
@@ -69,11 +69,37 @@ export default function TeamsPage() {
         </div>
       ) : teams.length === 0 ? (
         <div className={styles.empty}>
-          <p>You haven't joined a team yet.</p>
-          <Link to="/team/create" className={styles.btnPrimary}>
-            <PlusIcon width={15} height={15} />
-            Create team
-          </Link>
+          <div className={styles.emptyIcon}>
+            <UsersIcon width={28} height={28} />
+          </div>
+
+          <h2 className={styles.emptyTitle}>Build your team</h2>
+
+          <p className={styles.emptyText}>
+            Create your own team or join an existing one to start playing.
+          </p>
+
+          <div className={styles.emptyActions}>
+            <Link to="/team/create" className={styles.createTeamBtn}>
+              <span className={styles.btnIcon}>
+                <PlusIcon width={16} height={16} />
+              </span>
+              <span>
+                <strong>Create a team</strong>
+                <small>Start your own squad</small>
+              </span>
+            </Link>
+
+            <Link to="/join" className={styles.joinTeamBtn}>
+              <span className={styles.btnIcon}>
+                <UsersIcon width={16} height={16} />
+              </span>
+              <span>
+                <strong>Join a team</strong>
+                <small>Find your next squad</small>
+              </span>
+            </Link>
+          </div>
         </div>
       ) : filtered.length === 0 ? (
         <div className={styles.empty}>

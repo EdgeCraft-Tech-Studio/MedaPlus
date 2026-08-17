@@ -13,7 +13,7 @@ import type { SessionUser } from "../lib/session";
 
 const NAV_ITEMS = [
   { to: "/home", label: "Home", icon: HomeIcon, end: true },
-  { to: "/teams", label: "Teams", icon: UsersIcon },
+  { to: "/teams", label: "My Teams", icon: UsersIcon },
   { to: "/app", label: "pitchs", icon: FootballPitchIcon },
   { to: "/discover", label: "Discover", icon: CompassIcon },
   { to: "/profile", label: "Profile", icon: UserCircleIcon },

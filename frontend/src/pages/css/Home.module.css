@@ -1,63 +1,88 @@
 .page {
-  --green-900: #0e2f24;
-  --green-800: #123c2d;
-  --green-700: #16513f;
-  --grass: #3fae7f;
-  --grass-bright: #4fd897;
-  --grass-soft: #e6f5ee;
+  --ink: #14181a;
+  --muted: #6b7278;
+  --faint: #a3a9ad;
+  --line: #e7e8ea;
+  --paper: #fafafa;
+  --card: #ffffff;
 
-  --c-team: #2f5d8a; --c-team-soft: #eaf1f8;
-  --c-match: #b3352f; --c-match-soft: #fbeceb;
-  --c-pitch: #2f8a5e; --c-pitch-soft: #e6f5ee;
-  --c-tournament: #c9942a; --c-tournament-soft: #fbf1dd;
-  --c-findteam: #6a4fae; --c-findteam-soft: #f0ecfa;
+  --brand: #1f8a5f;
+  --brand-soft: #eaf5f0;
+  --brand-dark: #14231d;
 
-  --ink: #0e1712;
-  --muted: #6b7a72;
-  --faint: #b7c2bb;
-  --line: #ece9df;
+  --danger: #c0392b;
+  --danger-soft: #fbeceb;
+  --amber: #a9752c;
+  --amber-soft: #f6efe2;
+
   --font-mono: 'IBM Plex Mono', monospace;
 
   max-width: 1080px;
   margin: 0 auto;
-  padding: clamp(20px, 4vw, 36px) clamp(16px, 4vw, 32px) 40px;
+  padding: clamp(24px, 4vw, 40px) clamp(16px, 4vw, 32px) 48px;
+  color: var(--ink);
 }
 
 * { box-sizing: border-box; }
 
-.hero { margin-bottom: clamp(24px, 4vw, 36px); }
+/* ---------------- HERO ---------------- */
+
+.hero { margin-bottom: clamp(28px, 4.5vw, 40px); }
+
+.heroTop { margin-bottom: 20px; }
 
 .eyebrow {
   display: block;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--grass);
-  font-weight: 700;
+  font-size: 12.5px;
+  color: var(--muted);
+  font-weight: 500;
   margin-bottom: 4px;
 }
 
 .heroTitle {
-  font-size: clamp(22px, 3vw, 28px);
-  font-weight: 800;
+  font-size: clamp(22px, 3vw, 27px);
+  font-weight: 650;
   letter-spacing: -0.02em;
+  color: var(--ink);
 }
 
+.snapshotRow {
+  display: flex;
+  align-items: center;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 16px 20px;
+}
 
-.section { margin-bottom: clamp(28px, 4.5vw, 40px); }
+.snapshotItem { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+
+.snapshotValue { font-size: 20px; font-weight: 650; color: var(--ink); font-variant-numeric: tabular-nums; }
+.snapshotLabel { font-size: 12px; color: var(--muted); }
+
+.snapshotDivider { width: 1px; align-self: stretch; background: var(--line); margin: 0 20px; }
+
+@media (max-width: 560px) {
+  .snapshotRow { flex-direction: column; align-items: stretch; gap: 14px; }
+  .snapshotDivider { display: none; }
+}
+
+/* ---------------- SECTIONS ---------------- */
+
+.section { margin-bottom: clamp(30px, 4.5vw, 42px); }
 
 .sectionHead {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 14px;
+  margin-bottom: 12px;
 }
 
 .sectionTitle {
-  font-size: 15px;
-  font-weight: 800;
-  letter-spacing: -0.01em;
+  font-size: 13.5px;
+  font-weight: 650;
+  letter-spacing: -0.005em;
+  color: var(--ink);
 }
 
 .seeAllLink {
@@ -65,277 +90,250 @@
   align-items: center;
   gap: 3px;
   text-decoration: none;
-  color: var(--grass);
+  color: var(--muted);
   font-size: 12.5px;
-  font-weight: 700;
+  font-weight: 500;
+  transition: color 0.15s ease;
 }
 
-/* ---------------- QUICK ACTIONS ---------------- */
+.seeAllLink:hover { color: var(--brand); }
+
+/* ---------------- QUICK ACTIONS ----------------
+   One restrained accent (brand green), used only on hover/icon —
+   not a different loud fill color per action. */
 
 .quickGrid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 12px;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
 }
 
-@media (max-width: 720px) { .quickGrid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 640px) { .quickGrid { grid-template-columns: 1fr; } }
 
 .quickBtn {
-  position: relative;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   text-decoration: none;
   color: var(--ink);
-  background: #fff;
-  border: 1.5px solid var(--line);
-  border-radius: 14px;
-  padding: 13px 12px;
-  box-shadow: 0 3px 0 0 var(--line);
-  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px 16px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
 }
 
-.quickBtn[data-accent="pitch"] { --accent-color: var(--c-pitch); }
-.quickBtn[data-accent="match"] { --accent-color: var(--c-match); }
-.quickBtn[data-accent="findteam"] { --accent-color: var(--c-findteam); }
-.quickBtn[data-accent="team"] { --accent-color: var(--c-team); }
-
 .quickBtn:hover {
-  transform: translateY(-3px);
-  border-color: var(--accent-color);
-  box-shadow: 0 3px 0 0 var(--accent-color), 0 12px 22px rgba(14, 47, 36, 0.08);
+  border-color: #d3d6d9;
+  box-shadow: 0 4px 14px rgba(20, 24, 26, 0.06);
+  transform: translateY(-1px);
 }
 
 .quickIconWrap {
   flex-shrink: 0;
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
   display: grid;
   place-items: center;
-  color: #fff;
-  background: var(--accent-color);
+  color: var(--brand);
+  background: var(--brand-soft);
 }
 
 .quickLabel {
   flex: 1;
   font-size: 13.5px;
-  font-weight: 700;
+  font-weight: 550;
 }
 
 .quickChevron {
   color: var(--faint);
-  transition: transform 0.15s ease;
+  transition: transform 0.15s ease, color 0.15s ease;
 }
 
-.quickBtn:hover .quickChevron { transform: translateX(2px); color: var(--accent-color); }
+.quickBtn:hover .quickChevron { transform: translateX(2px); color: var(--brand); }
 
-/* ---------------- TEAMS ROW ---------------- */
+/* ---------------- MATCH LIST ---------------- */
 
-.teamsRow {
+.matchList { display: flex; flex-direction: column; gap: 8px; }
+
+.matchRow {
   display: flex;
-  gap: 12px;
-
-  overflow-x: auto;
-  padding: 4px;
-  scroll-snap-type: x proximity;
-}
-
-.teamCard, .teamCardAdd {
-  scroll-snap-align: start;
-  flex: 0 0 200px;
+  align-items: center;
+  gap: 16px;
   text-decoration: none;
   color: var(--ink);
-  background: #fff;
+  background: var(--card);
   border: 1px solid var(--line);
-  border-radius: 16px;
-  padding: 16px;
-  transition: transform 0.18s ease, box-shadow 0.18s ease;
+  border-radius: 14px;
+  padding: 14px 16px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.teamCard:hover, .teamCardAdd:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 14px 28px rgba(14, 47, 36, 0.09);
+.matchRow:hover { border-color: #d3d6d9; box-shadow: 0 4px 14px rgba(20, 24, 26, 0.06); }
+
+.matchDateBlock {
+  flex-shrink: 0;
+  width: 44px;
+  text-align: center;
 }
-.teamCardTop {
+
+.matchWeekday { display: block; font-size: 9.5px; color: var(--faint); text-transform: uppercase; letter-spacing: 0.04em; }
+.matchDay { display: block; font-size: 19px; font-weight: 650; line-height: 1.2; }
+.matchMonth { display: block; font-size: 10px; color: var(--muted); text-transform: uppercase; }
+
+.matchDivider { width: 1px; align-self: stretch; background: var(--line); }
+
+.matchInfo { flex: 1; min-width: 0; }
+
+.matchTeamRow { display: flex; align-items: center; gap: 8px; margin-bottom: 3px; }
+
+.matchTeamTag {
+  font-size: 10.5px;
+  font-weight: 650;
+  color: var(--brand);
+  background: var(--brand-soft);
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.matchSport { font-size: 11px; color: var(--faint); }
+
+.matchTitle { font-size: 14px; font-weight: 600; margin-bottom: 3px; }
+
+.matchMeta {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.matchMeta svg { flex-shrink: 0; color: var(--faint); }
+
+.matchMetaDot {
+  width: 3px; height: 3px; border-radius: 50%; background: var(--faint); margin: 0 2px; flex-shrink: 0;
+}
+
+.matchChevron { flex-shrink: 0; color: var(--faint); }
+
+@media (max-width: 560px) {
+  .matchDivider { display: none; }
+  .matchMeta { flex-wrap: wrap; }
+}
+
+/* ---------------- STATUS PILL — muted, not filled loud colors ---------------- */
+
+.statusPill {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.statusPill[data-status="confirmed"] { background: var(--brand-soft); color: var(--brand); }
+.statusPill[data-status="pending_payment"] { background: var(--amber-soft); color: var(--amber); }
+.statusPill[data-status="open"] { background: #f1f2f4; color: var(--muted); }
+.statusPill[data-status="registration_open"] { background: var(--brand-soft); color: var(--brand); }
+.statusPill[data-status="upcoming"] { background: #f1f2f4; color: var(--muted); }
+.statusPill[data-status="ongoing"] { background: var(--amber-soft); color: var(--amber); }
+.statusPill[data-status="completed"] { background: #f1f2f4; color: var(--faint); }
+
+/* ---------------- TOURNAMENT ROW ---------------- */
+
+.tournamentRow {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.tournamentCard {
+  flex: 0 0 230px;
+  text-decoration: none;
+  color: var(--ink);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 16px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.tournamentCard:hover { border-color: #d3d6d9; box-shadow: 0 4px 14px rgba(20, 24, 26, 0.06); }
+
+.tournamentTop {
   display: flex;
   align-items: center;
   justify-content: space-between;
   margin-bottom: 10px;
 }
 
-.teamLogo {
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
-  background: linear-gradient(135deg, var(--green-700), var(--grass));
-  color: #fff;
-  font-weight: 700;
-  font-size: 13px;
-  display: grid;
-  place-items: center;
-  overflow: hidden;
-}
-
-.teamLogo img { width: 100%; height: 100%; object-fit: cover; }
-
-.roleBadge {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.03em;
-  padding: 4px 8px;
-  border-radius: 999px;
-}
-
-.roleBadge[data-role="OWNER"] { background: var(--c-tournament-soft); color: var(--c-tournament); }
-.roleBadge[data-role="ADMIN"] { background: var(--c-team-soft); color: var(--c-team); }
-.roleBadge[data-role="MEMBER"] { background: var(--grass-soft); color: var(--green-700); }
-
-.teamName { font-size: 14.5px; font-weight: 700; margin-bottom: 2px; }
-.teamMeta { font-size: 12px; color: var(--muted); margin-bottom: 12px; }
-
-.teamCapacity { display: flex; flex-direction: column; gap: 6px; }
-
-.capacityBar {
-  height: 5px;
-  border-radius: 999px;
-  background: var(--grass-soft);
-  overflow: hidden;
-}
-
-.capacityFill {
-  height: 100%;
-  background: var(--grass);
-  border-radius: 999px;
-}
-
-.teamCapacity span { font-size: 11px; color: var(--muted); }
-
-.teamCardAdd {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  color: var(--muted);
-  font-size: 12.5px;
-  font-weight: 700;
-  border: 3px dashed green;
-}
-
-.teamCardAdd:hover { color: var(--grass); border-color: var(--grass); }
-
-/* ---------------- MATCH LIST ---------------- */
-
-.matchList {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.matchRow {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  text-decoration: none;
-  color: var(--ink);
-  background: #fff;
-  border: 1px solid var(--line);
-  border-left: 4px solid var(--c-match);
-  border-radius: 14px;
-  padding: 12px 14px;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
-}
-
-.matchRow:hover { transform: translateY(-2px); box-shadow: 0 10px 22px rgba(14, 47, 36, 0.08); }
-
-.matchDateBlock {
-  flex-shrink: 0;
-  width: 46px;
-  text-align: center;
-  font-family: var(--font-mono);
-}
-
-.matchDay { display: block; font-size: 18px; font-weight: 700; line-height: 1; }
-.matchMonth { display: block; font-size: 10.5px; color: var(--muted); text-transform: uppercase; margin-top: 2px; }
-
-.matchInfo { flex: 1; min-width: 0; }
-.matchTitle { font-size: 13.5px; font-weight: 700; }
-.matchMeta { font-size: 12px; color: var(--muted); margin-top: 2px; }
-
-.matchChevron { flex-shrink: 0; color: var(--faint); }
-
-/* ---------------- SHARED STATUS PILL ---------------- */
-
-.statusPill {
-  flex-shrink: 0;
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  font-weight: 700;
-  padding: 5px 10px;
-  border-radius: 999px;
-  white-space: nowrap;
-}
-
-.statusPill[data-status="confirmed"] { background: var(--grass-soft); color: var(--green-700); }
-.statusPill[data-status="pending_payment"] { background: var(--c-tournament-soft); color: var(--c-tournament); }
-.statusPill[data-status="open"] { background: var(--c-team-soft); color: var(--c-team); }
-.statusPill[data-status="registration_open"] { background: var(--grass-soft); color: var(--green-700); }
-.statusPill[data-status="upcoming"] { background: var(--c-team-soft); color: var(--c-team); }
-.statusPill[data-status="ongoing"] { background: var(--c-match-soft); color: var(--c-match); }
-.statusPill[data-status="completed"] { background: #f1f1ee; color: var(--faint); }
-
-/* ---------------- TOURNAMENT ROW ---------------- */
-
-.tournamentRow {
-  display: flex;
-  gap: 12px;
-  overflow-x: auto;
-  padding-bottom: 4px;
-}
-
-.tournamentCard {
-  flex: 0 0 240px;
-  text-decoration: none;
-  color: var(--ink);
-  background: #fff;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  padding: 16px;
-  transition: transform 0.18s ease, box-shadow 0.18s ease;
-}
-
-.tournamentCard:hover { transform: translateY(-3px); box-shadow: 0 14px 28px rgba(14, 47, 36, 0.09); }
-
-.tournamentTop {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 12px;
-}
-
 .tournamentIconWrap {
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
   display: grid;
   place-items: center;
-  color: var(--c-tournament);
-  background: var(--c-tournament-soft);
+  color: var(--amber);
+  background: var(--amber-soft);
 }
 
-.tournamentName { font-size: 14.5px; font-weight: 700; margin-bottom: 2px; }
+.tournamentTeamTag {
+  font-size: 10.5px;
+  font-weight: 650;
+  color: var(--brand);
+  margin-bottom: 6px;
+}
+
+.tournamentName { font-size: 14px; font-weight: 600; margin-bottom: 2px; }
 .tournamentMeta { font-size: 12px; color: var(--muted); margin-bottom: 12px; }
 
 .tournamentFoot {
   display: flex;
   justify-content: space-between;
-  font-size: 11.5px;
+  font-size: 11px;
   color: var(--muted);
-  font-family: var(--font-mono);
   padding-top: 10px;
   border-top: 1px solid var(--line);
+}
+
+/* ---------------- ACTIVITY FEED ---------------- */
+
+.activityList {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.activityRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.activityRow:last-child { border-bottom: none; }
+
+.activityIconWrap {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  background: #f4f5f6;
+}
+
+.activityText { flex: 1; font-size: 13px; color: var(--ink); line-height: 1.4; }
+.activityTime { flex-shrink: 0; font-size: 11.5px; color: var(--faint); }
+
+@media (max-width: 560px) {
+  .activityText { font-size: 12.5px; }
 }
 
 /* ---------------- EMPTY STATE ---------------- */
@@ -346,31 +344,43 @@
   align-items: center;
   text-align: center;
   gap: 10px;
-  padding: 32px 20px;
-  background: #fff;
-  border: 1.5px dashed var(--line);
-  border-radius: 16px;
+  padding: 36px 20px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 14px;
 }
 
 .emptyIconWrap {
-  width: 42px;
-  height: 42px;
-  border-radius: 12px;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
   display: grid;
   place-items: center;
-  color: var(--grass);
-  background: var(--grass-soft);
+  color: var(--brand);
+  background: var(--brand-soft);
 }
 
 .emptyState p { font-size: 13px; color: var(--muted); max-width: 260px; }
 
+.emptyActions { display: flex; gap: 8px; }
+
 .emptyCta {
   text-decoration: none;
-  background: var(--grass);
+  background: var(--brand-dark);
   color: #fff;
   font-size: 12.5px;
-  font-weight: 700;
-  padding: 8px 16px;
+  font-weight: 600;
+  padding: 9px 16px;
+  border-radius: 999px;
+}
+
+.emptyCtaGhost {
+  text-decoration: none;
+  background: #f1f2f4;
+  color: var(--ink);
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 9px 16px;
   border-radius: 999px;
 }
 
