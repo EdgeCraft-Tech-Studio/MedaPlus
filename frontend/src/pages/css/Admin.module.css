@@ -625,84 +625,48 @@
 
 /* ---------- Filters: collapsible, cleaner ---------- */
 
-.filtersToggle {
-  width: 100%;
+/* ---------- Filters: pill bar, matches app filter style ---------- */
+
+
+
+.filterZone {
   display: flex;
+  justify-content: center;   /* ✅ was flex-start */
+  margin-top: 18px;          /* ✅ replaces the old margin-top:12px that assumed a toggle above it */
+}
+
+.filterBar {
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  background: none;
-  border: none;
-  padding: 0;
-  cursor: pointer;
-  font-family: var(--font-display);
-}
-
-.filtersToggleLeft {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--color-text-faint);
-}
-
-.filtersToggleLeft svg {
-  color: var(--color-accent);
-}
-
-.filterCountBadge {
-  background: var(--color-accent);
-  color: #fff;
-  font-size: 11px;
-  font-weight: 700;
-  padding: 1px 7px;
+  gap: 4px;
+  padding: 6px 8px;
+  background: #ffffff;
+  border: 1px solid var(--color-border);
   border-radius: 999px;
-  font-family: var(--font-mono);
+  box-shadow: var(--shadow-card);
+  max-width: 100%;
+  flex-wrap: wrap;
 }
 
-.chevron {
-  display: flex;
-  color: var(--color-text-faint);
-  transition: transform 0.25s var(--ease);
-}
-
-.chevronOpen {
-  transform: rotate(180deg);
-}
-
-.filtersBody {
-  display: grid;
-  grid-template-rows: 0fr;
-  opacity: 0;
-  transition: grid-template-rows 0.3s var(--ease), opacity 0.25s ease, margin-top 0.3s var(--ease);
-}
-
-.filtersBody > * {
-  overflow: hidden;
-}
-
-.filtersBodyOpen {
-  grid-template-rows: 1fr;
-  opacity: 1;
-  margin-top: 16px;
+.pillDivider {
+  width: 1px;
+  height: 22px;
+  background: var(--color-border);
+  flex-shrink: 0;
 }
 
 .searchField {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--color-border-strong);
-  background: #ffffff;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  gap: 7px;
+  padding: 7px 6px 7px 12px;
+  border-radius: 999px;
+  min-width: 0;
+  transition: background 0.15s ease;
 }
 
 .searchField:focus-within {
-  border-color: var(--color-accent);
-  box-shadow: 0 0 0 3px var(--color-accent-soft);
+  background: var(--color-surface-alt);
 }
 
 .searchField svg {
@@ -712,33 +676,179 @@
 
 .searchInput {
   border: none;
-  outline: none;
   background: transparent;
-  font-size: 14px;
+  outline: none;
   font-family: var(--font-display);
+  font-size: 13.5px;
   color: var(--color-text);
-  width: 100%;
+  width: 148px;
+  padding: 0;
 }
 
 .searchInput::placeholder {
   color: var(--color-text-faint);
 }
 
-.filtersGrid {
+.searchClear {
   display: grid;
-  grid-template-columns: 2fr 1fr 1fr;
-  gap: 10px;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  border: none;
+  background: var(--color-surface-alt);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 0;
 }
 
-.amenityRow .clearBtn {
+.searchClear:hover {
+  background: var(--color-border);
+  color: var(--color-text);
+}
+
+.statusField {
+  display: flex;
+  align-items: center;
+  padding: 7px 4px 7px 12px;
+  border-radius: 999px;
+  transition: background 0.15s ease;
+}
+
+.statusField:focus-within {
+  background: var(--color-surface-alt);
+}
+
+.statusSelect {
+  border: none;
+  background: transparent;
+  outline: none;
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text);
+  cursor: pointer;
+  padding: 0 4px;
+}
+
+.priceField {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  transition: background 0.15s ease;
+}
+
+.priceField:focus-within {
+  background: var(--color-surface-alt);
+}
+
+.priceLabel {
+  font-size: 12.5px;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.priceInput {
+  border: none;
+  background: transparent;
+  outline: none;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text);
+  width: 56px;
+  padding: 0;
+}
+
+.priceInput::placeholder {
+  font-family: var(--font-display);
+  font-weight: 400;
+  color: var(--color-text-faint);
+}
+
+.amenityGroup {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 4px;
+}
+
+.amenityToggle {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 8px 12px;
+  gap: 6px;
+  padding: 7px 9px;
   border-radius: 999px;
-  margin-left: auto;
+  border: none;
+  background: transparent;
+  color: var(--color-text-faint);
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-size: 12.5px;
+  font-weight: 500;
+  transition: background 0.15s ease, color 0.15s ease;
 }
 
+.amenityToggle svg {
+  flex-shrink: 0;
+}
+
+.amenityToggleLabel {
+  display: none;
+  white-space: nowrap;
+}
+
+.amenityToggle:hover {
+  background: var(--color-surface-alt);
+  color: var(--color-text-muted);
+}
+
+.amenityToggleOn {
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+}
+
+.amenityToggleOn:hover {
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+}
+
+.amenityToggleOn .amenityToggleLabel {
+  display: inline;
+}
+
+.filterBar .clearBtn {
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-weight: 500;
+  font-size: 12.5px;
+  cursor: pointer;
+  font-family: var(--font-display);
+  flex-shrink: 0;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.filterBar .clearBtn:hover {
+  color: var(--color-danger);
+  background: var(--color-danger-soft);
+}
+
+@media (max-width: 640px) {
+  .filterBar {
+    justify-content: center;
+    width: 100%;
+  }
+  .searchInput {
+    width: 110px;
+  }
+}
 /* ---------- Pending owners: card grid with avatar ---------- */
 
 .ownerGrid {

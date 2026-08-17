@@ -17,7 +17,32 @@ type IconName =
   | "car"
   | "bulb"
   | "imageOff"
-  | "shield";
+  | "verifiedCheck"
+  | "search"
+  | "x";
+
+
+  export function ApprovalIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      {...props}
+    >
+      <path
+        d="M12 3.5 19 6v5.5c0 4.2-2.7 7.5-7 9-4.3-1.5-7-4.8-7-9V6l7-2.5z"
+        strokeLinejoin="round"
+      />
+      <path
+        d="m8.5 12 2.2 2.2 4.8-5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
 
 function Icon({ name, size = 15 }: { name: IconName; size?: number }) {
   const paths: Record<IconName, React.ReactNode> = {
@@ -58,9 +83,21 @@ function Icon({ name, size = 15 }: { name: IconName; size?: number }) {
         <path d="M21 15l-5-5L5 21" />
       </>
     ),
-    shield: (
-      <path d="M12 2l8 3.5v5.3c0 5-3.4 8.9-8 11.2-4.6-2.3-8-6.2-8-11.2V5.5L12 2z" />
+    // solid filled checkmark — reads cleanly at small badge sizes, unlike a thin stroked check
+    verifiedCheck: (
+      <path
+        d="M9 16.2 4.8 12l-1.4 1.4L9 19 20.6 7.4l-1.4-1.4z"
+        fill="currentColor"
+        stroke="none"
+      />
     ),
+    search: (
+      <>
+        <circle cx="11" cy="11" r="7" />
+        <path d="M21 21l-4.3-4.3" />
+      </>
+    ),
+    x: <path d="M18 6 6 18M6 6l12 12" />,
   };
 
   return (
@@ -184,6 +221,19 @@ function AmenityTags({ pitch }: { pitch: Pitch }) {
   );
 }
 
+/** Icon-only status indicator — blue verified shield if approved, muted shield if pending. No text. */
+function StatusBadge({ approved }: { approved: boolean }) {
+  return (
+    <div
+      className={`${styles.statusBadge} ${
+        approved ? styles.statusBadgeApproved : styles.statusBadgePending
+      }`}
+      title={approved ? "Account verified" : "Pending admin approval"}
+    >
+      <ApprovalIcon width={20} height={20} strokeWidth={approved ? 2 : 1.8} />
+    </div>
+  );
+}
 export default function Owner() {
   const navigate = useNavigate();
 
@@ -202,6 +252,11 @@ export default function Owner() {
     parking: false,
     lighting: false,
   });
+
+  const activeFilterCount =
+    (search.trim() ? 1 : 0) +
+    (maxPrice.trim() ? 1 : 0) +
+    Object.values(amenities).filter(Boolean).length;
 
   async function refresh() {
     try {
@@ -232,273 +287,258 @@ export default function Owner() {
         matchesAmenities(p, amenities)
     );
   }, [pitches, search, maxPrice, amenities]);
- 
+
+  function clearFilters() {
+    setSearch("");
+    setMaxPrice("");
+    setAmenities({ dressing: false, showers: false, parking: false, lighting: false });
+  }
+
   return (
     <div>
-    <div className={styles.page}>
-      <ToastContainer />
-      <div className={styles.container}>
-        <div className={styles.topBar}>
-          <div className={styles.titleGroup}>
-            <div className={styles.eyebrow}>My pitches</div>
-            <h2 className={styles.title}>Owner Dashboard</h2>
-          </div>
+      <div className={styles.page}>
+        <ToastContainer />
+        <div className={styles.container}>
+          <div className={styles.topBar}>
+            <div className={styles.titleGroup}>
+              <div className={styles.eyebrow}>My pitches</div>
+            </div>
 
-          <div className={`${styles.addWrap} ${!isApproved ? styles.addWrapDisabled : ""}`}>
-            <AddButton
-              onClick={() => setOpenAdd(true)}
-              title={isApproved ? "Add Pitch" : "Waiting for admin approval"}
-            />
-          </div>
-        </div>
-
-        {user && (
-          <div className={styles.statusBanner}>
-            <div className={styles.statusBannerLeft}>
-              <div className={styles.statusIconWrap}>
-                <Icon name="shield" size={18} />
+            <div className={styles.topBarActions}>
+              {user && <StatusBadge approved={isApproved} />}
+              <div className={`${styles.addWrap} ${!isApproved ? styles.addWrapDisabled : ""}`}>
+                <AddButton
+                  onClick={() => setOpenAdd(true)}
+                  title={isApproved ? "Add Pitch" : "Waiting for admin approval"}
+                />
               </div>
-              <div className={styles.statusBannerText}>
-                Account status:{" "}
-                <b>{isApproved ? "Approved" : "Pending admin approval"}</b>
-                {!isApproved && (
-                  <div style={{ marginTop: 3 }}>
-                    You can log in, but your pitches won't appear to players until
-                    your account is approved.
-                  </div>
+            </div>
+          </div>
+
+          {msg && <p className={styles.message}>{msg}</p>}
+
+          <PitchWizardModal
+            open={openAdd}
+            onClose={() => setOpenAdd(false)}
+            onSubmit={async (payload) => {
+              await createPitch(payload);
+              setMsg("Pitch created (pending admin approval).");
+              showToast("Pitch created — pending approval.", "create");
+              setOpenAdd(false);
+              await refresh();
+            }}
+          />
+
+          <PitchWizardModal
+            open={!!editingPitch}
+            onClose={() => setEditingPitch(null)}
+            mode="edit"
+            initialData={
+              editingPitch
+                ? {
+                    id: editingPitch.id,
+                    name: editingPitch.name,
+                    address: editingPitch.address,
+                    latitude: editingPitch.latitude,
+                    longitude: editingPitch.longitude,
+                    opening_time: editingPitch.opening_time,
+                    closing_time: editingPitch.closing_time,
+                    hourly_price: editingPitch.hourly_price,
+                    weekly_price: editingPitch.weekly_price,
+                    monthly_price: editingPitch.monthly_price,
+                    min_hours: editingPitch.min_hours,
+                    allow_hourly: editingPitch.allow_hourly,
+                    allow_weekly: editingPitch.allow_weekly,
+                    allow_monthly: editingPitch.allow_monthly,
+                    has_dressing_room: editingPitch.has_dressing_room,
+                    has_showers: editingPitch.has_showers,
+                    has_parking: editingPitch.has_parking,
+                    has_lighting: editingPitch.has_lighting,
+                    other_services: editingPitch.other_services,
+                    images: editingPitch.images,
+                  }
+                : undefined
+            }
+            onSubmit={async (payload) => {
+              if (!editingPitch?.id) return;
+              await updatePitch(editingPitch.id, payload);
+              setMsg("Pitch updated successfully.");
+              setEditingPitch(null);
+              await refresh();
+            }}
+          />
+
+          {/* ---------- Filters (same pill bar as Admin) ---------- */}
+          <div className={styles.filterZone}>
+            <div className={styles.filterBar}>
+              <div className={styles.searchField}>
+                <Icon name="search" size={14} />
+                <input
+                  className={styles.searchInput}
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search pitches"
+                />
+                {search && (
+                  <button
+                    type="button"
+                    className={styles.searchClear}
+                    onClick={() => setSearch("")}
+                    aria-label="Clear search"
+                  >
+                    <Icon name="x" size={10} />
+                  </button>
                 )}
               </div>
-            </div>
 
-            <span
-              className={`${styles.statusPill} ${
-                isApproved ? styles.statusApproved : styles.statusPending
-              }`}
-            >
-              {isApproved ? "Approved" : "Pending"}
-            </span>
-          </div>
-        )}
+              <div className={styles.pillDivider} />
 
-        {msg && <p className={styles.message}>{msg}</p>}
+              <div className={styles.priceField}>
+                <span className={styles.priceLabel}>Max price</span>
+                <input
+                  className={styles.priceInput}
+                  value={maxPrice}
+                  onChange={(e) => setMaxPrice(e.target.value)}
+                  placeholder="Any"
+                  inputMode="numeric"
+                />
+              </div>
 
-        <PitchWizardModal
-          open={openAdd}
-          onClose={() => setOpenAdd(false)}
-          onSubmit={async (payload) => {
-            await createPitch(payload);
-            setMsg("Pitch created (pending admin approval).");
-            showToast("Pitch created — pending approval.", "create");
-            setOpenAdd(false);
-            await refresh();
-          }}
-        />
+              <div className={styles.pillDivider} />
 
-        <PitchWizardModal
-          open={!!editingPitch}
-          onClose={() => setEditingPitch(null)}
-          mode="edit"
-          initialData={
-  editingPitch
-    ? {
-        id: editingPitch.id,
-        name: editingPitch.name,
-        address: editingPitch.address,
-        latitude: editingPitch.latitude,
-        longitude: editingPitch.longitude,
-        opening_time: editingPitch.opening_time,
-        closing_time: editingPitch.closing_time,
-        hourly_price: editingPitch.hourly_price,
-        weekly_price: editingPitch.weekly_price,
-        monthly_price: editingPitch.monthly_price,
-        min_hours: editingPitch.min_hours,
-        allow_hourly: editingPitch.allow_hourly,
-        allow_weekly: editingPitch.allow_weekly,
-        allow_monthly: editingPitch.allow_monthly,
-        has_dressing_room: editingPitch.has_dressing_room,
-        has_showers: editingPitch.has_showers,
-        has_parking: editingPitch.has_parking,
-        has_lighting: editingPitch.has_lighting,
-        other_services: editingPitch.other_services,
-        images: editingPitch.images,
-      }
-    : undefined
-}
-          onSubmit={async (payload) => {
-            if (!editingPitch?.id) return;
-            await updatePitch(editingPitch.id, payload);
-            setMsg("Pitch updated successfully.");
-            setEditingPitch(null);
-            await refresh();
-          }}
-        />
-
-        <div className={styles.filtersCard}>
-          <div className={styles.filtersHeading}>Pitch filters</div>
-          <div className={styles.filtersGrid}>
-            <input
-              className={styles.input}
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by pitch name or address"
-            />
-
-            <input
-              className={styles.input}
-              value={maxPrice}
-              onChange={(e) => setMaxPrice(e.target.value)}
-              placeholder="Max price"
-            />
-
-            <button
-              className={styles.clearBtn}
-              onClick={() => {
-                setSearch("");
-                setMaxPrice("");
-                setAmenities({
-                  dressing: false,
-                  showers: false,
-                  parking: false,
-                  lighting: false,
-                });
-              }}
-            >
-              Clear filters
-            </button>
-          </div>
-
-          <div className={styles.amenityRow}>
-            <label className={styles.chip}>
-              <input
-                className={styles.checkbox}
-                type="checkbox"
-                checked={amenities.dressing}
-                onChange={(e) =>
-                  setAmenities((prev) => ({ ...prev, dressing: e.target.checked }))
-                }
-              />
-              <Icon name="shirt" size={13} />
-              Dressing room
-            </label>
-            <label className={styles.chip}>
-              <input
-                className={styles.checkbox}
-                type="checkbox"
-                checked={amenities.showers}
-                onChange={(e) =>
-                  setAmenities((prev) => ({ ...prev, showers: e.target.checked }))
-                }
-              />
-              <Icon name="droplet" size={13} />
-              Showers
-            </label>
-            <label className={styles.chip}>
-              <input
-                className={styles.checkbox}
-                type="checkbox"
-                checked={amenities.parking}
-                onChange={(e) =>
-                  setAmenities((prev) => ({ ...prev, parking: e.target.checked }))
-                }
-              />
-              <Icon name="car" size={13} />
-              Parking
-            </label>
-            <label className={styles.chip}>
-              <input
-                className={styles.checkbox}
-                type="checkbox"
-                checked={amenities.lighting}
-                onChange={(e) =>
-                  setAmenities((prev) => ({ ...prev, lighting: e.target.checked }))
-                }
-              />
-              <Icon name="bulb" size={13} />
-              Lighting
-            </label>
-          </div>
-        </div>
-
-        <hr className={styles.divider} />
-
-        <div className={styles.section}>
-          <div className={styles.sectionHeader}>
-            <div className={styles.sectionTitle}>My pitches</div>
-            {!loading && <span className={styles.countBadge}>{filteredPitches.length}</span>}
-          </div>
-
-          {loading ? (
-            <div className={styles.loadingSlot}>
-              <p className={styles.emptyText}>Loading pitches...</p>
-            </div>
-          ) : filteredPitches.length === 0 ? (
-            <p className={styles.emptyText}>No pitches yet.</p>
-          ) : (
-            <div className={styles.cardGrid}>
-              {filteredPitches.map((p, index) => (
-                <div
-                  key={p.id}
-                  onClick={() => {
-                  if (!p.is_approved) return;           // block navigation if not approved
-                  navigate(`/app/pitches/${p.id}`);
-                }}
-                  className={styles.pitchCard}
-                  style={{ "--i": index } as React.CSSProperties}
+              <div className={styles.amenityGroup}>
+                <button
+                  type="button"
+                  onClick={() => setAmenities((prev) => ({ ...prev, dressing: !prev.dressing }))}
+                  className={`${styles.amenityToggle} ${amenities.dressing ? styles.amenityToggleOn : ""}`}
+                  title="Dressing room"
+                  aria-pressed={amenities.dressing}
                 >
-                  <CardImage pitch={p} />
+                  <Icon name="shirt" size={14} />
+                  <span className={styles.amenityToggleLabel}>Dressing room</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAmenities((prev) => ({ ...prev, showers: !prev.showers }))}
+                  className={`${styles.amenityToggle} ${amenities.showers ? styles.amenityToggleOn : ""}`}
+                  title="Showers"
+                  aria-pressed={amenities.showers}
+                >
+                  <Icon name="droplet" size={14} />
+                  <span className={styles.amenityToggleLabel}>Showers</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAmenities((prev) => ({ ...prev, parking: !prev.parking }))}
+                  className={`${styles.amenityToggle} ${amenities.parking ? styles.amenityToggleOn : ""}`}
+                  title="Parking"
+                  aria-pressed={amenities.parking}
+                >
+                  <Icon name="car" size={14} />
+                  <span className={styles.amenityToggleLabel}>Parking</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAmenities((prev) => ({ ...prev, lighting: !prev.lighting }))}
+                  className={`${styles.amenityToggle} ${amenities.lighting ? styles.amenityToggleOn : ""}`}
+                  title="Lighting"
+                  aria-pressed={amenities.lighting}
+                >
+                  <Icon name="bulb" size={14} />
+                  <span className={styles.amenityToggleLabel}>Lighting</span>
+                </button>
+              </div>
 
-                  <div className={styles.cardBody}>
-                    <div className={styles.cardTitleRow}>
-                      <div>
-                        <div className={styles.pitchName}>{p.name}</div>
-                        <div className={styles.pitchAddress}>
-                          <Icon name="pin" size={13} />
-                          {p.address || "No address on file"}
-                        </div>
-                      </div>
-
-                      <span
-                        className={`${styles.statusPill} ${
-                          p.is_approved ? styles.statusApproved : styles.statusPending
-                        }`}
-                      >
-                        {p.is_approved ? "Approved" : "Pending"}
-                      </span>
-                    </div>
-
-                    <PitchHours pitch={p} />
-                    <AmenityTags pitch={p} />
-
-                    {p.other_services && (
-                      <div className={styles.otherServices}>
-                        <b>Other services:</b> {p.other_services}
-                      </div>
-                    )}
-
-                    <div className={styles.hintText}>
-                      <Icon name="tag" size={12} />
-                      Click card to manage
-                    </div>
-                  </div>
-
-                  <button
-                    className={styles.editCornerBtn}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setMsg("");
-                      setEditingPitch(p);
-                    }}
-                  >
-                    Edit
+              {activeFilterCount > 0 && (
+                <>
+                  <div className={styles.pillDivider} />
+                  <button className={styles.clearBtn} onClick={clearFilters}>
+                    Clear
                   </button>
-                </div>
-              ))}
+                </>
+              )}
             </div>
-          )}
+          </div>
+
+          <hr className={styles.divider} />
+
+          <div className={styles.section}>
+            <div className={styles.sectionHeader}>
+              <div className={styles.sectionTitle}>My pitches</div>
+              {!loading && <span className={styles.countBadge}>{filteredPitches.length}</span>}
+            </div>
+
+            {loading ? (
+              <div className={styles.loadingSlot}>
+                <p className={styles.emptyText}>Loading pitches...</p>
+              </div>
+            ) : filteredPitches.length === 0 ? (
+              <p className={styles.emptyText}>No pitches yet.</p>
+            ) : (
+              <div className={styles.cardGrid}>
+                {filteredPitches.map((p, index) => (
+                  <div
+                    key={p.id}
+                    onClick={() => {
+                      if (!p.is_approved) return;
+                      navigate(`/app/pitches/${p.id}`);
+                    }}
+                    className={styles.pitchCard}
+                    style={{ "--i": index } as React.CSSProperties}
+                  >
+                    <CardImage pitch={p} />
+
+                    <div className={styles.cardBody}>
+                      <div className={styles.cardTitleRow}>
+                        <div>
+                          <div className={styles.pitchName}>{p.name}</div>
+                          <div className={styles.pitchAddress}>
+                            <Icon name="pin" size={13} />
+                            {p.address || "No address on file"}
+                          </div>
+                        </div>
+
+                        <span
+                          className={`${styles.statusPill} ${
+                            p.is_approved ? styles.statusApproved : styles.statusPending
+                          }`}
+                        >
+                          {p.is_approved ? "Approved" : "Pending"}
+                        </span>
+                      </div>
+
+                      <PitchHours pitch={p} />
+                      <AmenityTags pitch={p} />
+
+                      {p.other_services && (
+                        <div className={styles.otherServices}>
+                          <b>Other services:</b> {p.other_services}
+                        </div>
+                      )}
+
+                      <div className={styles.hintText}>
+                        <Icon name="tag" size={12} />
+                        Click card to manage
+                      </div>
+                    </div>
+
+                    <button
+                      className={styles.editCornerBtn}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setMsg("");
+                        setEditingPitch(p);
+                      }}
+                    >
+                      Edit
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
-    </div>
-    
   );
 }

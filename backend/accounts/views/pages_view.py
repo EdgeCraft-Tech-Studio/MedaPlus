@@ -74,20 +74,35 @@ class AdminListOwnersView(APIView):
         return Response({"owners": owners})
 
 
-class AdminPendingOwnersView(APIView): 
-    
+class AdminPendingOwnersView(APIView):
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
         if not _require_admin(request):
             return Response({"detail": "Forbidden"}, status=403)
 
-        owners = User.objects.filter(role=UserRole.OWNER, is_approved=False).values(
-            "id", "first_name", "last_name", "phone", "email", "profile_photo"
-        )
-        owners = [{**o, "id": str(o["id"])} for o in owners]
-        return Response({"pending_owners": owners})
+        owners = User.objects.filter(
+            role=UserRole.OWNER, is_approved=False
+        ).only("id", "first_name", "last_name", "phone", "email", "profile_photo")
 
+        def photo_url(user):
+            if not user.profile_photo:
+                return None
+            return request.build_absolute_uri(user.profile_photo.url)
+
+        data = [
+            {
+                "id": str(o.id),
+                "first_name": o.first_name,
+                "last_name": o.last_name,
+                "phone": o.phone,
+                "email": o.email,
+                "profile_photo_url": photo_url(o),
+            }
+            for o in owners
+        ]
+        return Response({"pending_owners": data})
 
 
 class AdminApproveOwnerView(APIView):

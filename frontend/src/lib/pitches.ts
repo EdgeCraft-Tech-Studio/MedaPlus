@@ -145,7 +145,7 @@ export async function listPendingOwners() {
     last_name: string;
     phone: string;
     email: string;
-    profile_photo: string | null; // ⚠️ backend must add this field
+    profile_photo_url: string | null;
   }>;
 }
 

@@ -19,8 +19,6 @@ import {
   listPitches,
   updatePitch,
 } from "../lib/pitches";
-import AppHeader from "./AppHeader";
-import { logout } from "../lib/auth";
 
 type OwnerRow = {
   id: string;
@@ -258,10 +256,16 @@ function ownerInitial(firstName: string, username: string) {
 }
 
 function OwnerAvatar({ owner }: { owner: PendingOwnerRow }) {
-  if (owner.profile_photo_url) {
+  const [imgFailed, setImgFailed] = useState(false);
+
+  if (owner?.profile_photo_url && !imgFailed) {
     return (
       <div className={styles.ownerAvatar}>
-        <img src={owner.profile_photo_url} alt="" />
+        <img
+          src={owner?.profile_photo_url}
+          alt=""
+          onError={() => setImgFailed(true)}
+        />
       </div>
     );
   }
@@ -292,7 +296,6 @@ export default function Admin() {
   const [amenities, setAmenities] = useState({
     dressing: false, showers: false, parking: false, lighting: false,
   });
-  const [filtersOpen, setFiltersOpen] = useState(false);
 
   const activeFilterCount =
     (search.trim() ? 1 : 0) +
@@ -389,22 +392,15 @@ export default function Admin() {
     setAmenities({ dressing: false, showers: false, parking: false, lighting: false });
   }
 
-  async function handleLogout() {
-    await logout();
-    navigate("/login", { replace: true });
-  }
+
 
   return (
     <div>
-      <AppHeader variant="logout" onLogout={handleLogout} />
       <div className={styles.page}>
         <ToastContainer />
         <div className={styles.container}>
           <div className={styles.topBar}>
-            <div className={styles.titleGroup}>
-              <div className={styles.eyebrow}>Control panel</div>
-              <h2 className={styles.title}>Admin</h2>
-            </div>
+            <h2 className={styles.title}>Admin</h2>
             <AddButton onClick={() => setOpenAdd(true)} />
           </div>
 
@@ -475,109 +471,110 @@ export default function Admin() {
           />
 
           {/* ---------- Filters ---------- */}
-          <div className={styles.filtersCard}>
-            <button
-              type="button"
-              className={styles.filtersToggle}
-              onClick={() => setFiltersOpen((v) => !v)}
-            >
-              <span className={styles.filtersToggleLeft}>
-                <Icon name="filter" size={14} />
-                Pitch filters
-                {activeFilterCount > 0 && (
-                  <span className={styles.filterCountBadge}>{activeFilterCount}</span>
-                )}
-              </span>
-              <span className={`${styles.chevron} ${filtersOpen ? styles.chevronOpen : ""}`}>
-                <Icon name="pin" size={0} />
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="6 9 12 15 18 9" />
-                </svg>
-              </span>
-            </button>
+<div className={styles.filterZone}>
+  <div className={styles.filterBar}>
+    <div className={styles.searchField}>
+      <Icon name="search" size={14} />
+      <input
+        className={styles.searchInput}
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        placeholder="Search pitches"
+      />
+      {search && (
+        <button
+          type="button"
+          className={styles.searchClear}
+          onClick={() => setSearch("")}
+          aria-label="Clear search"
+        >
+          <Icon name="x" size={10} />
+        </button>
+      )}
+    </div>
 
-            <div className={`${styles.filtersBody} ${filtersOpen ? styles.filtersBodyOpen : ""}`}>
-              <div className={styles.filtersGrid}>
-                <div className={styles.searchField}>
-                  <Icon name="search" size={15} />
-                  <input
-                    className={styles.searchInput}
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Search by pitch name or address"
-                  />
-                </div>
+    <div className={styles.pillDivider} />
 
-                <select
-                  className={styles.select}
-                  value={approvalFilter}
-                  onChange={(e) => setApprovalFilter(e.target.value as ApprovalFilter)}
-                >
-                  <option value="all">All statuses</option>
-                  <option value="approved">Approved</option>
-                  <option value="not_approved">Not approved</option>
-                </select>
+    <div className={styles.statusField}>
+      <select
+        className={styles.statusSelect}
+        value={approvalFilter}
+        onChange={(e) => setApprovalFilter(e.target.value as ApprovalFilter)}
+      >
+        <option value="all">All statuses</option>
+        <option value="approved">Approved</option>
+        <option value="not_approved">Not approved</option>
+      </select>
+    </div>
 
-                <input
-                  className={styles.input}
-                  value={maxPrice}
-                  onChange={(e) => setMaxPrice(e.target.value)}
-                  placeholder="Max price"
-                  inputMode="numeric"
-                />
-              </div>
+    <div className={styles.pillDivider} />
 
-              <div className={styles.amenityRow}>
-                <label className={styles.chip}>
-                  <input
-                    className={styles.checkbox}
-                    type="checkbox"
-                    checked={amenities.dressing}
-                    onChange={(e) => setAmenities((prev) => ({ ...prev, dressing: e.target.checked }))}
-                  />
-                  <Icon name="shirt" size={13} />
-                  Dressing room
-                </label>
-                <label className={styles.chip}>
-                  <input
-                    className={styles.checkbox}
-                    type="checkbox"
-                    checked={amenities.showers}
-                    onChange={(e) => setAmenities((prev) => ({ ...prev, showers: e.target.checked }))}
-                  />
-                  <Icon name="droplet" size={13} />
-                  Showers
-                </label>
-                <label className={styles.chip}>
-                  <input
-                    className={styles.checkbox}
-                    type="checkbox"
-                    checked={amenities.parking}
-                    onChange={(e) => setAmenities((prev) => ({ ...prev, parking: e.target.checked }))}
-                  />
-                  <Icon name="car" size={13} />
-                  Parking
-                </label>
-                <label className={styles.chip}>
-                  <input
-                    className={styles.checkbox}
-                    type="checkbox"
-                    checked={amenities.lighting}
-                    onChange={(e) => setAmenities((prev) => ({ ...prev, lighting: e.target.checked }))}
-                  />
-                  <Icon name="bulb" size={13} />
-                  Lighting
-                </label>
+    <div className={styles.priceField}>
+      <span className={styles.priceLabel}>Max price</span>
+      <input
+        className={styles.priceInput}
+        value={maxPrice}
+        onChange={(e) => setMaxPrice(e.target.value)}
+        placeholder="Any"
+        inputMode="numeric"
+      />
+    </div>
 
-                {activeFilterCount > 0 && (
-                  <button type="button" className={styles.clearBtn} onClick={clearFilters}>
-                    <Icon name="x" size={12} />
-                    Clear all
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
+    <div className={styles.pillDivider} />
+
+    <div className={styles.amenityGroup}>
+      <button
+        type="button"
+        onClick={() => setAmenities((prev) => ({ ...prev, dressing: !prev.dressing }))}
+        className={`${styles.amenityToggle} ${amenities.dressing ? styles.amenityToggleOn : ""}`}
+        title="Dressing room"
+        aria-pressed={amenities.dressing}
+      >
+        <Icon name="shirt" size={14} />
+        <span className={styles.amenityToggleLabel}>Dressing room</span>
+      </button>
+      <button
+        type="button"
+        onClick={() => setAmenities((prev) => ({ ...prev, showers: !prev.showers }))}
+        className={`${styles.amenityToggle} ${amenities.showers ? styles.amenityToggleOn : ""}`}
+        title="Showers"
+        aria-pressed={amenities.showers}
+      >
+        <Icon name="droplet" size={14} />
+        <span className={styles.amenityToggleLabel}>Showers</span>
+      </button>
+      <button
+        type="button"
+        onClick={() => setAmenities((prev) => ({ ...prev, parking: !prev.parking }))}
+        className={`${styles.amenityToggle} ${amenities.parking ? styles.amenityToggleOn : ""}`}
+        title="Parking"
+        aria-pressed={amenities.parking}
+      >
+        <Icon name="car" size={14} />
+        <span className={styles.amenityToggleLabel}>Parking</span>
+      </button>
+      <button
+        type="button"
+        onClick={() => setAmenities((prev) => ({ ...prev, lighting: !prev.lighting }))}
+        className={`${styles.amenityToggle} ${amenities.lighting ? styles.amenityToggleOn : ""}`}
+        title="Lighting"
+        aria-pressed={amenities.lighting}
+      >
+        <Icon name="bulb" size={14} />
+        <span className={styles.amenityToggleLabel}>Lighting</span>
+      </button>
+    </div>
+
+    {activeFilterCount > 0 && (
+      <>
+        <div className={styles.pillDivider} />
+        <button className={styles.clearBtn} onClick={clearFilters}>
+          Clear
+        </button>
+      </>
+    )}
+  </div>
+</div>
 
           <hr className={styles.divider} />
 

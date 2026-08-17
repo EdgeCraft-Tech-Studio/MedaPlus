@@ -3,8 +3,28 @@ import { Link, useNavigate } from "react-router-dom";
 import styles from "./css/JoinTeam.module.css";
 import { BallIcon, HashIcon, XIcon, ClockIcon } from "./Icons";
 import { lookupInvitationByCode, requestJoinViaCode, type InvitationPreview } from "../lib/team";
+import { api } from "../lib/api";
 
 type ViewState = "code_entry" | "loading" | "preview" | "requesting" | "requested" | "not_found";
+
+/** Turns a relative media path (e.g. "team_logos/x.png") into an absolute URL
+ *  using the API's origin. No-op if the URL is already absolute. */
+
+function resolveMediaUrl(url?: string | null): string | null {
+  if (!url) return null;
+  const trimmed = url.trim();
+  if (!trimmed || trimmed === "#" || trimmed === "/") return null;
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  const base = api.defaults.baseURL || "";
+  try {
+    const origin = new URL(base).origin;
+    return `${origin}${trimmed.startsWith("/") ? "" : "/"}${trimmed}`;
+  } catch {
+    return null;
+  }
+}
+
+
 
 export default function JoinTeam() {
   const nav = useNavigate();
@@ -20,6 +40,17 @@ export default function JoinTeam() {
     setError("");
     setLogoFailed(false);
     setView("code_entry");
+  }
+
+  /** Pop back to wherever this page was opened from (Discover, a direct
+   *  link, etc.) instead of hardcoding a destination. Falls back to /home
+   *  if there's no history to go back to (e.g. opened in a new tab). */
+  function handleClose() {
+    if (window.history.length > 1) {
+      nav(-1);
+    } else {
+      nav("/home");
+    }
   }
 
   async function handleCodeSubmit(e: React.FormEvent) {
@@ -56,6 +87,8 @@ export default function JoinTeam() {
     }
   }
 
+  const logoUrl = invitation ? resolveMediaUrl(invitation.team.logo) : null;
+
   return (
     <div className={styles.page}>
       <div className={styles.card}>
@@ -66,7 +99,7 @@ export default function JoinTeam() {
           </Link>
           <button
             type="button"
-            onClick={() => nav("/home")}
+            onClick={handleClose}
             aria-label="Close"
             style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}
           >
@@ -106,9 +139,9 @@ export default function JoinTeam() {
         {view === "preview" && invitation && (
           <>
             <span className={styles.teamLogo}>
-              {invitation.team.logo && !logoFailed ? (
+              {logoUrl && !logoFailed ? (
                 <img
-                  src={invitation.team.logo}
+                  src={logoUrl}
                   alt=""
                   onError={() => setLogoFailed(true)}
                 />
@@ -135,7 +168,7 @@ export default function JoinTeam() {
 
             {!invitation.is_redeemable && (
               <p className={styles.subtitle} style={{ color: "var(--danger)" }}>
-                {invitation.is_expired ? "This code has expired." : "This code is no longer available."}
+                {invitation.is_expired ? "This code has expired." : "This code is no longer available contact admin."}
               </p>
             )}
 

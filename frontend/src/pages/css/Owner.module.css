@@ -68,6 +68,15 @@
   color: var(--color-primary);
 }
 
+/* ---------- add button + status badge, tight gap ---------- */
+
+.topBarActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
 .addWrap {
   transition: opacity 0.2s ease;
 }
@@ -77,8 +86,30 @@
   pointer-events: none;
 }
 
-/* ---------- account status banner ---------- */
+.statusBadge {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  line-height: 0;
+}
 
+
+.statusBadgeApproved svg path:first-child {
+  fill: #2563eb;
+  stroke: #2563eb;
+}
+
+.statusBadgeApproved svg path:last-child {
+  stroke: #ffffff;
+}
+/* blue "verified" badge — white check on blue, with a double ring halo (like Upwork/LinkedIn verified) */
+.statusBadgeApproved {
+  color: #2563eb;
+}
+
+.statusBadgePending {
+  color: var(--color-text-faint);
+}
 .editCornerBtn {
   position: absolute;
   right: 0;
@@ -106,48 +137,6 @@
   filter: brightness(0.95);
 }
 
-
-
-.statusBanner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  flex-wrap: wrap;
-  margin-top: 18px;
-  padding: 16px 20px;
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--color-border);
-  background: var(--color-surface-alt);
-  animation: slideIn 0.35s var(--ease);
-}
-
-.statusBannerLeft {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.statusIconWrap {
-  display: grid;
-  place-items: center;
-  width: 38px;
-  height: 38px;
-  border-radius: 50%;
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
-  flex-shrink: 0;
-}
-
-.statusBannerText {
-  font-size: 13.5px;
-  color: var(--color-text-muted);
-}
-
-.statusBannerText b {
-  color: var(--color-text);
-}
-
 .message {
   margin-top: 18px;
   padding: 12px 16px;
@@ -164,127 +153,6 @@
   border: none;
   border-top: 1px solid var(--color-border);
   margin: 32px 0;
-}
-
-.filtersCard {
-  background: var(--color-surface-alt);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  padding: 20px 22px;
-  margin-top: 18px;
-}
-
-.filtersHeading {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--color-text-faint);
-  margin-bottom: 14px;
-}
-
-.filtersGrid {
-  display: grid;
-  grid-template-columns: 2fr 1fr auto;
-  gap: 10px;
-}
-
-.input {
-  width: 100%;
-  padding: 10px 12px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--color-border-strong);
-  background: #ffffff;
-  color: var(--color-text);
-  font-size: 14px;
-  font-family: var(--font-display);
-  outline: none;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
-}
-
-.input:focus {
-  border-color: var(--color-accent);
-  box-shadow: 0 0 0 3px var(--color-accent-soft);
-}
-
-.input::placeholder {
-  color: var(--color-text-faint);
-}
-
-.clearBtn {
-  padding: 10px 16px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--color-border-strong);
-  background: #ffffff;
-  color: var(--color-text-muted);
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: all 0.2s ease;
-}
-
-.clearBtn:hover {
-  background: var(--color-surface-alt);
-  border-color: var(--color-text-faint);
-  color: var(--color-text);
-}
-
-.clearBtn:active {
-  transform: scale(0.96);
-}
-
-.amenityRow {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin-top: 14px;
-}
-
-.chip {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 8px 12px;
-  border-radius: 999px;
-  border: 1px solid var(--color-border-strong);
-  background: #ffffff;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  transition: all 0.2s ease;
-  overflow: hidden;
-}
-
-.chip::before {
-  content: "";
-  width: 12px;
-  height: 12px;
-  border-radius: 3px;
-  border: 1.5px solid var(--color-border-strong);
-  flex-shrink: 0;
-  transition: all 0.2s ease;
-}
-
-.chip:has(.checkbox:checked) {
-  background: var(--color-primary);
-  border-color: var(--color-primary);
-  color: #ffffff;
-}
-
-.chip:has(.checkbox:checked)::before {
-  background: var(--color-accent);
-  border-color: var(--color-accent);
-}
-
-.checkbox {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  margin: 0;
-  cursor: pointer;
 }
 
 .section {
@@ -547,9 +415,8 @@
 .otherServices {
   font-size: 12.5px;
   color: var(--color-text-muted);
-  padding-top: 2px;
-  border-top: 1px dashed var(--color-border);
   padding-top: 10px;
+  border-top: 1px dashed var(--color-border);
 }
 
 .otherServices b {
@@ -595,16 +462,206 @@
 }
 
 @media (max-width: 900px) {
-  .filtersGrid {
-    grid-template-columns: 1fr;
-  }
-
   .cardTitleRow {
     flex-direction: column;
   }
+}
 
-  .statusBanner {
-    flex-direction: column;
-    align-items: flex-start;
+/* ---------- Filters: pill bar, matches Admin ---------- */
+
+.filterZone {
+  display: flex;
+  justify-content: center;
+  margin-top: 18px;
+}
+
+.filterBar {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+  background: #ffffff;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  box-shadow: var(--shadow-card);
+  max-width: 100%;
+  flex-wrap: wrap;
+}
+
+.pillDivider {
+  width: 1px;
+  height: 22px;
+  background: var(--color-border);
+  flex-shrink: 0;
+}
+
+.searchField {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 6px 7px 12px;
+  border-radius: 999px;
+  min-width: 0;
+  transition: background 0.15s ease;
+}
+
+.searchField:focus-within {
+  background: var(--color-surface-alt);
+}
+
+.searchField svg {
+  color: var(--color-text-faint);
+  flex-shrink: 0;
+}
+
+.searchInput {
+  border: none;
+  background: transparent;
+  outline: none;
+  font-family: var(--font-display);
+  font-size: 13.5px;
+  color: var(--color-text);
+  width: 148px;
+  padding: 0;
+}
+
+.searchInput::placeholder {
+  color: var(--color-text-faint);
+}
+
+.searchClear {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  border: none;
+  background: var(--color-surface-alt);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 0;
+}
+
+.searchClear:hover {
+  background: var(--color-border);
+  color: var(--color-text);
+}
+
+.priceField {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  transition: background 0.15s ease;
+}
+
+.priceField:focus-within {
+  background: var(--color-surface-alt);
+}
+
+.priceLabel {
+  font-size: 12.5px;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.priceInput {
+  border: none;
+  background: transparent;
+  outline: none;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text);
+  width: 56px;
+  padding: 0;
+}
+
+.priceInput::placeholder {
+  font-family: var(--font-display);
+  font-weight: 400;
+  color: var(--color-text-faint);
+}
+
+.amenityGroup {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 4px;
+}
+
+.amenityToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 9px;
+  border-radius: 999px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-faint);
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-size: 12.5px;
+  font-weight: 500;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.amenityToggle svg {
+  flex-shrink: 0;
+}
+
+.amenityToggleLabel {
+  display: none;
+  white-space: nowrap;
+}
+
+.amenityToggle:hover {
+  background: var(--color-surface-alt);
+  color: var(--color-text-muted);
+}
+
+.amenityToggleOn {
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+}
+
+.amenityToggleOn:hover {
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+}
+
+.amenityToggleOn .amenityToggleLabel {
+  display: inline;
+}
+
+.filterBar .clearBtn {
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-weight: 500;
+  font-size: 12.5px;
+  cursor: pointer;
+  font-family: var(--font-display);
+  flex-shrink: 0;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.filterBar .clearBtn:hover {
+  color: var(--color-danger);
+  background: var(--color-danger-soft);
+}
+
+@media (max-width: 640px) {
+  .filterBar {
+    justify-content: center;
+    width: 100%;
+  }
+  .searchInput {
+    width: 110px;
   }
 }
