@@ -9,7 +9,9 @@ import { type TournamentStatus } from "./types";
 import type { SessionUser } from "../lib/session";
 import { me } from "../lib/auth";
 
-const PITCH_OWNER_ROLE = "OWNER"; // ⚠️ set this to whatever value your backend's User.role field actually uses for a pitch owner
+const PITCH_OWNER_ROLE = "OWNER"; 
+
+const ADMIN_ROLE = "ADMIN"; 
 
 const baseQuickActions = [
   { key: "match", to: "/match/create", icon: VersusIcon, label: "Make match" },
@@ -18,6 +20,10 @@ const baseQuickActions = [
 
 const pitchOwnerAction = {
   key: "pitch", to: "/owner", icon: FootballPitchIcon, label: "Manage pitch",
+};
+
+const adminAction = {
+  key: "pitch", to: "/admin", icon: FootballPitchIcon, label: "Dashboard",
 };
 
 const TOURNAMENT_STATUS_LABEL: Record<TournamentStatus, string> = {
@@ -127,9 +133,22 @@ function todayLabel() {
 
 export default function Home() {
   const [user, setUser] = useState<SessionUser | null>(null);
-  const quickActions = user?.role === PITCH_OWNER_ROLE
-    ? [...baseQuickActions, pitchOwnerAction]
-    : baseQuickActions;
+  const pitchOwnerAction = {
+  key: "pitch", to: "/owner", icon: FootballPitchIcon, label: "Manage pitch",
+};
+
+const adminAction = {
+  key: "pitch", to: "/admin", icon: FootballPitchIcon, label: "Dashboard",
+};
+
+const roleAction =
+  user?.role === PITCH_OWNER_ROLE
+    ? pitchOwnerAction
+    : user?.role === ADMIN_ROLE
+    ? adminAction
+    : null;
+
+const quickActions = roleAction ? [...baseQuickActions, roleAction] : baseQuickActions;
 
   useEffect(() => {
     async function loadUser() {
