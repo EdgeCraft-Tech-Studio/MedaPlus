@@ -17,15 +17,6 @@ const baseQuickActions = [
   { key: "match", to: "/match/create", icon: VersusIcon, label: "Make match" },
   { key: "createteam", to: "/team/create", icon: UsersIcon, label: "Create team" },
 ];
-
-const pitchOwnerAction = {
-  key: "pitch", to: "/owner", icon: FootballPitchIcon, label: "Manage pitch",
-};
-
-const adminAction = {
-  key: "pitch", to: "/admin", icon: FootballPitchIcon, label: "Dashboard",
-};
-
 const TOURNAMENT_STATUS_LABEL: Record<TournamentStatus, string> = {
   registration_open: "Registration open",
   upcoming: "Upcoming",
