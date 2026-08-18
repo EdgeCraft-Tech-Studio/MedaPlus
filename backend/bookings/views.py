@@ -102,8 +102,8 @@ def create_booking_group(request):
 
         existing_slot = Slot.objects.filter(
             pitch=pitch,
-            start_dt=start_dt,
-            end_dt=end_dt,
+            start_dt=start_dt, 
+            end_dt=end_dt, 
         ).first()
 
         if existing_slot and existing_slot.status != SlotStatus.AVAILABLE:

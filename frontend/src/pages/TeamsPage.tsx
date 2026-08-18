@@ -154,6 +154,10 @@ export default function TeamsPage() {
             <UsersIcon width={22} height={22} />
             Create a new team
           </Link>
+          <Link to="/join" className={`${styles.card} ${styles.cardAdd}`}>
+            <UsersIcon width={22} height={22} />
+            Join team
+          </Link>
         </div>
       )}
     </div>

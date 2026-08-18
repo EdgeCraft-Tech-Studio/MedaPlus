@@ -13,7 +13,6 @@ import styles from "./css/PitchDetail.module.css";
 import LoadingBall from "./LoadingBall";
 import { showToast } from "./Toast";
 import ToastContainer from "./Toast";
-import AppHeader from "./AppHeader";
 
 type BookingMode = "daily" | "weekly" | "monthly";
 type SelectedMap = Record<string, AvailabilitySlot>;
@@ -460,7 +459,6 @@ export default function PitchDetail() {
 
   return (
     <div>
-    <AppHeader variant="logout" /> 
     <div className={styles.page}>
       <ToastContainer />
       <div className={styles.shell}>
