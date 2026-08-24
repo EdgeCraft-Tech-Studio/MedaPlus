@@ -91,13 +91,16 @@ export async function changePassword(payload: {
   return res.data;
 }
 
-export async function requestPhoneChange(new_phone: string): Promise<{ message: string }> {
-  const res = await api.post<{ message: string }>("/auth/me/phone/request/", { new_phone });
+export async function requestPhoneChange(payload: {
+  new_phone: string; // must be +251… — normalize before calling this
+  password: string;
+}): Promise<{ message: string }> {
+  const res = await api.post<{ message: string }>("/auth/me/phone/request/", payload);
   return res.data;
 }
 
 export async function confirmPhoneChange(payload: {
-  new_phone: string;
+  new_phone: string; // same +251… value sent to requestPhoneChange
   otp_code: string;
 }): Promise<SessionUser> {
   const res = await api.post<SessionUser>("/auth/me/phone/confirm/", payload);

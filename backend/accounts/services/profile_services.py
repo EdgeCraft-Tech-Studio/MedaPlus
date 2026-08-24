@@ -16,8 +16,8 @@ class ProfileService:
         ])
         
         # 2. revoke all other sessions — user stays logged in here
-        SessionService.revoke_all_sessions(
+        SessionService().revoke_all_sessions(
             user_id=user.id,
             reason=REVOKE_REASON_CHOICES.REVOKE_PASSWORD_CHANGE,
-            exclude_session_id=current_session_id
+            exclude_session_id=current_session_id,
         )

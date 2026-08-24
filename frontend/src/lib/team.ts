@@ -322,3 +322,26 @@ export async function requestJoinViaCode(code: string, message: string = "") {
   const res = await api.post(`/invitations/code/request/`, { code, message });
   return res.data;
 }
+
+
+export interface UserSearchResult {
+  id: string;
+  username: string;
+  first_name: string;
+  last_name: string;
+  profile_photo_url: string | null;
+}
+
+export async function searchUsersForInvite(slug: string, query: string): Promise<UserSearchResult[]> {
+  const res = await api.get(`/teams/${slug}/invitations/search-users/`, {
+    params: { q: query },
+  });
+  return res.data;
+}
+
+export async function createDirectInvitation(slug: string, invitedUserId: string) {
+  const res = await api.post(`/teams/${slug}/invitations/direct/`, {
+    invited_user_id: invitedUserId,
+  });
+  return res.data;
+}

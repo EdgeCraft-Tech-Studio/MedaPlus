@@ -2,6 +2,7 @@ from datetime import timedelta
 import uuid
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.db import models
+from django.db.models.functions import Lower
 from django.utils import timezone
 
 
@@ -261,7 +262,11 @@ class User(AbstractBaseUser, PermissionsMixin):
             models.Index(
                 fields=['phone', 'deleted_at'],
                 name='idx_user_deleted'
-            )
+            ),
+
+            models.Index(Lower('username'), name='idx_user_username_lower'),
+            models.Index(Lower('first_name'), name='idx_user_first_name_lower'),
+            models.Index(Lower('last_name'), name='idx_user_last_name_lower'),
 
         ]
 

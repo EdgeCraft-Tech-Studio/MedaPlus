@@ -41,7 +41,7 @@ from ..services import (
     update_invitation as update_invitation_service,
 )
 from ..services.exceptions import InsufficientPermissionError
-from .throttling import CodeRedemptionThrottle, InvitationCreateThrottle
+from ..throttling import CodeRedemptionThrottle, InvitationCreateThrottle
 from .mixins import TeamLookupMixin
 
 

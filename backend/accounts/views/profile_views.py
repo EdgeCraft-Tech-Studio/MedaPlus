@@ -353,6 +353,7 @@ class RequestPhoneChangeView(APIView):
             # Original passed only new_phone — service had no user context.
             _auth_service.initiate_phone_change(
                 new_phone=new_phone,
+                user = request.user
             )
         except SMSSendError:
             # do not expose internal SMS error details to API caller

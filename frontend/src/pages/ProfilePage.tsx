@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import styles from "./css/Profile.module.css";
 import { ChevronRightIcon, LockIcon } from "./Icons";
@@ -9,6 +9,368 @@ import {
 import type { SessionUser } from "../lib/session";
 
 const DASH = "–";
+
+/* ---------------------------------------------------------------------- */
+/* Icons                                                                   */
+/* ---------------------------------------------------------------------- */
+
+function EyeIcon({ width = 16, height = 16 }: { width?: number; height?: number }) {
+  return (
+    <svg width={width} height={height} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.8" />
+    </svg>
+  );
+}
+
+function EyeOffIcon({ width = 16, height = 16 }: { width?: number; height?: number }) {
+  return (
+    <svg width={width} height={height} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M17.94 17.94A10.94 10.94 0 0 1 12 19c-7 0-11-7-11-7a20.6 20.6 0 0 1 5.06-5.94M9.9 4.24A10.6 10.6 0 0 1 12 4c7 0 11 7 11 7a20.6 20.6 0 0 1-2.46 3.42M14.12 14.12a3 3 0 1 1-4.24-4.24"
+        stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M1 1l22 22" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function CameraIcon({ width = 13, height = 13 }: { width?: number; height?: number }) {
+  return (
+    <svg width={width} height={height} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2.13a1.5 1.5 0 0 0 1.28-.72l.68-1.12A1.5 1.5 0 0 1 10.87 4.5h2.26a1.5 1.5 0 0 1 1.28.66l.68 1.12A1.5 1.5 0 0 0 16.37 7H18.5A1.5 1.5 0 0 1 20 8.5v9A1.5 1.5 0 0 1 18.5 19h-13A1.5 1.5 0 0 1 4 17.5v-9Z"
+        stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+      <circle cx="12" cy="13" r="3.2" stroke="currentColor" strokeWidth="1.7" />
+    </svg>
+  );
+}
+
+function AlertIcon({ width = 13, height = 13 }: { width?: number; height?: number }) {
+  return (
+    <svg width={width} height={height} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 8v5M12 16v.01" />
+    </svg>
+  );
+}
+
+/* ---------------------------------------------------------------------- */
+/* Phone validation — identical logic to Login.tsx / Signup.tsx so every   */
+/* entry point normalizes the same way before hitting the backend.         */
+/* ---------------------------------------------------------------------- */
+
+interface PhoneValidationResult {
+  valid: boolean;
+  message: string;
+  normalized: string; // local format, e.g. 0941184305
+}
+
+function validateEthioPhone(value: string): PhoneValidationResult {
+  const cleaned = value.replace(/[\s\-()]/g, "");
+
+  if (!cleaned) {
+    return { valid: false, message: "Phone number is required", normalized: "" };
+  }
+
+  let digits = cleaned;
+
+  if (digits.startsWith("+251")) {
+    digits = "0" + digits.slice(4);
+  } else if (digits.startsWith("251") && digits.length === 12) {
+    digits = "0" + digits.slice(3);
+  }
+
+  if (!/^\d+$/.test(digits)) {
+    return { valid: false, message: "Phone number can only contain digits", normalized: "" };
+  }
+
+  if (digits.length !== 10) {
+    return {
+      valid: false,
+      message: "Enter a 10-digit number, e.g. 09XXXXXXXX or 07XXXXXXXX",
+      normalized: "",
+    };
+  }
+
+  if (digits[0] !== "0") {
+    return { valid: false, message: "Phone number must start with 0", normalized: "" };
+  }
+
+  const carrierDigit = digits[1];
+  if (carrierDigit !== "9" && carrierDigit !== "7") {
+    return {
+      valid: false,
+      message: "Enter a valid Ethio Telecom (09) or Safaricom (07) number",
+      normalized: "",
+    };
+  }
+
+  return { valid: true, message: "", normalized: digits };
+}
+
+function toInternationalPhone(local: string): string {
+  return "+251" + local.slice(1);
+}
+
+/* ---------------------------------------------------------------------- */
+/* Reusable password field with its own independent show/hide toggle       */
+/* ---------------------------------------------------------------------- */
+
+function PasswordField({
+  id, label, value, onChange, disabled,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  disabled?: boolean;
+}) {
+  const [show, setShow] = useState(false);
+  return (
+    <div className={styles.field}>
+      <label className={styles.label} htmlFor={id}>{label}</label>
+      <div className={styles.pwWrapper}>
+        <input
+          id={id}
+          type={show ? "text" : "password"}
+          className={styles.input}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          disabled={disabled}
+          autoComplete={id === "pw-current" ? "current-password" : "new-password"}
+        />
+        <button
+          type="button"
+          className={styles.pwToggle}
+          onClick={() => setShow((s) => !s)}
+          disabled={disabled}
+          aria-label={show ? "Hide password" : "Show password"}
+          tabIndex={-1}
+        >
+          {show ? <EyeOffIcon /> : <EyeIcon />}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------------- */
+/* Phone change: request (phone + password) -> OTP verify -> done          */
+/* ---------------------------------------------------------------------- */
+
+function PhoneChangeSection({
+  setUser, onClose,
+}: {
+  setUser: (u: SessionUser) => void;
+  onClose: () => void;
+}) {
+  const [stage, setStage] = useState<"form" | "otp">("form");
+
+  const [newPhone, setNewPhone] = useState("");       // raw user input, local format
+  const [pendingPhone, setPendingPhone] = useState(""); // normalized +251… actually sent to backend
+  const [phoneFieldError, setPhoneFieldError] = useState<string | null>(null);
+
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [otpCode, setOtpCode] = useState("");
+
+  const [requesting, setRequesting] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+
+  const [formError, setFormError] = useState<string | null>(null);
+  const [otpError, setOtpError] = useState<string | null>(null);
+  const [otpInfo, setOtpInfo] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  function handlePhoneInput(value: string) {
+    setNewPhone(value);
+    if (phoneFieldError) setPhoneFieldError(null);
+  }
+
+  async function handleRequest(e: React.FormEvent) {
+    e.preventDefault();
+    setFormError(null);
+    setPhoneFieldError(null);
+
+    const result = validateEthioPhone(newPhone);
+    if (!result.valid) {
+      setPhoneFieldError(result.message);
+      return;
+    }
+
+    const internationalPhone = toInternationalPhone(result.normalized);
+
+    setRequesting(true);
+    try {
+      const res = await requestPhoneChange({ new_phone: internationalPhone, password });
+      setPendingPhone(internationalPhone);
+      setOtpInfo(res.message || `We sent a code to ${internationalPhone}.`);
+      setStage("otp");
+    } catch (err: any) {
+      const data = err?.response?.data;
+      setFormError(
+        data?.new_phone?.[0] ?? data?.password?.[0] ?? data?.detail ?? "Couldn't send verification code."
+      );
+    } finally {
+      setRequesting(false);
+    }
+  }
+
+  async function handleVerify(e: React.FormEvent) {
+    e.preventDefault();
+    setVerifying(true);
+    setOtpError(null);
+    try {
+      const updated = await confirmPhoneChange({ new_phone: pendingPhone, otp_code: otpCode });
+      setUser(updated);
+      setSuccess("Phone number updated successfully.");
+      setTimeout(() => onClose(), 1400);
+    } catch (err: any) {
+      const data = err?.response?.data;
+      setOtpError(data?.otp_code?.[0] ?? data?.detail ?? "Incorrect code. Please try again.");
+    } finally {
+      setVerifying(false);
+    }
+  }
+
+  if (success) {
+    return (
+      <div className={styles.editForm}>
+        <div className={styles.successBanner}>{success}</div>
+      </div>
+    );
+  }
+
+  const inOtpStage = stage === "otp";
+
+  return (
+    <form className={styles.editForm} onSubmit={inOtpStage ? handleVerify : handleRequest}>
+      <fieldset
+        className={inOtpStage ? styles.fieldsetLocked : undefined}
+        disabled={inOtpStage || requesting}
+        style={{ border: "none", padding: 0, margin: 0 }}
+      >
+        <div className={styles.field}>
+          <label className={styles.label} htmlFor="new-phone">New phone number</label>
+          <input
+            id="new-phone"
+            className={styles.input}
+            placeholder="09XXXXXXXX or 07XXXXXXXX"
+            value={newPhone}
+            onChange={(e) => handlePhoneInput(e.target.value)}
+            inputMode="tel"
+            autoComplete="tel"
+            aria-invalid={!!phoneFieldError}
+          />
+          {phoneFieldError && (
+            <div className={styles.fieldError}>
+              <AlertIcon />
+              <span>{phoneFieldError}</span>
+            </div>
+          )}
+        </div>
+        <div className={styles.field}>
+          <label className={styles.label} htmlFor="phone-pw">Your password</label>
+          <div className={styles.pwWrapper}>
+            <input
+              id="phone-pw"
+              type={showPassword ? "text" : "password"}
+              className={styles.input}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
+            />
+            <button
+              type="button"
+              className={styles.pwToggle}
+              onClick={() => setShowPassword((s) => !s)}
+              aria-label={showPassword ? "Hide password" : "Show password"}
+              tabIndex={-1}
+            >
+              {showPassword ? <EyeOffIcon /> : <EyeIcon />}
+            </button>
+          </div>
+        </div>
+      </fieldset>
+
+      {formError && (
+        <div className={styles.fieldError}>
+          <AlertIcon />
+          <span>{formError}</span>
+        </div>
+      )}
+
+      {inOtpStage && (
+        <div className={styles.otpBlock}>
+          {otpInfo && <div className={styles.fieldInfo}>{otpInfo}</div>}
+          <div className={styles.otpRow}>
+            <div className={styles.field} style={{ marginBottom: 0, flex: 1 }}>
+              <label className={styles.label} htmlFor="otp">Verification code</label>
+              <input
+                id="otp"
+                className={styles.input}
+                inputMode="numeric"
+                maxLength={5}
+                placeholder="12345"
+                value={otpCode}
+                onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ""))}
+                disabled={verifying}
+                autoFocus
+              />
+            </div>
+            <button
+              type="submit"
+              className={styles.verifyBtn}
+              disabled={verifying || otpCode.length !== 5}
+            >
+              {verifying ? <span className={styles.spinner} aria-hidden="true" /> : "Verify"}
+            </button>
+          </div>
+          {otpError && (
+            <div className={styles.fieldError}>
+              <AlertIcon />
+              <span>{otpError}</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className={styles.formActions}>
+        {!inOtpStage ? (
+          <>
+            <button type="submit" className={styles.saveBtn} disabled={requesting || !newPhone || !password}>
+              {requesting ? "Sending code..." : "Save changes"}
+            </button>
+            <button type="button" className={styles.cancelBtn} onClick={onClose} disabled={requesting}>
+              Cancel
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              type="button"
+              className={`${styles.saveBtn} ${styles.disabledLook}`}
+              disabled
+              aria-disabled="true"
+            >
+              Save changes
+            </button>
+            <button
+              type="button"
+              className={styles.cancelBtn}
+              onClick={() => { setStage("form"); setOtpCode(""); setOtpError(null); }}
+              disabled={verifying}
+            >
+              Back
+            </button>
+          </>
+        )}
+      </div>
+    </form>
+  );
+}
+
+/* ---------------------------------------------------------------------- */
+/* Main page                                                                */
+/* ---------------------------------------------------------------------- */
 
 export default function ProfilePage() {
   const nav = useNavigate();
@@ -41,12 +403,6 @@ export default function ProfilePage() {
   const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
 
   const [showPhoneForm, setShowPhoneForm] = useState(false);
-  const [phoneStep, setPhoneStep] = useState<"request" | "confirm">("request");
-  const [newPhone, setNewPhone] = useState("");
-  const [otpCode, setOtpCode] = useState("");
-  const [phoneSubmitting, setPhoneSubmitting] = useState(false);
-  const [phoneError, setPhoneError] = useState<string | null>(null);
-  const [phoneMessage, setPhoneMessage] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -155,42 +511,6 @@ export default function ProfilePage() {
     }
   }
 
-  async function handleRequestPhoneChange(e: React.FormEvent) {
-    e.preventDefault();
-    setPhoneSubmitting(true);
-    setPhoneError(null);
-    try {
-      const res = await requestPhoneChange(newPhone);
-      setPhoneMessage(res.message);
-      setPhoneStep("confirm");
-    } catch (err: any) {
-      const data = err?.response?.data;
-      setPhoneError(data?.new_phone?.[0] ?? data?.detail ?? "Couldn't request phone change.");
-    } finally {
-      setPhoneSubmitting(false);
-    }
-  }
-
-  async function handleConfirmPhoneChange(e: React.FormEvent) {
-    e.preventDefault();
-    setPhoneSubmitting(true);
-    setPhoneError(null);
-    try {
-      const updated = await confirmPhoneChange({ new_phone: newPhone, otp_code: otpCode });
-      setUser(updated);
-      setShowPhoneForm(false);
-      setPhoneStep("request");
-      setNewPhone("");
-      setOtpCode("");
-      setPhoneMessage(null);
-    } catch (err: any) {
-      const data = err?.response?.data;
-      setPhoneError(data?.otp_code?.[0] ?? data?.detail ?? "Couldn't confirm phone change.");
-    } finally {
-      setPhoneSubmitting(false);
-    }
-  }
-
   async function handleLogout() {
     await logout();
     nav("/login", { replace: true });
@@ -217,15 +537,19 @@ export default function ProfilePage() {
   return (
     <div className={styles.page}>
       <div className={styles.headCard}>
-        <button
-          className={styles.avatar}
-          onClick={handlePhotoClick}
-          disabled={uploadingPhoto}
-          aria-label="Change profile photo"
-          style={{ border: "none", cursor: "pointer", padding: 0 }}
-        >
-          {user.profile_photo_url ? <img src={user.profile_photo_url} alt="" /> : initials}
-        </button>
+        <div className={styles.avatarWrap}>
+          <button
+            className={styles.avatar}
+            onClick={handlePhotoClick}
+            disabled={uploadingPhoto}
+            aria-label="Change profile photo"
+          >
+            {user.profile_photo_url ? <img src={user.profile_photo_url} alt="" /> : initials}
+          </button>
+          <span className={styles.avatarCameraBadge} aria-hidden="true">
+            <CameraIcon />
+          </span>
+        </div>
         <input
           ref={fileInputRef}
           type="file"
@@ -241,7 +565,7 @@ export default function ProfilePage() {
         </div>
       </div>
       {uploadingPhoto && <div className={styles.sectionTitle}>Uploading photo…</div>}
-      {photoError && <div className={styles.sectionTitle} style={{ color: "var(--danger, red)" }}>{photoError}</div>}
+      {photoError && <div className={styles.fieldError}><AlertIcon /><span>{photoError}</span></div>}
 
       {/* ---------- Personal information ---------- */}
       <div className={styles.sectionTitle}>Personal information</div>
@@ -263,13 +587,12 @@ export default function ProfilePage() {
               <input id="p-last" className={styles.input} value={lastName}
                 onChange={(e) => setLastName(e.target.value)} disabled={savingProfile} />
             </div>
-            {profileError && <div style={{ color: "var(--danger, red)", fontSize: 13 }}>{profileError}</div>}
-            <div style={{ display: "flex", gap: 8 }}>
+            {profileError && <div className={styles.fieldError}><AlertIcon /><span>{profileError}</span></div>}
+            <div className={styles.formActions}>
               <button type="submit" className={styles.saveBtn} disabled={savingProfile}>
                 {savingProfile ? "Saving..." : "Save changes"}
               </button>
-              <button type="button" className={styles.saveBtn}
-                style={{ background: "var(--grass-soft)", color: "var(--green-800)" }}
+              <button type="button" className={styles.cancelBtn}
                 onClick={() => setEditing(false)} disabled={savingProfile}>
                 Cancel
               </button>
@@ -283,7 +606,7 @@ export default function ProfilePage() {
       <div className={styles.card}>
         {!editingEmail ? (
           <button className={`${styles.row} ${styles.rowBtn}`} onClick={startEditEmail}>
-            <span className={styles.rowLabel}>{user.email ?? "Add an email"}</span>
+            <span className={styles.rowLabel}>{user.email || "Add an email"}</span>
             <ChevronRightIcon width={15} height={15} />
           </button>
         ) : (
@@ -293,13 +616,12 @@ export default function ProfilePage() {
               <input id="p-email" type="email" className={styles.input} value={emailDraft}
                 onChange={(e) => setEmailDraft(e.target.value)} disabled={savingEmail} />
             </div>
-            {emailError && <div style={{ color: "var(--danger, red)", fontSize: 13 }}>{emailError}</div>}
-            <div style={{ display: "flex", gap: 8 }}>
+            {emailError && <div className={styles.fieldError}><AlertIcon /><span>{emailError}</span></div>}
+            <div className={styles.formActions}>
               <button type="submit" className={styles.saveBtn} disabled={savingEmail}>
                 {savingEmail ? "Saving..." : "Save email"}
               </button>
-              <button type="button" className={styles.saveBtn}
-                style={{ background: "var(--grass-soft)", color: "var(--green-800)" }}
+              <button type="button" className={styles.cancelBtn}
                 onClick={() => setEditingEmail(false)} disabled={savingEmail}>
                 Cancel
               </button>
@@ -322,81 +644,36 @@ export default function ProfilePage() {
           </button>
         ) : (
           <form className={styles.editForm} onSubmit={handleChangePassword}>
-            <div className={styles.field}>
-              <label className={styles.label} htmlFor="pw-current">Current password</label>
-              <input id="pw-current" type="password" className={styles.input} value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)} disabled={savingPassword} />
-            </div>
-            <div className={styles.field}>
-              <label className={styles.label} htmlFor="pw-new">New password</label>
-              <input id="pw-new" type="password" className={styles.input} value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)} disabled={savingPassword} />
-            </div>
-            <div className={styles.field}>
-              <label className={styles.label} htmlFor="pw-confirm">Confirm new password</label>
-              <input id="pw-confirm" type="password" className={styles.input} value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)} disabled={savingPassword} />
-            </div>
-            {passwordError && <div style={{ color: "var(--danger, red)", fontSize: 13 }}>{passwordError}</div>}
-            <br />
-            <div style={{ display: "flex", gap: 8 }}>
+            <PasswordField id="pw-current" label="Current password" value={currentPassword}
+              onChange={setCurrentPassword} disabled={savingPassword} />
+            <PasswordField id="pw-new" label="New password" value={newPassword}
+              onChange={setNewPassword} disabled={savingPassword} />
+            <PasswordField id="pw-confirm" label="Confirm new password" value={confirmPassword}
+              onChange={setConfirmPassword} disabled={savingPassword} />
+            {passwordError && <div className={styles.fieldError}><AlertIcon /><span>{passwordError}</span></div>}
+            <div className={styles.formActions}>
               <button type="submit" className={styles.saveBtn} disabled={savingPassword}>
                 {savingPassword ? "Saving..." : "Update password"}
               </button>
-              <button type="button" className={styles.saveBtn}
-                style={{ background: "var(--grass-soft)", color: "var(--green-800)" }}
+              <button type="button" className={styles.cancelBtn}
                 onClick={() => setShowPasswordForm(false)} disabled={savingPassword}>
                 Cancel
               </button>
             </div>
           </form>
         )}
-        {passwordSuccess && <div style={{ padding: "8px 16px", fontSize: 13, color: "var(--green-800)" }}>{passwordSuccess}</div>}
+        {passwordSuccess && <div className={styles.successBanner}>{passwordSuccess}</div>}
 
         {!showPhoneForm ? (
-          <button className={`${styles.row} ${styles.rowBtn}`} onClick={() => { setShowPhoneForm(true); setPhoneStep("request"); }}>
+          <button className={`${styles.row} ${styles.rowBtn}`} onClick={() => setShowPhoneForm(true)}>
             <span className={styles.rowLabel}>Change phone number</span>
             <ChevronRightIcon width={15} height={15} />
           </button>
-        ) : phoneStep === "request" ? (
-          <form className={styles.editForm} onSubmit={handleRequestPhoneChange}>
-            <div className={styles.field}>
-              <label className={styles.label} htmlFor="new-phone">New phone number</label>
-              <input id="new-phone" className={styles.input} placeholder="+251912345678" value={newPhone}
-                onChange={(e) => setNewPhone(e.target.value)} disabled={phoneSubmitting} />
-            </div>
-            {phoneError && <div style={{ color: "var(--danger, red)", fontSize: 13 }}>{phoneError}</div>}
-            <div style={{ display: "flex", gap: 8 }}>
-              <button type="submit" className={styles.saveBtn} disabled={phoneSubmitting}>
-                {phoneSubmitting ? "Sending..." : "Send OTP"}
-              </button>
-              <button type="button" className={styles.saveBtn}
-                style={{ background: "var(--grass-soft)", color: "var(--green-800)" }}
-                onClick={() => setShowPhoneForm(false)} disabled={phoneSubmitting}>
-                Cancel
-              </button>
-            </div>
-          </form>
         ) : (
-          <form className={styles.editForm} onSubmit={handleConfirmPhoneChange}>
-            {phoneMessage && <div style={{ fontSize: 13, color: "var(--green-800)" }}>{phoneMessage}</div>}
-            <div className={styles.field}>
-              <label className={styles.label} htmlFor="otp">OTP code</label>
-              <input id="otp" className={styles.input} value={otpCode}
-                onChange={(e) => setOtpCode(e.target.value)} disabled={phoneSubmitting} />
-            </div>
-            {phoneError && <div style={{ color: "var(--danger, red)", fontSize: 13 }}>{phoneError}</div>}
-            <div style={{ display: "flex", gap: 8 }}>
-              <button type="submit" className={styles.saveBtn} disabled={phoneSubmitting}>
-                {phoneSubmitting ? "Confirming..." : "Confirm"}
-              </button>
-              <button type="button" className={styles.saveBtn}
-                style={{ background: "var(--grass-soft)", color: "var(--green-800)" }}
-                onClick={() => { setShowPhoneForm(false); setPhoneStep("request"); }} disabled={phoneSubmitting}>
-                Cancel
-              </button>
-            </div>
-          </form>
+          <PhoneChangeSection
+            setUser={setUser}
+            onClose={() => setShowPhoneForm(false)}
+          />
         )}
       </div>
 

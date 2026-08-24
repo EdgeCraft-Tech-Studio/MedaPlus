@@ -3,11 +3,13 @@ import styles from "./css/ManageRoster.module.css";
 import {
   UserPlusIcon, SearchIcon, LinkIcon, HashIcon, CopyIcon, XIcon, MoreIcon, EditIcon, TrashIcon, CheckIcon,
 } from "./Icons";
+
 import {
   type RosterMember, type TeamInvitationItem, type JoinRequestItem, type TeamDashboardData,
   promoteMember, demoteMember, removeMember, transferOwnership,
   cancelInvitation, approveJoinRequest, rejectJoinRequest,
   createLinkInvitation, createCodeInvitation, updateInvitation,
+  searchUsersForInvite, createDirectInvitation, type UserSearchResult, // ✅ add this line
 } from "../lib/team";
 
 type SubTab = "members" | "invitations" | "requests";
@@ -658,7 +660,7 @@ function AddPlayersModal({
 
         <div className={styles.methodBody}>
           {method === "search" && (
-            <div className={styles.emptyMini}>search field</div>
+            <SearchTab slug={slug} onInviteSent={() => setHasChanges(true)} />
           )}
 
           {method === "link" && (
@@ -990,6 +992,144 @@ function AddPlayersModal({
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function SearchTab({ slug, onInviteSent }: { slug: string; onInviteSent: () => void }) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<UserSearchResult[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [searched, setSearched] = useState(false);
+  const [invitingId, setInvitingId] = useState<string | null>(null);
+  const [invitedIds, setInvitedIds] = useState<Set<string>>(new Set());
+
+  function validateQuery(value: string): string | null {
+    const trimmed = value.trim();
+    if (!trimmed) return "Enter a name, username, or phone number.";
+    if (trimmed.length > 50) return "Search text is too long.";
+    return null;
+  }
+
+  async function handleSearch() {
+    const validationError = validateQuery(query);
+    if (validationError) {
+      setError(validationError);
+      setResults([]);
+      setSearched(false);
+      return;
+    }
+    setError("");
+    setLoading(true);
+    setSearched(true);
+    try {
+      const data = await searchUsersForInvite(slug, query.trim());
+      setResults(data);
+    } catch (err: any) {
+      const backendMsg = err?.response?.data?.q?.[0] || err?.response?.data?.detail;
+      setError(backendMsg || "Couldn't search right now. Try again.");
+      setResults([]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleInvite(userId: string) {
+    setInvitingId(userId);
+    setError("");
+    try {
+      await createDirectInvitation(slug, userId);
+      setInvitedIds((prev) => new Set(prev).add(userId));
+      onInviteSent();
+    } catch (err: any) {
+      const backendMsg = err?.response?.data?.detail;
+      setError(backendMsg || "Couldn't send invitation. Try again.");
+    } finally {
+      setInvitingId(null);
+    }
+  }
+
+  function displayName(u: UserSearchResult) {
+    const name = `${u.first_name ?? ""} ${u.last_name ?? ""}`.trim();
+    return name || u.username;
+  }
+
+  function initialsOf(name: string) {
+    return name.trim().split(/\s+/).map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase();
+  }
+
+  return (
+    <div>
+      <div className={styles.searchInputRow}>
+        <SearchIcon width={16} height={16} />
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") handleSearch(); }}
+          placeholder="Name, username, or phone number"
+          disabled={loading}
+          autoFocus
+        />
+        <button
+          type="button"
+          className={styles.searchGoBtn}
+          onClick={handleSearch}
+          disabled={loading}
+          aria-label="Search"
+        >
+          <SearchIcon width={15} height={15} />
+        </button>
+      </div>
+
+      {error && <div className={styles.errorBanner}>{error}</div>}
+
+      {loading && (
+        <div className={styles.searchResultsScroll}>
+          {[0, 1, 2].map((i) => (
+            <div key={i} className={styles.searchResultRow}>
+              <span className={`${styles.shimmerCircle} ${styles.shimmer}`} />
+              <div className={styles.searchResultInfo}>
+                <span className={`${styles.shimmerName} ${styles.shimmer}`} />
+                <span className={`${styles.shimmerHandle} ${styles.shimmer}`} />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {!loading && searched && !error && results.length === 0 && (
+        <div className={styles.emptyMini}>No matching players found.</div>
+      )}
+
+      {!loading && results.length > 0 && (
+        <div className={styles.searchResultsScroll}>
+          {results.map((u) => {
+            const name = displayName(u);
+            const invited = invitedIds.has(u.id);
+            const inviting = invitingId === u.id;
+            return (
+              <div key={u.id} className={styles.searchResultRow}>
+                <span className={styles.avatar}>
+                  {u.profile_photo_url ? <img src={u.profile_photo_url} alt="" /> : initialsOf(name)}
+                </span>
+                <div className={styles.searchResultInfo}>
+                  <div className={styles.searchResultName}>{name}</div>
+                  <div className={styles.searchResultHandle}>@{u.username}</div>
+                </div>
+                <button
+                  className={styles.inviteBtnSmall}
+                  onClick={() => handleInvite(u.id)}
+                  disabled={invited || inviting}
+                  style={invited ? { background: "var(--grass-soft)", color: "var(--green-700)" } : undefined}
+                >
+                  {invited ? "Invited" : inviting ? "Sending…" : "Invite"}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

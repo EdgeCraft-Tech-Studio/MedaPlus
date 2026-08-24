@@ -47,6 +47,11 @@ team_urlpatterns = [
         TeamViewSet.as_view({"post": "transfer_ownership_action"}),
         name="team-transfer-ownership",
     ),
+    path(
+    "teams/<slug:team_slug>/invitations/search-users/",
+    TeamViewSet.as_view({"get": "search_users"}),
+    name="invitation-search-users",
+),
 ]
 
 membership_urlpatterns = [

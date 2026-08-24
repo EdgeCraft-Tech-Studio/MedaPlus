@@ -190,42 +190,39 @@ class AuthService:
         logger.info('Signup OTP sent')
 
     def store_signup_data(
-        self,
-        phone: str,
-        username: str,
-        first_name: str,
-        last_name: str,
-        role: str,
-        password: str,
-    ) -> None:
-        """
-        Stores signup step-1 data in Redis with a 10-minute TTL.
+            self,
+            phone: str,
+            username: str,
+            first_name: str,
+            last_name: str,
+            password: str,
+            role: str,
+            email: str | None = None,
+        ) -> None:
+            key = f'{self._SIGNUP_KEY_PREFIX}{phone}'
+    
+            data = {
+                'first_name': first_name,
+                'last_name': last_name,
+                'username': username,
+                'email': email,
+                'role':role,
+                'hashed_password': make_password(password),
+            }
+    
+            cache.set(
+                key,
+                json.dumps(data),
+                timeout=self._SIGNUP_DATA_TTL
+            )
+    
+            logger.debug(
+                'Signup data cached',
+                extra={'phone': phone}
+            )
 
-        WHY Redis and not Django session:
-            Session cookies or DB sessions would store a plaintext password
-            (or its hash) in a user-controlled cookie / DB row.
-            Redis with a server-side key is controlled entirely by the backend
-            and auto-expires — this is the correct pattern for short-lived
-            pre-registration state.
 
-        Password is hashed with make_password() before storage so the raw
-        password never hits Redis — only the Django hash string is stored.
-
-        Called by:
-            auth_views.SignupView (only after OTP send succeeds)
-        """
-        key  = f'{self._SIGNUP_KEY_PREFIX}{phone}'
-        data = {
-            'username': username,
-            'first_name':      first_name,
-            'last_name':       last_name,
-            'role': role,
-            'hashed_password': make_password(password),   # raw password never stored
-        }
-        cache.set(key, json.dumps(data), timeout=self._SIGNUP_DATA_TTL)
-
-        logger.debug('Signup data cached', extra={'phone': phone})
-
+    
     def get_signup_data(self, phone: str) -> dict | None:
         """
         Retrieves signup step-1 data from Redis.
@@ -272,6 +269,7 @@ class AuthService:
         ip_address: str | None = None,
         user_agent: str | None = None,
         fcm_token: str | None = None,
+        email: str | None = None,
     ) -> dict:
         """
         Step 2 of signup flow — creates user and issues session.
@@ -313,20 +311,25 @@ class AuthService:
             raise PhoneAlreadyExistsError(
                 'An account with this phone number already exists.'
             )
+        if email and User.objects.filter(email=email, deleted_at__isnull=True).exists():
+            raise PhoneAlreadyExistsError(
+                'An account with this email already exists.'
+            )
         if User.objects.filter(username=username, deleted_at__isnull=True).exists():
             raise UsernameAlreadyExistsError(
                 'This username is already taken.'
             )
-
         # step 3 — create user
         # password is already hashed — pass directly to avoid double-hashing
-        user = User.objects.create_user(
+        user = User(
             username=username,
             phone=phone,
             first_name=first_name,
             last_name=last_name,
+            email=email,
             password=hashed_password,
         )
+
         user.role = role
         # Players are approved immediately; owners require admin approval
         user.is_approved = (role == UserRole.PLAYER)
@@ -729,7 +732,7 @@ class AuthService:
     # Step 2 → confirm_phone_change    (marks used, updates phone, revokes sessions)
     # =========================================================================
 
-    def initiate_phone_change(self, new_phone: str) -> None:
+    def initiate_phone_change(self, new_phone: str, user: None) -> None:
         """
         Step 1 of phone change flow.
         Sends OTP to the NEW phone number to verify the user owns it.
@@ -746,7 +749,7 @@ class AuthService:
         self.otp_service.send(
             phone=new_phone,
             purpose=PhoneVerification.Purpose.PHONE_CHANGE,
-            user=None
+            user=user
         )
 
         logger.info(
@@ -808,7 +811,7 @@ class AuthService:
         # other devices will receive 401 and must re-login with the new phone
         self.session_service.revoke_all_sessions(
             user_id=user.id,
-            reason=REVOKE_REASON_CHOICES.REVOKE_PHONE_CHANGE,
+            reason=REVOKE_REASON_CHOICES.REVOKE_PHONE_CHANGED,
             exclude_session_id=current_session_id,
         )
 

@@ -120,25 +120,16 @@ def _store_signup_data(phone: str, validated: dict) -> None:
     never reaches Redis.
     Called only after OTP send succeeds — if send fails, we don't store.
     """
-    if validated['email']:
-        _auth_service.store_signup_data(
-            phone=phone,
-            username=validated['username'],
-            first_name=validated['first_name'],
-            last_name=validated['last_name'],
-            password=validated['password'],
-            role=validated['role'],
-            email=validated['email']
-        )
-    else:
-        _auth_service.store_signup_data(
-            phone=phone,
-            username=validated['username'],
-            first_name=validated['first_name'],
-            last_name=validated['last_name'],
-            password=validated['password'],
-            role=validated['role']
-        )
+    
+    _auth_service.store_signup_data(
+        phone=phone,
+        username=validated['username'],
+        first_name=validated['first_name'],
+        last_name=validated['last_name'],
+        password=validated['password'],
+        role=validated['role'],
+        email=validated.get('email'),
+    )
 
 
 def _get_signup_data(phone: str) -> dict | None:
@@ -237,13 +228,13 @@ class SignupVerifyOTPView(APIView):
                 },
                 status=status.HTTP_400_BAD_REQUEST
             )
-
         try:
             result = _auth_service.complete_signup(
                 phone=phone,
                 username=signup_data['username'],
                 first_name=signup_data['first_name'],
                 last_name=signup_data['last_name'],
+                email=signup_data.get('email'),
                 hashed_password=signup_data['hashed_password'],   # hashed in Redis
                 role=signup_data['role'],
                 verification=verification,

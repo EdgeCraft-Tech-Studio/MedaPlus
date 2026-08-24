@@ -6,6 +6,11 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from team.serializers.common import UserSummarySerializer
+from team.serializers.invitation import UserSearchQuerySerializer
+from team.services.user_search_services import search_users_for_invite
+from team.throttling import UserSearchThrottle
+
 from ..models import MembershipRole, Team
 from ..pagination import DefaultPagination
 from ..serializers import (
@@ -20,8 +25,9 @@ from ..services import leave_team, transfer_ownership
 from ..services.exceptions import TeamServiceError
 from .permissions import IsTeamOwner
 
+from .mixins import TeamLookupMixin
 
-class TeamViewSet(viewsets.GenericViewSet):
+class TeamViewSet(TeamLookupMixin,viewsets.GenericViewSet):
 
     """
     list        GET    /teams/                       — public discovery
@@ -146,6 +152,24 @@ class TeamViewSet(viewsets.GenericViewSet):
             )
         serializer = TeamDetailSerializer(team, context=self.get_serializer_context())
         return Response(serializer.data)
+
+
+
+
+    @action(detail=False, methods=["get"], url_path="search-users", throttle_classes=[UserSearchThrottle])
+    def search_users(self, request, *args, **kwargs):
+        team = self.get_team()
+        serializer = UserSearchQuerySerializer(data=request.query_params)
+        serializer.is_valid(raise_exception=True)
+        query = serializer.validated_data["q"]
+
+        users = search_users_for_invite(team=team, query=query)
+        return Response(
+            UserSummarySerializer(users, many=True, context=self.get_serializer_context()).data
+        )
+
+
+    
 
     @action(detail=False, methods=["get"], url_path="my")
     def my(self, request, *args, **kwargs):

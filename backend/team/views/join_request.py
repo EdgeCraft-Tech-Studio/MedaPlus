@@ -10,7 +10,7 @@ from team.pagination import DefaultPagination
 from .permissions import IsJoinRequestOwner, IsTeamManager
 from ..serializers import TeamJoinRequestCreateSerializer, TeamJoinRequestSerializer
 from ..services import approve_join_request, cancel_join_request, create_join_request, reject_join_request
-from .throttling import JoinRequestCreateThrottle
+from ..throttling import JoinRequestCreateThrottle
 from .mixins import TeamLookupMixin
 
 

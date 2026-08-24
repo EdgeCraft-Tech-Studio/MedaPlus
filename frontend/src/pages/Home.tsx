@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import styles from "./css/Home.module.css";
 import {
   VersusIcon, UsersIcon, ChevronRightIcon, TrophyIcon, FootballPitchIcon,
-  ClockIcon, MapPinIcon
+  ClockIcon, MapPinIcon,BookPitchIcon
 } from "./Icons";
 import { type TournamentStatus } from "./types";
 import type { SessionUser } from "../lib/session";
@@ -14,6 +14,7 @@ const PITCH_OWNER_ROLE = "OWNER";
 const ADMIN_ROLE = "ADMIN"; 
 
 const baseQuickActions = [
+  { key: "pitchbook", to: "/app", icon: BookPitchIcon, label: "Book Pitch" },
   { key: "match", to: "/match/create", icon: VersusIcon, label: "Make match" },
   { key: "createteam", to: "/team/create", icon: UsersIcon, label: "Create team" },
 ];
@@ -163,26 +164,7 @@ const quickActions = roleAction ? [...baseQuickActions, roleAction] : baseQuickA
           </div>
         </div>
 
-        {/* ---------------- WEEK SNAPSHOT ---------------- */}
-        <div className={styles.snapshotRow}>
-          <div className={styles.snapshotItem}>
-            <span className={styles.snapshotValue}>{mockWeekSnapshot.matchesThisWeek}</span>
-            <span className={styles.snapshotLabel}>Matches this week</span>
-          </div>
-          <div className={styles.snapshotDivider} />
-          <div className={styles.snapshotItem}>
-            <span className={styles.snapshotValue}>{mockWeekSnapshot.pendingPayments}</span>
-            <span className={styles.snapshotLabel}>Pending payments</span>
-          </div>
-          <div className={styles.snapshotDivider} />
-          <div className={styles.snapshotItem}>
-            <span className={styles.snapshotValue}>{mockWeekSnapshot.tournamentsOpen}</span>
-            <span className={styles.snapshotLabel}>Tournaments open</span>
-          </div>
-        </div>
-      </header>
-
-      {/* ---------------- QUICK ACTIONS ---------------- */}
+         {/* ---------------- QUICK ACTIONS ---------------- */}
       <section className={styles.section}>
         <div className={styles.sectionHead}>
           <span className={styles.sectionTitle}>Quick actions</span>
@@ -200,6 +182,27 @@ const quickActions = roleAction ? [...baseQuickActions, roleAction] : baseQuickA
           })}
         </div>
       </section>
+
+      </header>
+
+        {/* ---------------- WEEK SNAPSHOT ---------------- */}
+        <div className={styles.snapshotRow}>
+          <div className={styles.snapshotItem}>
+            <span className={styles.snapshotValue}>{mockWeekSnapshot.matchesThisWeek}</span>
+            <span className={styles.snapshotLabel}>Matches this week</span>
+          </div>
+          <div className={styles.snapshotDivider} />
+          <div className={styles.snapshotItem}>
+            <span className={styles.snapshotValue}>{mockWeekSnapshot.pendingPayments}</span>
+            <span className={styles.snapshotLabel}>Pending payments</span>
+          </div>
+          <div className={styles.snapshotDivider} />
+          <div className={styles.snapshotItem}>
+            <span className={styles.snapshotValue}>{mockWeekSnapshot.tournamentsOpen}</span>
+            <span className={styles.snapshotLabel}>Tournaments open</span>
+          </div>
+        </div>
+     
 
       {/* ---------------- UPCOMING MATCHES ---------------- */}
       <section className={styles.section}>

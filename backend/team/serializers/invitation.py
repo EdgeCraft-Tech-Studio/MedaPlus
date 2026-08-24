@@ -181,3 +181,12 @@ class JoinRequestViaCodeSerializer(serializers.Serializer):
 
     def validate_code(self, value: str) -> str:
         return value.strip().upper()
+
+class UserSearchQuerySerializer(serializers.Serializer):
+    q = serializers.CharField(min_length=1, max_length=50)
+
+    def validate_q(self, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError("Search query cannot be empty.")
+        return value

@@ -36,3 +36,15 @@ class JoinRequestCreateThrottle(UserRateThrottle):
     """
 
     scope = "join_request_create"
+
+
+
+class UserSearchThrottle(UserRateThrottle):
+    """Search hits the users table directly. Without a limit, this
+    endpoint becomes an enumeration/scraping vector (brute-force
+    guessing real phone numbers or usernames one exact query at a
+    time). Configure via
+    DEFAULT_THROTTLE_RATES = {'user_search': '60/min'}.
+    """
+
+    scope = "user_search"

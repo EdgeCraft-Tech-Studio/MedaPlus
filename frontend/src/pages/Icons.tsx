@@ -106,6 +106,27 @@ export function VersusIcon(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
+
+export function BookPitchIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      {...props}
+    >
+      {/* Calendar */}
+      <rect x="3" y="5" width="18" height="16" rx="2" />
+      <path d="M7 3v4M17 3v4M3 10h18" />
+
+      {/* Football */}
+      <circle cx="12" cy="15.5" r="3" />
+      <path d="M10.2 13.2l1.8 1.3 1.8-1.3M10.8 17.8l1.2-2.3 1.2 2.3" />
+    </svg>
+  );
+}
+
 export function AlertIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" {...props}>
