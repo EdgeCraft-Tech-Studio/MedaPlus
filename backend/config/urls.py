@@ -3,8 +3,8 @@ from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import path, include
 
-from accounts.views.auth_view import ForgotPasswordVerifyOTPView, ForgotPasswordView, HomeDataView, LoginView, LogoutView, ResendOTPView, ResetPasswordView, SignupVerifyOTPView, SignupView, TokenRefreshsView
-from accounts.views.otp_view import OTPStatusView
+from accounts.views.auth_view import ForgotPasswordVerifyOTPView, ForgotPasswordView, HomeDataView, LoginView, LogoutView, ResetPasswordView, SignupVerifyOTPView, SignupView, TokenRefreshsView
+from accounts.views.otp_view import OTPStatusView, ResendOTPView
 from accounts.views.pages_view import AdminApproveOwnerView, AdminListOwnersView, AdminPendingOwnersView, MeView
 from accounts.views.profile_views import ChangePasswordView, ConfirmPhoneChangeView, RequestPhoneChangeView, UpdateEmailView, UpdateFCMTokenView, UpdatePhotoView
 

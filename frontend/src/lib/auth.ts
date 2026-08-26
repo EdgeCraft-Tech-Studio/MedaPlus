@@ -106,3 +106,11 @@ export async function confirmPhoneChange(payload: {
   const res = await api.post<SessionUser>("/auth/me/phone/confirm/", payload);
   return res.data;
 }
+
+export async function resendOtp(payload: {
+  phone: string;
+  purpose: "signup" | "login" | "password_reset" | "phone_change";
+}): Promise<{ message?: string }> {
+  const res = await api.post("/otp/resend/", payload);
+  return res.data;
+}

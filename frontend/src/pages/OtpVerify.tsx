@@ -3,7 +3,7 @@ import { useLocation, useNavigate, Link } from "react-router-dom";
 import AuthHeader from "../pages/AuthHeader";
 import styles from "./css/Otp.module.css";
 import LoadingBall from "./LoadingBall";
-import { verifySignupOtp } from "../lib/auth";
+import { resendOtp, verifySignupOtp } from "../lib/auth";
 
 const CODE_LENGTH = 5;
 const RESEND_SECONDS = 60;
@@ -48,25 +48,6 @@ function formatTime(totalSeconds: number) {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-// ---------------------------------------------------------------------
-// TODO (backend): replace these two stubs with real API calls, e.g.
-//
-// import { verifyOtp as verifyOtpApi, resendOtp as resendOtpApi } from "../lib/auth";
-//
-// async function verifyOtp(phone: string, code: string) {
-//   return verifyOtpApi({ phone, code }); // should return the created/verified user or a token
-// }
-//
-// async function resendOtp(phone: string) {
-//   return resendOtpApi({ phone });
-// }
-// ---------------------------------------------------------------------
-
-async function resendOtp(phone: string): Promise<{ ok: boolean }> {
-  // eslint-disable-next-line no-console
-  console.log("TODO: call backend to resend OTP", { phone });
-  return { ok: true };
-}
 
 export default function OtpVerify() {
   const nav = useNavigate();
@@ -219,25 +200,36 @@ async function handleVerify() {
 }
 
   async function handleResend() {
-    if (secondsLeft > 0 || resending) return;
-    setErr("");
-    setResending(true);
-    setResent(false);
+  if (secondsLeft > 0 || resending) return;
+  setErr("");
+  setResending(true);
+  setResent(false);
 
-    try {
-      await resendOtp(phone);
-      setSecondsLeft(RESEND_SECONDS);
-      setDigits(Array(CODE_LENGTH).fill(""));
-      autoSubmittedRef.current = false;
-      inputsRef.current[0]?.focus();
-      setResent(true);
-      setTimeout(() => setResent(false), 3000);
-    } catch {
-      setErr("Couldn't resend the code. Please try again in a moment.");
-    } finally {
-      setResending(false);
+  try {
+    await resendOtp({ phone, purpose: "signup" });
+    setSecondsLeft(RESEND_SECONDS);
+    setDigits(Array(CODE_LENGTH).fill(""));
+    autoSubmittedRef.current = false;
+    inputsRef.current[0]?.focus();
+    setResent(true);
+    setTimeout(() => setResent(false), 3000);
+  } catch (e: any) {
+    const data = e?.response?.data;
+    const phoneError = Array.isArray(data?.phone) ? data.phone[0] : data?.phone;
+    setErr(phoneError || data?.detail || "Couldn't resend the code. Please try again in a moment.");
+
+    // If the backend told us exactly when we're unblocked, sync the
+    // countdown to that instead of the default 60s.
+    if (data?.blocked_until) {
+      const secondsUntil = Math.ceil(
+        (new Date(data.blocked_until).getTime() - Date.now()) / 1000
+      );
+      if (secondsUntil > 0) setSecondsLeft(secondsUntil);
     }
+  } finally {
+    setResending(false);
   }
+}
 
   return (
     <div className={styles.page}>

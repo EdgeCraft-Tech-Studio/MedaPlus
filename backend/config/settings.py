@@ -142,7 +142,6 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
     ],
-    "EXCEPTION_HANDLER": "team.exception_handlers.teams_exception_handler",
     "DEFAULT_PAGINATION_CLASS": "team.pagination.DefaultPagination",
     "DEFAULT_THROTTLE_RATES": {
         "invitation_create": "30/hour",

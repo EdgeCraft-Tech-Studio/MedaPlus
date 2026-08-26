@@ -321,14 +321,22 @@ class AuthService:
             )
         # step 3 — create user
         # password is already hashed — pass directly to avoid double-hashing
+        if email is not "":
+            user = User(
+                username=username,
+                phone=phone,
+                first_name=first_name,
+                last_name=last_name,
+                email=email,
+                password=hashed_password,
+            )
         user = User(
-            username=username,
-            phone=phone,
-            first_name=first_name,
-            last_name=last_name,
-            email=email,
-            password=hashed_password,
-        )
+                        username=username,
+                        phone=phone,
+                        first_name=first_name,
+                        last_name=last_name,
+                        password=hashed_password,
+                    )
 
         user.role = role
         # Players are approved immediately; owners require admin approval
