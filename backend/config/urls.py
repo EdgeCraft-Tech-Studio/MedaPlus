@@ -113,6 +113,7 @@ urlpatterns = [
     path("api/", include("pitches.urls")),
     path("api/", include("team.urls")),
     path("api/", include("bookings.urls")), 
+    path("api/", include("chat.urls")),
     # path("api/", include("bookings.urls")),
 
     # path("api/admin/owners/", admin_list_owners),

@@ -3,6 +3,7 @@ import Modal from "./Modal";
 import { MapContainer, TileLayer, Marker, useMapEvents } from "react-leaflet";
 import styles from "../pages/css/PitchWizardModal.module.css";
 import { showToast } from "../pages/Toast";
+import type { SportType } from "../lib/pitches";
 
 type OwnerOption = {
   id: string;
@@ -14,6 +15,7 @@ type InitialPitchData = {
   id?: string;
   owner_id?: string;
   name?: string;
+  sport_type?: SportType;
   address?: string;
   latitude?: number;
   longitude?: number;
@@ -68,6 +70,7 @@ type DraftShape = {
   maxStepReached: StepNum;
   ownerId: string;
   name: string;
+  sportType: SportType; 
   address: string;
   openingTime: string;
   closingTime: string;
@@ -126,6 +129,7 @@ function buildBaseline(
     return {
       ownerId: data?.owner_id || "",
       name: data?.name || "",
+      sportType: data?.sport_type ?? "FOOTBALL", 
       address: data?.address || "",
       openingTime: normalizeTime(data?.opening_time) || "08:00",
       closingTime: normalizeTime(data?.closing_time) || "22:00",
@@ -153,6 +157,7 @@ function buildBaseline(
   return {
     ownerId: "",
     name: "",
+    sportType: "FOOTBALL", 
     address: "",
     openingTime: "08:00",
     closingTime: "22:00",
@@ -183,6 +188,7 @@ function isMeaningfulSnapshot(snapshot: FieldSnapshot, baseline: FieldSnapshot) 
   return (
     snapshot.ownerId !== baseline.ownerId ||
     snapshot.name !== baseline.name ||
+    snapshot.sportType !== baseline.sportType ||
     snapshot.address !== baseline.address ||
     snapshot.openingTime !== baseline.openingTime ||
     snapshot.closingTime !== baseline.closingTime ||
@@ -346,6 +352,7 @@ export default function PitchWizardModal({
   const [ownerId, setOwnerId] = useState("");
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
+  const [sportType, setSportType] = useState<SportType>("FOOTBALL");
 
   const [openingTime, setOpeningTime] = useState("08:00");
   const [closingTime, setClosingTime] = useState("22:00");
@@ -398,6 +405,7 @@ export default function PitchWizardModal({
     setDraftRestored(false);
     setOwnerId("");
     setName("");
+    setSportType("FOOTBALL"); 
     setAddress("");
     setOpeningTime("08:00");
     setClosingTime("22:00");
@@ -430,6 +438,7 @@ export default function PitchWizardModal({
     setDraftRestored(false);
     setOwnerId(data?.owner_id || "");
     setName(data?.name || "");
+    setSportType(data?.sport_type ?? "FOOTBALL");
     setAddress(data?.address || "");
     setOpeningTime(normalizeTime(data?.opening_time) || "08:00");
     setClosingTime(normalizeTime(data?.closing_time) || "22:00");
@@ -461,6 +470,7 @@ export default function PitchWizardModal({
     setMaxStepReached(draft.maxStepReached ?? draft.step ?? 1);
     setOwnerId(draft.ownerId ?? "");
     setName(draft.name ?? "");
+    setSportType(draft.sportType ?? "FOOTBALL"); 
     setAddress(draft.address ?? "");
     setOpeningTime(draft.openingTime ?? "08:00");
     setClosingTime(draft.closingTime ?? "22:00");
@@ -510,6 +520,7 @@ export default function PitchWizardModal({
           const snapshot: FieldSnapshot = {
             ownerId: draft.ownerId ?? "",
             name: draft.name ?? "",
+            sportType: draft.sportType ?? "FOOTBALL", 
             address: draft.address ?? "",
             openingTime: draft.openingTime ?? "08:00",
             closingTime: draft.closingTime ?? "22:00",
@@ -608,6 +619,7 @@ export default function PitchWizardModal({
       const snapshot: FieldSnapshot = {
         ownerId,
         name,
+        sportType,
         address,
         openingTime,
         closingTime,
@@ -655,6 +667,7 @@ export default function PitchWizardModal({
           maxStepReached,
           ownerId,
           name,
+          sportType,
           address,
           openingTime,
           closingTime,
@@ -704,6 +717,7 @@ export default function PitchWizardModal({
     maxStepReached,
     ownerId,
     name,
+    sportType, 
     address,
     openingTime,
     closingTime,
@@ -895,6 +909,7 @@ export default function PitchWizardModal({
     }
 
     formData.append("name", name);
+    formData.append("sport_type", sportType); 
     formData.append("address", address);
     formData.append("latitude", String(lat));
     formData.append("longitude", String(lng));
@@ -1072,8 +1087,20 @@ export default function PitchWizardModal({
                       className={styles.input}
                       value={name}
                       onChange={(e) => setName(e.target.value)}
-                      placeholder="e.g. Bole 5-a-side Arena"
+                      placeholder="e.g. Bole, Semit, Megenagna"
                     />
+                  </div>
+
+                  <div className={styles.field}>
+                    <label className={styles.label}>Sport</label>
+                    <select
+                      className={styles.select}
+                      value={sportType}
+                      onChange={(e) => setSportType(e.target.value as SportType)}
+                    >
+                      <option value="FOOTBALL">Football</option>
+                      <option value="BASKETBALL">Basketball</option>
+                    </select>
                   </div>
 
                   <div className={styles.field}>

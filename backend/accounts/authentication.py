@@ -11,58 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 class SessionTokenAuthentication(BaseAuthentication):
-    """
-    DRF authentication class — the single source of truth for authentication.
-
-    ─── WHY HERE AND NOT IN MIDDLEWARE ──────────────────────────────────────────
-
-    DRF's authentication class is the architecturally correct place for this
-    logic because:
-
-    1. DRF knows about it — it integrates cleanly with IsAuthenticated,
-       permission_classes, request.user, and request.auth.
-    2. It is discoverable — any developer opening the project knows to look
-       at DEFAULT_AUTHENTICATION_CLASSES for authentication logic.
-    3. It scales — adding WebSocket auth, admin API auth, or microservice auth
-       means adding another class to the list, not hunting through middleware.
-    4. It is testable in isolation — you can test authenticate() directly
-       without spinning up the full middleware chain.
-
-    ─── WHAT THIS CLASS DOES ────────────────────────────────────────────────────
-
-    1. Reads Authorization: Bearer <token> header
-    2. SHA-256 hashes the raw token (raw token never hits the database)
-    3. Looks up UserSession by hash with .is_active() — one DB query
-       (.is_active() = not revoked AND not expired — SQL-level filter)
-    4. Validates user is still active and not soft-deleted
-    5. Sets request._request.current_session = session
-       (so existing views using request.current_session work unchanged)
-    6. Touches the session via Redis throttle (at most 1 DB write per 5 min)
-    7. Returns (user, session) tuple — DRF sets request.user and request.auth
-
-    ─── WHAT MIDDLEWARE DOES ────────────────────────────────────────────────────
-
-    The companion SessionAuthMiddleware (middleware.py) does ONLY:
-    - Request/response logging
-    - Analytics (path, timing, user_id for monitoring tools)
-    - NO authentication logic whatsoever
-
-    ─── SETTINGS REQUIRED ───────────────────────────────────────────────────────
-
-    config/settings/base.py:
-
-        REST_FRAMEWORK = {
-            'DEFAULT_AUTHENTICATION_CLASSES': [
-                'accounts.authentication.SessionTokenAuthentication',
-            ],
-            'DEFAULT_PERMISSION_CLASSES': [
-                'rest_framework.permissions.IsAuthenticated',
-            ],
-        }
-
-        AUTH_USER_MODEL = 'accounts.User'
-    """
-
+    
     TOKEN_PREFIX              = 'Bearer '
     ACTIVITY_THROTTLE_SECONDS = 300   # 5 minutes — max 1 DB write per session
 

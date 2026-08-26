@@ -49,7 +49,8 @@ INSTALLED_APPS = [
     "accounts",
     "pitches",
     "bookings",
-    "team"
+    "team",
+    "chat"
 
 ]
 
@@ -147,6 +148,7 @@ REST_FRAMEWORK = {
         "invitation_create": "30/hour",
         "code_redeem": "10/min",
         "join_request_create": "50/day",
+        "chat_message_send": "60/min",
     },
 }
 

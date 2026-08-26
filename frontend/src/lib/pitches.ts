@@ -1,4 +1,5 @@
 import { api } from "./api";
+export type SportType = "FOOTBALL" | "BASKETBALL";
 
 export type PitchImageItem = {
   id: string;
@@ -11,6 +12,7 @@ export type Pitch = {
   address: string;
   latitude: number;
   longitude: number;
+  sport_type: SportType;
 
   opening_time: string;
   closing_time: string;

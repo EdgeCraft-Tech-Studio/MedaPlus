@@ -356,7 +356,7 @@
 }
 
 .amenityToggleLabel {
-  display: none;
+  display: inline;
   white-space: nowrap;
 }
 
@@ -373,10 +373,6 @@
 .amenityToggleOn:hover {
   background: var(--accent-soft);
   color: var(--accent-hover);
-}
-
-.amenityToggleOn .amenityToggleLabel {
-  display: inline;
 }
 
 /* clear: quiet text action at the end of the pill */
@@ -750,3 +746,131 @@
   transition: background 0.18s ease, color 0.18s ease;
 }
 .backLink:hover { color: var(--accent-soft); color: var(--accent); }
+
+
+/* ---------- sport filter toggle (in filter bar) ---------- */
+
+.sportGroup {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 4px;
+}
+
+.sportToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  border-radius: 999px;
+  border: none;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-family: var(--font);
+  font-size: 12.5px;
+  font-weight: 500;
+  transition: background 0.15s ease, color 0.15s ease;
+  white-space: nowrap;
+}
+
+.sportToggleIcon {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+}
+
+.sportToggleLabel {
+  display: inline;
+  white-space: nowrap;
+}
+
+.sportToggle:hover {
+  background: var(--surface-alt);
+  color: var(--text-muted);
+}
+
+.sportToggleOn {
+  background: var(--c-tournament-soft);
+  color: var(--c-tournament);
+}
+
+
+
+/* ---------- sport badge on card image ---------- */
+
+.sportBadge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  backdrop-filter: blur(2px);
+}
+
+.sportBadge svg {
+  width: 12px;
+  height: 12px;
+}
+
+.sportBadgeFootball {
+  background: rgba(15, 122, 82, 0.9);
+}
+
+.sportBadgeBasketball {
+  background: rgba(201, 148, 42, 0.92);
+}
+
+/* ---------- map legend + custom marker cleanup ---------- */
+
+.mapLegend {
+  display: flex;
+  justify-content: center;
+  gap: 18px;
+  margin-top: 12px;
+}
+
+.mapLegendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.mapLegendItem svg {
+  width: 14px;
+  height: 14px;
+}
+
+.mapLegendIconFootball {
+  color: var(--accent);
+}
+
+.mapLegendIconBasketball {
+  color: var(--c-tournament);
+}
+
+.mapWrap :global(.pitch-marker-icon) {
+  background: transparent !important;
+  border: none !important;
+}
+
+.mapWrap :global(.pitch-marker) {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  filter: drop-shadow(0 2px 3px rgba(17, 19, 24, 0.25));
+  transition: transform 0.15s ease;
+}
+
+.mapWrap :global(.pitch-marker:hover) {
+  transform: translateY(-2px) scale(1.05);
+}

@@ -259,6 +259,7 @@ def pitches_list_create(request):
         tenant=tenant,
         name=data["name"],
         address=data.get("address", ""),
+        sport_type=data.get("sport_type", "FOOTBALL"),
         latitude=data["latitude"],
         longitude=data["longitude"],
         min_hours=data.get("min_hours", 1),
@@ -338,6 +339,7 @@ def pitch_detail(request, pitch_id: str):
     for field in [
         "name",
         "address",
+        "sport_type",
         "latitude",
         "longitude",
         "opening_time",

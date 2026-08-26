@@ -31,6 +31,11 @@ class BookingType(models.TextChoices):
     MONTHLY = "MONTHLY", "Monthly"
 
 
+class SportType(models.TextChoices):
+    FOOTBALL = "FOOTBALL", "Football"
+    BASKETBALL = "BASKETBALL", "Basketball"
+
+
 class Pitch(models.Model):
     tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name="pitches")
     name = models.CharField(max_length=120)
@@ -39,6 +44,11 @@ class Pitch(models.Model):
     latitude = models.FloatField()
     longitude = models.FloatField()
     address = models.CharField(max_length=255, blank=True, default="")
+    sport_type = models.CharField(
+        max_length=20,
+        choices=SportType.choices,
+        default=SportType.FOOTBALL,
+    )
 
     # Booking rules
     min_hours = models.PositiveIntegerField(default=1)

@@ -6,6 +6,7 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from core.utils.choices import MembershipStatus
 from team.serializers.common import UserSummarySerializer
 from team.serializers.invitation import UserSearchQuerySerializer
 from team.services.user_search_services import search_users_for_invite
@@ -45,23 +46,28 @@ class TeamViewSet(TeamLookupMixin,viewsets.GenericViewSet):
     pagination_class = DefaultPagination
     permission_classes = [IsAuthenticated]
 
+
     def get_queryset(self):
-        base = Team.objects.select_related("created_by").with_active_member_count()
+        base = (
+            Team.objects
+            .select_related("created_by")
+            .with_active_member_count()
+        )
 
         if self.action == "list":
-            # Public discovery (§18/§19): only operable, PUBLIC teams,
-            # AND never a team the requesting user already belongs to —
-            # "find a team to join" has no business surfacing teams
-            # you're already on. This is enforced here, server-side,
-            # not just hidden by the frontend.
             base = base.discoverable()
-            base = base.exclude(
-                memberships__user=self.request.user,
-                memberships__status="active"
-            )
+
+            active_team_ids = self.request.user.team_memberships.filter(
+                status=MembershipStatus.ACTIVE
+            ).values_list("team_id", flat=True)
+
+            base = base.exclude(id__in=active_team_ids)
+
             base = self._apply_discovery_filters(base)
+
         return base
 
+    
     def _apply_discovery_filters(self, queryset):
         params = self.request.query_params
         sport = params.get("sport")

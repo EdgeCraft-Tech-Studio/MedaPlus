@@ -1,6 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useParams } from "react-router-dom";
 import "leaflet/dist/leaflet.css";
 import "./lib/leafletFix";
 
@@ -43,8 +43,13 @@ import CreateTournament from "./pages/CreateTournament";
 
 // Profile
 import ProfilePage from "./pages/ProfilePage";
-
+import ChatPage from "./pages/chatPage";
+function ChatRoute() {
+  const { slug } = useParams();
+  return <ChatPage key={slug} />;
+}
 ReactDOM.createRoot(document.getElementById("root")!).render(
+  
   <React.StrictMode>
     <BrowserRouter>
       <Routes>
@@ -95,7 +100,8 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
             {/* Teams */}
             <Route path="/teams" element={<TeamsPage />} />
             <Route path="/teams/:slug" element={<TeamDashboard />} />
-
+            
+            <Route path="/chat/:slug" element={<ChatRoute />} />
             {/* Matches */}
             <Route path="/matches" element={<MatchesPage />} />
             <Route

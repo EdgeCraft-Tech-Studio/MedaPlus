@@ -338,6 +338,7 @@ export default function Owner() {
                 ? {
                     id: editingPitch.id,
                     name: editingPitch.name,
+                    sport_type: editingPitch.sport_type,
                     address: editingPitch.address,
                     latitude: editingPitch.latitude,
                     longitude: editingPitch.longitude,

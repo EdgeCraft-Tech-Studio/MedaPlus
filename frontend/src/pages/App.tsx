@@ -1,16 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { MapContainer, Marker, TileLayer } from "react-leaflet";
+import L from "leaflet";
 import type { Pitch } from "../lib/pitches";
 import { listPitches } from "../lib/pitches";
 import styles from "./css/Dashboard.module.css";
 import LoadingBall from "./LoadingBall";
 
 type TabKey = "map" | "nearby" | "best";
+type SportType = "FOOTBALL" | "BASKETBALL";
+type SportFilter = "ALL" | SportType;
 
 const ADDIS_ABABA = { lat: 8.9806, lng: 38.7578 };
-
-
 
 function distanceKm(aLat: number, aLng: number, bLat: number, bLng: number) {
   const R = 6371;
@@ -82,16 +83,12 @@ function matchesAmenities(
   return true;
 }
 
-/* ---------- small inline icons (purely presentational) ---------- */
-
-function LogoIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" {...props}>
-      <rect x="3.5" y="3.5" width="17" height="17" rx="4" />
-      <path d="M8 12h8M12 8v8" />
-    </svg>
-  );
+function matchesSport(p: Pitch, filter: SportFilter) {
+  if (filter === "ALL") return true;
+  return (p as Pitch & { sport_type?: SportType }).sport_type === filter;
 }
+
+/* ---------- small inline icons (purely presentational) ---------- */
 
 function SearchIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
@@ -187,6 +184,30 @@ function PinIcon(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
+function FootballIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" {...props}>
+      <circle cx="12" cy="12" r="9" />
+      <path
+        d="M12 7.2l3.6 2.6-1.4 4.2H9.8L8.4 9.8 12 7.2z"
+        fill="currentColor"
+        stroke="none"
+      />
+      <path d="M12 3v4.2M12 20.8V16.8M4.5 8.3l3.9 1.5M19.5 8.3l-3.9 1.5M4.5 15.7l3.9-1.5M19.5 15.7l-3.9-1.5" />
+    </svg>
+  );
+}
+
+function BasketballIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" {...props}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 3v18M3 12h18" />
+      <path d="M5.6 5.6c2.9 3 2.9 9.8 0 12.8M18.4 5.6c-2.9 3-2.9 9.8 0 12.8" />
+    </svg>
+  );
+}
+
 /* ---------- tab icons ---------- */
 
 function MapTabIcon(props: React.SVGProps<SVGSVGElement>) {
@@ -215,8 +236,227 @@ function TopRatedTabIcon(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
-/* ---------- short-description card: photo + hours/prices grid + amenity tags,
-   same listing mechanism used on the Admin/Owner pages ---------- */
+/* ---------- map pin icons (per sport) ----------
+   Real-looking ball renders (not line icons) sit inside the pin head's
+   circular cutout — a white pentagon-paneled football, and a textured
+   orange basketball with seams — so they're distinguishable at a glance. */
+
+function buildPitchDivIcon(sport: SportType) {
+  const isBasketball = sport === "BASKETBALL";
+  const pinColor = isBasketball ? "#c9942a" : "#0f7a52";
+  const ballId = isBasketball ? "bball" : "fball";
+
+  const ballSvg = isBasketball
+    ? `
+      <defs>
+        <radialGradient id="${ballId}-shade" cx="32%" cy="25%" r="78%">
+          <stop offset="0%" stop-color="#ffbd70"/>
+          <stop offset="28%" stop-color="#f79432"/>
+          <stop offset="68%" stop-color="#d96816"/>
+          <stop offset="100%" stop-color="#8f3508"/>
+        </radialGradient>
+
+        <filter id="${ballId}-shadow" x="-30%" y="-30%" width="160%" height="160%">
+          <feDropShadow dx="0.5" dy="1" stdDeviation="0.8" flood-color="#000000" flood-opacity="0.35"/>
+        </filter>
+      </defs>
+
+      <!-- Realistic basketball -->
+      <circle
+        cx="12"
+        cy="12"
+        r="10.5"
+        fill="url(#${ballId}-shade)"
+        filter="url(#${ballId}-shadow)"
+      />
+
+      <!-- Outer ball texture -->
+      <circle
+        cx="12"
+        cy="12"
+        r="10.5"
+        fill="none"
+        stroke="#4a1d08"
+        stroke-width="0.8"
+      />
+
+      <!-- Vertical seam -->
+      <path
+        d="M12 1.5 C8.8 5.2 8.8 18.8 12 22.5"
+        fill="none"
+        stroke="#4a1d08"
+        stroke-width="1"
+      />
+
+      <!-- Opposite vertical seam -->
+      <path
+        d="M12 1.5 C15.2 5.2 15.2 18.8 12 22.5"
+        fill="none"
+        stroke="#4a1d08"
+        stroke-width="1"
+      />
+
+      <!-- Horizontal seam -->
+      <path
+        d="M1.5 12 C6 10.2 18 10.2 22.5 12"
+        fill="none"
+        stroke="#4a1d08"
+        stroke-width="1"
+      />
+
+      <!-- Curved basketball seams -->
+      <path
+        d="M3.5 6.2 C7.5 9 16.5 15 20.5 17.8"
+        fill="none"
+        stroke="#4a1d08"
+        stroke-width="1"
+      />
+
+      <path
+        d="M20.5 6.2 C16.5 9 7.5 15 3.5 17.8"
+        fill="none"
+        stroke="#4a1d08"
+        stroke-width="1"
+      />
+
+      <!-- Realistic light reflection -->
+      <ellipse
+        cx="7.5"
+        cy="6.5"
+        rx="3.2"
+        ry="2"
+        fill="#ffffff"
+        opacity="0.28"
+        transform="rotate(-30 7.5 6.5)"
+      />
+    `
+    : `
+      <defs>
+        <radialGradient id="${ballId}-shade" cx="32%" cy="25%" r="80%">
+          <stop offset="0%" stop-color="#ffffff"/>
+          <stop offset="45%" stop-color="#f4f4f2"/>
+          <stop offset="78%" stop-color="#d5d5d1"/>
+          <stop offset="100%" stop-color="#9e9e99"/>
+        </radialGradient>
+
+        <filter id="${ballId}-shadow" x="-30%" y="-30%" width="160%" height="160%">
+          <feDropShadow dx="0.5" dy="1" stdDeviation="0.8" flood-color="#000000" flood-opacity="0.3"/>
+        </filter>
+      </defs>
+
+      <!-- Realistic football -->
+      <circle
+        cx="12"
+        cy="12"
+        r="10.5"
+        fill="url(#${ballId}-shade)"
+        stroke="#222222"
+        stroke-width="0.75"
+        filter="url(#${ballId}-shadow)"
+      />
+
+      <!-- Center pentagon -->
+      <polygon
+        points="12,8.3 15.3,10.6 14.05,14.4 9.95,14.4 8.7,10.6"
+        fill="#181818"
+      />
+
+      <!-- Top pentagon -->
+      <polygon
+        points="12,2.2 14.8,4.2 13.75,7.4 10.25,7.4 9.2,4.2"
+        fill="#202020"
+      />
+
+      <!-- Left pentagon -->
+      <polygon
+        points="3.1,9.4 6.1,8.3 8.4,10.4 7.35,13.7 4.1,13.9"
+        fill="#202020"
+      />
+
+      <!-- Right pentagon -->
+      <polygon
+        points="20.9,9.4 17.9,8.3 15.6,10.4 16.65,13.7 19.9,13.9"
+        fill="#202020"
+      />
+
+      <!-- Bottom pentagon - moved DOWN so it does not touch center -->
+      <polygon
+        points="8.7,17.5 10.7,15.3 13.3,15.3 15.3,17.5 13.9,20.3 10.1,20.3"
+        fill="#202020"
+      />
+
+      <!-- Panel connection lines -->
+      <path
+        d="
+          M12 8.3 L12 7.4
+          M8.7 10.6 L6.1 8.3
+          M15.3 10.6 L17.9 8.3
+          M9.95 14.4 L8.7 17.5
+          M14.05 14.4 L15.3 17.5
+          M10.25 7.4 L9.2 4.2
+          M13.75 7.4 L14.8 4.2
+        "
+        fill="none"
+        stroke="#3b3b3b"
+        stroke-width="0.55"
+      />
+
+      <!-- Football shine -->
+      <ellipse
+        cx="7.2"
+        cy="6.3"
+        rx="3.5"
+        ry="2.1"
+        fill="#ffffff"
+        opacity="0.55"
+        transform="rotate(-30 7.2 6.3)"
+      />
+
+      <!-- Slight bottom shading -->
+      <ellipse
+        cx="14"
+        cy="19.5"
+        rx="5"
+        ry="1.5"
+        fill="#777777"
+        opacity="0.15"
+      />
+    `;
+
+  const html = `
+    <div class="pitch-marker">
+      <svg width="34" height="42" viewBox="0 0 34 42" xmlns="http://www.w3.org/2000/svg">
+        <path
+          d="M17 1C8.4 1 1.5 7.8 1.5 16c0 10.8 15.5 24 15.5 24s15.5-13.2 15.5-24C32.5 7.8 25.6 1 17 1z"
+          fill="${pinColor}"
+          stroke="white"
+          stroke-width="1.6"
+        />
+        <circle cx="17" cy="16" r="11.5" fill="white"/>
+        <g transform="translate(5,4)">
+          ${ballSvg}
+        </g>
+      </svg>
+    </div>`;
+
+  return L.divIcon({
+    html,
+    className: "pitch-marker-icon",
+    iconSize: [34, 42],
+    iconAnchor: [17, 42],
+    popupAnchor: [0, -38],
+  });
+}
+
+const FOOTBALL_ICON = buildPitchDivIcon("FOOTBALL");
+const BASKETBALL_ICON = buildPitchDivIcon("BASKETBALL");
+
+function iconForPitch(pitch: Pitch) {
+  const sport = (pitch as Pitch & { sport_type?: SportType }).sport_type;
+  return sport === "BASKETBALL" ? BASKETBALL_ICON : FOOTBALL_ICON;
+}
+
+/* ---------- short-description card ---------- */
 
 function PitchCard({
   pitch,
@@ -231,6 +471,10 @@ function PitchCard({
     pitch.opening_time_label && pitch.closing_time_label
       ? `${pitch.opening_time_label} - ${pitch.closing_time_label}`
       : `${pitch.opening_time} - ${pitch.closing_time}`;
+
+  const sport = (pitch as Pitch & { sport_type?: SportType }).sport_type;
+  const SportIcon = sport === "BASKETBALL" ? BasketballIcon : FootballIcon;
+  const sportLabel = sport === "BASKETBALL" ? "Basketball" : "Football";
 
   const amenityItems: Array<{ label: string; on: boolean; icon: (p: React.SVGProps<SVGSVGElement>) => React.ReactElement }> = [
     { label: "Dressing room", on: pitch.has_dressing_room, icon: ShirtIcon },
@@ -251,6 +495,10 @@ function PitchCard({
         ) : (
           <div className={styles.cardImagePlaceholder}>No photo yet</div>
         )}
+        <span className={`${styles.sportBadge} ${sport === "BASKETBALL" ? styles.sportBadgeBasketball : styles.sportBadgeFootball}`}>
+          <SportIcon />
+          {sportLabel}
+        </span>
       </div>
 
       <div className={styles.cardBody}>
@@ -310,6 +558,12 @@ const AMENITY_DEFS: Array<{
   { key: "lighting", label: "Lighting", icon: LightIcon },
 ];
 
+const SPORT_DEFS: Array<{ key: SportFilter; label: string; icon?: (p: React.SVGProps<SVGSVGElement>) => React.ReactElement }> = [
+  { key: "ALL", label: "All sports" },
+  { key: "FOOTBALL", label: "Football", icon: FootballIcon },
+  { key: "BASKETBALL", label: "Basketball", icon: BasketballIcon },
+];
+
 export default function App() {
   const navigate = useNavigate();
 
@@ -323,6 +577,7 @@ export default function App() {
 
   const [search, setSearch] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
+  const [sportFilter, setSportFilter] = useState<SportFilter>("ALL");
   const [amenities, setAmenities] = useState({
     dressing: false,
     showers: false,
@@ -369,9 +624,10 @@ export default function App() {
       (p) =>
         matchesSearch(p, search) &&
         matchesPrice(p, maxPrice) &&
-        matchesAmenities(p, amenities)
+        matchesAmenities(p, amenities) &&
+        matchesSport(p, sportFilter)
     );
-  }, [pitches, search, maxPrice, amenities]);
+  }, [pitches, search, maxPrice, amenities, sportFilter]);
 
   const nearbyPitches = useMemo(() => {
     return [...filteredPitches].sort((a, b) => {
@@ -393,8 +649,10 @@ export default function App() {
   function goToPitch(pitchId: string) {
     navigate(`/app/pitches/${pitchId}`);
   }
-
-   
+   console.log("hello start");
+  console.log(filteredPitches.map(p => ({ name: p.name, sport_type: (p as any).sport_type })));
+  
+   console.log("hello end");
 
   const TABS: { key: TabKey; label: string; icon: (p: React.SVGProps<SVGSVGElement>) => React.ReactElement }[] = [
     { key: "map", label: "Map", icon: MapTabIcon },
@@ -402,10 +660,10 @@ export default function App() {
     { key: "best", label: "Top rated", icon: TopRatedTabIcon },
   ];
 
-  const showFilters = tab !== "map";
   const hasActiveFilters =
     search.trim() !== "" ||
     maxPrice.trim() !== "" ||
+    sportFilter !== "ALL" ||
     Object.values(amenities).some(Boolean);
 
   function toggleAmenity(key: keyof typeof amenities) {
@@ -415,43 +673,43 @@ export default function App() {
   function clearFilters() {
     setSearch("");
     setMaxPrice("");
+    setSportFilter("ALL");
     setAmenities({ dressing: false, showers: false, parking: false, lighting: false });
   }
 
   return (
     <div>
-    <div className={styles.page}>
-      <div className={styles.shell}>
-        <div className={styles.header}>
-          <div className={styles.headerLeft}>
-            <div>
-              <div className={styles.title}>Pitch Finder</div>
-              <div className={styles.subtitle}>
-                compare and book a game near you
+      <div className={styles.page}>
+        <div className={styles.shell}>
+          <div className={styles.header}>
+            <div className={styles.headerLeft}>
+              <div>
+                <div className={styles.title}>Pitch Finder</div>
+                <div className={styles.subtitle}>
+                  compare and book a game near you
+                </div>
               </div>
+            </div>
+
+            <div className={styles.tabRow}>
+              {TABS.map(({ key, label, icon: TabIcon }) => (
+                <button
+                  key={key}
+                  onClick={() => setTab(key)}
+                  className={`${styles.tab} ${tab === key ? styles.tabActive : ""}`}
+                >
+                  <TabIcon className={styles.tabIcon} />
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            <div className={styles.statPill}>
+              <span className={styles.statValue}>{filteredPitches.length}</span>
+              <span className={styles.statLabel}>pitches found</span>
             </div>
           </div>
 
-          <div className={styles.tabRow}>
-            {TABS.map(({ key, label, icon: TabIcon }) => (
-              <button
-                key={key}
-                onClick={() => setTab(key)}
-                className={`${styles.tab} ${tab === key ? styles.tabActive : ""}`}
-              >
-                <TabIcon className={styles.tabIcon} />
-                {label}
-              </button>
-            ))}
-          </div>
-
-          <div className={styles.statPill}>
-            <span className={styles.statValue}>{filteredPitches.length}</span>
-            <span className={styles.statLabel}>pitches found</span>
-          </div>
-        </div>
-
-        {showFilters && (
           <div className={styles.filterZone}>
             <div className={styles.filterBar}>
               <div className={styles.searchField}>
@@ -472,6 +730,24 @@ export default function App() {
                     <CloseIcon />
                   </button>
                 )}
+              </div>
+
+              <div className={styles.divider} />
+
+              <div className={styles.sportGroup}>
+                {SPORT_DEFS.map(({ key, label, icon: SIcon }) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setSportFilter(key)}
+                    className={`${styles.sportToggle} ${sportFilter === key ? styles.sportToggleOn : ""}`}
+                    title={label}
+                    aria-pressed={sportFilter === key}
+                  >
+                    {SIcon && <SIcon className={styles.sportToggleIcon} />}
+                    <span className={styles.sportToggleLabel}>{label}</span>
+                  </button>
+                ))}
               </div>
 
               <div className={styles.divider} />
@@ -515,90 +791,101 @@ export default function App() {
               )}
             </div>
           </div>
-        )}
 
-        <div className={styles.content}>
-          {loading ? (
-            <div className={styles.loadingWrap}>
-              <LoadingBall label="Loading pitches..." />
-            </div>
-          ) : error ? (
-            <div className={styles.errorText}>{error}</div>
-          ) : (
-            <>
-              {tab === "map" && (
-                <>
-                  <div className={styles.mapWrap}>
-                    <MapContainer
-                      center={[mapCenter.lat, mapCenter.lng] as [number, number]}
-                      zoom={13}
-                      style={{ width: "100%", height: "100%" }}
-                    >
-                      <TileLayer
-                        attribution="&copy; OpenStreetMap contributors"
-                        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                      />
-                      {filteredPitches.map((pitch) => (
-                        <Marker
-                          key={pitch.id}
-                          position={[pitch.latitude, pitch.longitude]}
-                          eventHandlers={{
-                            click: () => goToPitch(pitch.id),
-                          }}
+          <div className={styles.content}>
+            {loading ? (
+              <div className={styles.loadingWrap}>
+                <LoadingBall label="Loading pitches..." />
+              </div>
+            ) : error ? (
+              <div className={styles.errorText}>{error}</div>
+            ) : (
+              <>
+                {tab === "map" && (
+                  <>
+                  
+                    <div className={styles.mapWrap}>
+                      <MapContainer
+                        center={[mapCenter.lat, mapCenter.lng] as [number, number]}
+                        zoom={13}
+                        style={{ width: "100%", height: "100%" }}
+                      >
+                        <TileLayer
+                          attribution="&copy; OpenStreetMap contributors"
+                          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                         />
-                      ))}
-                    </MapContainer>
+                        {filteredPitches.map((pitch) => (
+                          <Marker
+                            key={pitch.id}
+                            position={[pitch.latitude, pitch.longitude]}
+                            icon={iconForPitch(pitch)}
+                            eventHandlers={{
+                              click: () => goToPitch(pitch.id),
+                            }}
+                          />
+                        ))}
+                      </MapContainer>
+                    </div>
+                    <div className={styles.mapLegend}>
+                      <span className={styles.mapLegendItem}>
+                        <FootballIcon className={styles.mapLegendIconFootball} />
+                        Football
+                      </span>
+                      <span className={styles.mapLegendItem}>
+                        <BasketballIcon className={styles.mapLegendIconBasketball} />
+                        Basketball
+                      </span>
+                    </div>
+                    <div className={styles.mapHint}>Tap any marker to open that pitch.</div>
+                  </>
+                )}
+
+                {tab === "nearby" && (
+                  <div className={styles.cardGrid}>
+                    {nearbyPitches.length === 0 ? (
+                      <div className={styles.emptyState}>
+                        <EmptyIcon className={styles.emptyIcon} />
+                        <div className={styles.emptyTitle}>No pitches match these filters</div>
+                        <div className={styles.emptyText}>Try loosening one and search again.</div>
+                      </div>
+                    ) : (
+                      nearbyPitches.map((pitch, index) => (
+                        <PitchCard
+                          key={pitch.id}
+                          pitch={pitch}
+                          index={index}
+                          onClick={() => goToPitch(pitch.id)}
+                        />
+                      ))
+                    )}
                   </div>
-                  <div className={styles.mapHint}>Tap any marker to open that pitch.</div>
-                </>
-              )}
+                )}
 
-              {tab === "nearby" && (
-                <div className={styles.cardGrid}>
-                  {nearbyPitches.length === 0 ? (
-                    <div className={styles.emptyState}>
-                      <EmptyIcon className={styles.emptyIcon} />
-                      <div className={styles.emptyTitle}>No pitches match these filters</div>
-                      <div className={styles.emptyText}>Try loosening one and search again.</div>
-                    </div>
-                  ) : (
-                    nearbyPitches.map((pitch, index) => (
-                      <PitchCard
-                        key={pitch.id}
-                        pitch={pitch}
-                        index={index}
-                        onClick={() => goToPitch(pitch.id)}
-                      />
-                    ))
-                  )}
-                </div>
-              )}
-
-              {tab === "best" && (
-                <div className={styles.cardGrid}>
-                  {bestPitches.length === 0 ? (
-                    <div className={styles.emptyState}>
-                      <EmptyIcon className={styles.emptyIcon} />
-                      <div className={styles.emptyTitle}>No pitches match these filters</div>
-                      <div className={styles.emptyText}>Try loosening one and search again.</div>
-                    </div>
-                  ) : (
-                    bestPitches.map((pitch, index) => (
-                      <PitchCard
-                        key={pitch.id}
-                        pitch={pitch}
-                        index={index}
-                        onClick={() => goToPitch(pitch.id)}
-                      />
-                    ))
-                  )}
-                </div>
-              )}
-            </>
-          )}
+                {tab === "best" && (
+                  <div className={styles.cardGrid}>
+                    {bestPitches.length === 0 ? (
+                      <div className={styles.emptyState}>
+                        <EmptyIcon className={styles.emptyIcon} />
+                        <div className={styles.emptyTitle}>No pitches match these filters</div>
+                        <div className={styles.emptyText}>Try loosening one and search again.</div>
+                      </div>
+                    ) : (
+                      bestPitches.map((pitch, index) => (
+                        <PitchCard
+                          key={pitch.id}
+                          pitch={pitch}
+                          index={index}
+                          onClick={() => goToPitch(pitch.id)}
+                        />
+                      ))
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
         </div>
       </div>
-    </div>
     </div>
   );
 }

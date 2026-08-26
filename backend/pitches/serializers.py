@@ -43,6 +43,7 @@ class PitchSerializer(serializers.ModelSerializer):
             "latitude",
             "longitude",
             "opening_time",
+             "sport_type", 
             "closing_time",
             "opening_time_label",
             "closing_time_label",
@@ -117,6 +118,10 @@ class PitchCreateSerializer(serializers.Serializer):
 
     name = serializers.CharField(max_length=120)
     address = serializers.CharField(required=False, allow_blank=True, default="")
+
+    sport_type = serializers.ChoiceField(
+        choices=["FOOTBALL", "BASKETBALL"], required=False, default="FOOTBALL"
+    )
     latitude = serializers.FloatField()
     longitude = serializers.FloatField()
 
@@ -161,6 +166,9 @@ class PitchUpdateSerializer(serializers.Serializer):
     address = serializers.CharField(required=False, allow_blank=True)
     latitude = serializers.FloatField(required=False)
     longitude = serializers.FloatField(required=False)
+    sport_type = serializers.ChoiceField(
+        choices=["FOOTBALL", "BASKETBALL"], required=False
+    )
 
     opening_time = serializers.TimeField(input_formats=["%H:%M"], required=False)
     closing_time = serializers.TimeField(input_formats=["%H:%M"], required=False)

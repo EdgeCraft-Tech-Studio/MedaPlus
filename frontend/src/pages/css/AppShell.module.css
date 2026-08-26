@@ -154,8 +154,8 @@
 
 .bellBadge {
   position: absolute;
-  top: 4px;
-  right: 4px;
+  top: 1px;
+  right: 1px;
   min-width: 16px;
   height: 16px;
   padding: 0 3px;
@@ -390,4 +390,210 @@
 
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
+}
+
+
+
+/* ---------------- CHAT DROPDOWN ---------------- */
+
+.chatDropdownList {
+  overflow-y: auto;
+  max-height: 228px; /* ~3 rows visible, rest scrolls */
+}
+
+.chatListItem {
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 11px 16px;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition: background 0.15s ease;
+}
+
+.chatListItem:last-child { border-bottom: none; }
+.chatListItem:hover { background: var(--grass-soft); }
+.chatListItemUnread { background: rgba(63, 174, 127, 0.06); }
+
+.chatAvatar {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.chatItemBody {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.chatItemTopRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.chatItemName {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.chatItemTime {
+  font-size: 11px;
+  color: var(--faint);
+  flex-shrink: 0;
+}
+
+.chatItemBottomRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.chatItemMsg {
+  font-size: 12.5px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chatItemUnreadDot {
+  flex-shrink: 0;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--grass);
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+}
+
+@media (max-width: 860px) {
+  .notifPanel { width: 340px; }
+}
+
+/* ---------------- CHAT DRAWER ---------------- */
+
+.drawerOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(14, 23, 18, 0.4);
+  z-index: 45;
+  animation: overlayIn 0.2s ease;
+}
+
+@keyframes overlayIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.chatDrawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: clamp(280px, 22vw, 320px);
+  background: #fff;
+  border-left: 1px solid var(--line);
+  box-shadow: -12px 0 40px rgba(14, 47, 36, 0.18);
+  z-index: 46;
+  display: flex;
+  flex-direction: column;
+  animation: drawerIn 0.22s ease;
+}
+
+@keyframes drawerIn {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+.chatDrawerHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 16px 14px;
+  border-bottom: 1px solid var(--line);
+  font-weight: 700;
+  font-size: 15px;
+  flex-shrink: 0;
+}
+
+.chatDrawerList {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.chatDrawerItem {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 16px;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition: background 0.15s ease;
+}
+
+.chatDrawerItem:hover { background: var(--grass-soft); }
+
+.chatDrawerItemName {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 860px) {
+  .chatDrawer { width: 82vw; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drawerOverlay, .chatDrawer { animation: none; }
+}
+
+.notifDrawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: clamp(280px, 22vw, 320px);
+  background: #fff;
+  border-left: 1px solid var(--line);
+  box-shadow: -12px 0 40px rgba(14, 47, 36, 0.18);
+  z-index: 46;
+  display: flex;
+  flex-direction: column;
+  animation: drawerIn 0.22s ease;
+}
+
+@media (max-width: 860px) {
+  .notifDrawer { width: 82vw; }
 }

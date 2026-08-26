@@ -132,3 +132,19 @@ class JoinRequestStatus(models.TextChoices):
     APPROVED = "approved", "Approved"
     REJECTED = "rejected", "Rejected"
     CANCELLED = "cancelled", "Cancelled"
+
+
+
+class ChatMessageType(models.TextChoices):
+    """TEXT is every normal user-sent message. AUDIO is a Telegram-
+    style voice note — the file itself, not text. SYSTEM is reserved
+    for Telegram/Slack-style inline events ('Kebede joined the team')
+    — not implemented yet, but adding the enum value now means those
+    events can post into the same message stream later without a
+    schema change or a second mechanism bolted on afterward.
+    """
+ 
+    TEXT = "text", "Text"
+    AUDIO = "audio", "Audio"
+    SYSTEM = "system", "System"
+ 
