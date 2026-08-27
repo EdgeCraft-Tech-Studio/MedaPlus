@@ -1,5 +1,6 @@
 from datetime import timedelta
 import uuid
+import re
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.db import models
 from django.db.models.functions import Lower
@@ -79,8 +80,36 @@ class UserManager(BaseUserManager):
         return user
 
     
-    def create_superuser(self,username, phone, first_name, last_name, password, **extra_fields):
+
+
+    def create_superuser(self, username, phone, first_name, last_name, password, **extra_fields):
         """Create and save a superuser"""
+
+        # Remove spaces around the number
+        phone = phone.strip()
+
+        # Validate and normalize phone number
+        if re.fullmatch(r"09\d{8}", phone):
+            phone = "+251" + phone[1:]
+
+        elif re.fullmatch(r"07\d{8}", phone):
+            phone = "+251" + phone[1:]
+
+        elif re.fullmatch(r"\+2519\d{8}", phone):
+            pass
+
+        elif re.fullmatch(r"\+2517\d{8}", phone):
+            pass
+
+        elif re.fullmatch(r"2519\d{8}", phone):
+            phone = "+" + phone
+
+        elif re.fullmatch(r"2517\d{8}", phone):
+            phone = "+" + phone
+
+        else:
+            raise ValueError("Invalid phone number")
+
         extra_fields.setdefault('role', UserRole.ADMIN)
         extra_fields.setdefault('is_approved', True)
         extra_fields.setdefault('platform_admin', True)
@@ -91,16 +120,23 @@ class UserManager(BaseUserManager):
 
         if extra_fields.get('platform_admin') is not True:
             raise ValueError('Superuser must have platform_admin=True.')
+
         if extra_fields.get('is_staff') is not True:
             raise ValueError('Superuser must have is_staff=True.')
+
         if extra_fields.get('is_superuser') is not True:
             raise ValueError('Superuser must have is_superuser=True.')
 
         password = make_password(password)
-        
 
-        return self.create_user(username, phone, first_name, last_name, password, **extra_fields)
-
+        return self.create_user(
+            username,
+            phone,
+            first_name,
+            last_name,
+            password,
+            **extra_fields
+        )
 
     def created_user(self, username, phone, first_name, last_name, password, **extra_fields):
             extra_fields.setdefault('platform_admin', False)
