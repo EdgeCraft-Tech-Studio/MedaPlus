@@ -16,7 +16,7 @@ export default function TeamsPage() {
         const myTeams = await getMyTeams();
         setTeams(myTeams);
       } catch (err) {
-        console.error("Failed to load teams:", err);
+        console.error("Failed to load team:", err);
         setError(true);
       } finally {
         setLoading(false);

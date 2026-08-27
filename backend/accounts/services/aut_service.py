@@ -321,7 +321,7 @@ class AuthService:
             )
         # step 3 — create user
         # password is already hashed — pass directly to avoid double-hashing
-        if email is not "":
+        if email.strip():
             user = User(
                 username=username,
                 phone=phone,

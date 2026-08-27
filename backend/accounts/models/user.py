@@ -4,7 +4,7 @@ from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, Permis
 from django.db import models
 from django.db.models.functions import Lower
 from django.utils import timezone
-
+from django.contrib.auth.hashers import make_password
 
 class UserQueryset(models.QuerySet):
 
@@ -79,7 +79,7 @@ class UserManager(BaseUserManager):
         return user
 
     
-    def create_superuser(self, username, first_name, last_name, phone, password, **extra_fields):
+    def create_superuser(self,username, phone, first_name, last_name, password, **extra_fields):
         """Create and save a superuser"""
         extra_fields.setdefault('role', UserRole.ADMIN)
         extra_fields.setdefault('is_approved', True)
@@ -96,15 +96,18 @@ class UserManager(BaseUserManager):
         if extra_fields.get('is_superuser') is not True:
             raise ValueError('Superuser must have is_superuser=True.')
 
-        return self.create_user(username, first_name, last_name, phone, password, **extra_fields)
+        password = make_password(password)
+        
+
+        return self.create_user(username, phone, first_name, last_name, password, **extra_fields)
 
 
-    def created_user(self, username, first_name, last_name, phone, password, **extra_fields):
+    def created_user(self, username, phone, first_name, last_name, password, **extra_fields):
             extra_fields.setdefault('platform_admin', False)
             extra_fields.setdefault('is_staff', False)
             extra_fields.setdefault('must_change_password', False)
             return self.create_user(
-                username, first_name, last_name, phone, password, **extra_fields
+               username, phone, first_name, last_name, password, **extra_fields
             )
 
     def is_active(self):

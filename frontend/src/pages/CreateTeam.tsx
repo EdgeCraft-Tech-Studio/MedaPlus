@@ -17,7 +17,6 @@ const SKILL_LEVELS = [
   { value: "beginner", label: "Beginner" },
   { value: "intermediate", label: "Intermediate" },
   { value: "advanced", label: "Advanced" },
-  { value: "competitive", label: "Competitive" },
 ];
 
 const DAYS = [
@@ -42,7 +41,6 @@ const AGE_CATEGORIES = [
 
 const VISIBILITY = [
   { value: "public", label: "Public", hint: "Anyone can join" },
-  { value: "request", label: "Request", hint: "You approve" },
   { value: "private", label: "Private", hint: "Invite only" },
 ];
 

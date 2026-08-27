@@ -80,6 +80,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           {/* ---------------------------------------------------------
               Full-screen authenticated forms
           --------------------------------------------------------- */}
+          
           <Route path="/team/create" element={<CreateTeam />} />
           <Route path="/match/create" element={<MakeMatch />} />
           <Route

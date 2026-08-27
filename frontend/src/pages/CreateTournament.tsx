@@ -29,7 +29,6 @@ const SKILL_LEVELS = [
   { value: "beginner", label: "Beginner" },
   { value: "intermediate", label: "Intermediate" },
   { value: "advanced", label: "Advanced" },
-  { value: "competitive", label: "Competitive" },
 ];
 
 const VISIBILITY = [

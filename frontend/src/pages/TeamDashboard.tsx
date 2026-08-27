@@ -17,7 +17,6 @@ const SKILL_LABEL: Record<string, string> = {
   beginner: "Beginner",
   intermediate: "Intermediate",
   advanced: "Advanced",
-  competitive: "Competitive",
 };
 
 const AGE_LABEL: Record<string, string> = {
