@@ -9,6 +9,9 @@
   --color-text-muted: #6b7280;
   --color-text-faint: #9aa1ab;
   --color-primary: #123522;
+  
+  --color-pitch-900: #0f2e1c;
+  --color-pitch-700: #1c5c37;
   --color-primary-soft: #eaf2ed;
   --color-accent: #e2a63b;
   --color-accent-soft: #fbf1de;
@@ -16,11 +19,20 @@
   --color-success-soft: #e9f7ef;
   --color-danger: #c0392b;
   --color-danger-soft: #fbeae7;
+  --color-blue: #2563eb;
+  --color-blue-soft: #eaf1fe;
+  --color-court: #c7622b;
+  --color-court-soft: #fbe4d8;
+
+  --admin-slate-900: #14171c;
+  --admin-slate-800: #202531;
+
   --font-display: 'Inter', -apple-system, sans-serif;
   --font-mono: 'IBM Plex Mono', monospace;
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 18px;
+  --radius-xl: 24px;
   --shadow-card: 0 4px 14px rgba(20, 24, 29, 0.07);
   --shadow-card-hover: 0 16px 36px rgba(20, 24, 29, 0.14);
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
@@ -40,32 +52,45 @@
   width: 100%;
 }
 
-.topBar {
+/* ---------- Control panel header ---------- */
+
+.controlHeader {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-xl);
+  background: linear-gradient(135deg, var(--color-pitch-900) 0%, var(--color-pitch-700) 100%);
+  padding: 22px clamp(20px, 4vw, 32px);
+}
+
+.controlHeaderPattern {
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.09) 1px, transparent 1px);
+  background-size: 16px 16px;
+  pointer-events: none;
+}
+
+.controlHeaderTop {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 6px;
+  flex-wrap: wrap;
 }
 
-.titleGroup {
-  display: grid;
-  gap: 3px;
+.controlTitle {
+  font-size: clamp(19px, 2.2vw, 23px);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: #ffffff;
+  margin: 0;
 }
 
-.eyebrow {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--color-accent);
-}
-
-.title {
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  color: var(--color-primary);
+.controlSub {
+  margin-top: 4px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.62);
 }
 
 .message {
@@ -86,127 +111,97 @@
   margin: 32px 0;
 }
 
-.filtersCard {
-  background: var(--color-surface-alt);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  padding: 20px 22px;
+/* ---------- Platform stats: dense tile grid ---------- */
+
+.statsGrid {
   margin-top: 18px;
-}
-
-.filtersHeading {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--color-text-faint);
-  margin-bottom: 14px;
-}
-
-.filtersGrid {
   display: grid;
-  grid-template-columns: 2fr 1fr 1fr auto;
+  grid-template-columns: repeat(2, 1fr);
   gap: 10px;
 }
 
-.input,
-.select {
-  width: 100%;
-  padding: 10px 12px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--color-border-strong);
-  background: #ffffff;
-  color: var(--color-text);
-  font-size: 14px;
-  font-family: var(--font-display);
-  outline: none;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+@media (min-width: 640px) {
+  .statsGrid {
+    grid-template-columns: repeat(3, 1fr);
+  }
 }
 
-.input:focus,
-.select:focus {
-  border-color: var(--color-accent);
-  box-shadow: 0 0 0 3px var(--color-accent-soft);
+@media (min-width: 1000px) {
+  .statsGrid {
+    grid-template-columns: repeat(4, 1fr);
+  }
 }
 
-.input::placeholder {
-  color: var(--color-text-faint);
+@media (min-width: 1500px) {
+  .statsGrid {
+    grid-template-columns: repeat(6, 1fr);
+  }
 }
 
-.clearBtn {
-  padding: 10px 16px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--color-border-strong);
-  background: #ffffff;
-  color: var(--color-text-muted);
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: all 0.2s ease;
-}
-
-.clearBtn:hover {
-  background: var(--color-surface-alt);
-  border-color: var(--color-text-faint);
-  color: var(--color-text);
-}
-
-.clearBtn:active {
-  transform: scale(0.96);
-}
-
-.amenityRow {
+.statTile {
   display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin-top: 14px;
-}
-
-.chip {
-  position: relative;
-  display: inline-flex;
   align-items: center;
-  gap: 7px;
-  padding: 8px 12px;
-  border-radius: 999px;
-  border: 1px solid var(--color-border-strong);
+  gap: 10px;
+  padding: 12px 13px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
   background: #ffffff;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  transition: all 0.2s ease;
-  overflow: hidden;
 }
 
-.chip::before {
-  content: "";
-  width: 12px;
-  height: 12px;
-  border-radius: 3px;
-  border: 1.5px solid var(--color-border-strong);
+.statTileIcon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
   flex-shrink: 0;
-  transition: all 0.2s ease;
 }
 
-.chip:has(.checkbox:checked) {
-  background: var(--color-primary);
-  border-color: var(--color-primary);
-  color: #ffffff;
+.statTileValue {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--color-text);
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.chip:has(.checkbox:checked)::before {
-  background: var(--color-accent);
-  border-color: var(--color-accent);
+.statTileLabel {
+  font-size: 10.5px;
+  color: var(--color-text-muted);
+  margin-top: 1px;
 }
 
-.checkbox {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  margin: 0;
-  cursor: pointer;
+.statTile_slate .statTileIcon {
+  background: #eef0f3;
+  color: var(--admin-slate-900);
+}
+
+.statTile_green .statTileIcon {
+  background: var(--color-success-soft);
+  color: var(--color-success);
+}
+
+.statTile_red .statTileIcon {
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+}
+
+.statTile_blue .statTileIcon {
+  background: var(--color-blue-soft);
+  color: var(--color-blue);
+}
+
+.statTile_gold .statTileIcon {
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+}
+
+.statTile_court .statTileIcon {
+  background: var(--color-court-soft);
+  color: var(--color-court);
 }
 
 .section {
@@ -248,75 +243,123 @@
   padding: 18px 0;
 }
 
-.ownerList {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 10px;
-  list-style: none;
-  padding: 0;
-  margin: 0;
+/* ---------- All owners: dense table-style list ---------- */
+
+.ownerListWrap {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
 }
 
-.ownerRow {
+.ownerListRow {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
   padding: 12px 16px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
   background: #ffffff;
-  box-shadow: var(--shadow-card);
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
-.ownerRow:hover {
-  border-color: var(--color-border-strong);
-  box-shadow: var(--shadow-card-hover);
+.ownerListRow + .ownerListRow {
+  border-top: 1px solid var(--color-border);
 }
 
-.ownerInfo {
+.ownerListAvatar {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.ownerListInfo {
+  flex: 1;
+  min-width: 0;
   display: grid;
   gap: 2px;
-  min-width: 0;
 }
 
-.ownerName {
+.ownerListName {
   font-weight: 700;
-  font-size: 14px;
+  font-size: 13.5px;
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.ownerEmail {
+.ownerListMeta {
   display: flex;
   align-items: center;
   gap: 5px;
+  font-size: 11.5px;
   color: var(--color-text-faint);
-  font-weight: 400;
-  font-size: 12.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.approveBtn {
+.miniStatusPill {
   flex-shrink: 0;
-  padding: 7px 14px;
-  border-radius: var(--radius-sm);
-  border: none;
-  background: var(--color-primary);
-  color: #ffffff;
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.miniStatusApproved {
+  background: var(--color-success-soft);
+  color: var(--color-success);
+}
+
+.miniStatusPending {
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+}
+
+.ownerListStat {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.deleteIconBtn {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  background: #ffffff;
+  color: var(--color-danger);
   cursor: pointer;
-  transition: filter 0.2s ease, transform 0.15s ease;
+  transition: background 0.15s ease, border-color 0.15s ease;
 }
 
-.approveBtn:hover {
-  filter: brightness(1.15);
+.deleteIconBtn:hover {
+  background: var(--color-danger-soft);
+  border-color: var(--color-danger);
 }
 
-.approveBtn:active {
-  transform: scale(0.95);
+@media (max-width: 700px) {
+  .ownerListRow {
+    flex-wrap: wrap;
+  }
 }
 
-/* ---------- responsive card grid: deterministic column counts ---------- */
+/* ---------- pitch card grid ---------- */
 
 .cardGrid {
   display: grid;
@@ -354,8 +397,6 @@
   }
 }
 
-/* ---------- pitch card: hero image + organized body + corner-welded edit btn ---------- */
-
 .pitchCard {
   position: relative;
   display: flex;
@@ -379,6 +420,7 @@
 }
 
 .cardImage {
+  position: relative;
   width: 100%;
   height: clamp(180px, 20vw, 240px);
   overflow: hidden;
@@ -407,6 +449,49 @@
   color: var(--color-text-faint);
   font-size: 12px;
   font-weight: 600;
+}
+
+.sportTag {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 11px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #ffffff;
+  backdrop-filter: blur(2px);
+}
+
+.sportTagFootball {
+  background: rgba(18, 53, 34, 0.82);
+}
+
+.sportTagBasketball {
+  background: rgba(199, 98, 43, 0.86);
+}
+
+.deleteImgBtn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  border: none;
+  background: rgba(192, 57, 43, 0.92);
+  color: #ffffff;
+  cursor: pointer;
+  transition: filter 0.15s ease, transform 0.15s ease;
+}
+
+.deleteImgBtn:hover {
+  filter: brightness(1.1);
+  transform: scale(1.06);
 }
 
 .cardBody {
@@ -493,6 +578,44 @@
 
 .approvePillBtn:active {
   transform: scale(0.95);
+}
+
+.cardStatsRow {
+  display: flex;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.cardStat {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 11px;
+  background: var(--color-surface-alt);
+}
+
+.cardStat + .cardStat {
+  border-left: 1px solid var(--color-border);
+}
+
+.cardStat svg {
+  color: var(--color-accent);
+  flex-shrink: 0;
+}
+
+.cardStatValue {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 13.5px;
+  color: var(--color-text);
+  line-height: 1.2;
+}
+
+.cardStatLabel {
+  font-size: 10.5px;
+  color: var(--color-text-muted);
 }
 
 .metaGrid {
@@ -613,26 +736,17 @@
 }
 
 @media (max-width: 900px) {
-  .filtersGrid {
-    grid-template-columns: 1fr;
-  }
-
   .cardTitleRow {
     flex-direction: column;
   }
 }
 
-
-/* ---------- Filters: collapsible, cleaner ---------- */
-
-/* ---------- Filters: pill bar, matches app filter style ---------- */
-
-
+/* ---------- Filters ---------- */
 
 .filterZone {
   display: flex;
-  justify-content: center;   /* ✅ was flex-start */
-  margin-top: 18px;          /* ✅ replaces the old margin-top:12px that assumed a toggle above it */
+  justify-content: center;
+  margin-top: 18px;
 }
 
 .filterBar {
@@ -798,7 +912,6 @@
 }
 
 .amenityToggleLabel {
-  display: none;
   white-space: nowrap;
 }
 
@@ -849,6 +962,7 @@
     width: 110px;
   }
 }
+
 /* ---------- Pending owners: card grid with avatar ---------- */
 
 .ownerGrid {
@@ -1000,9 +1114,6 @@
 }
 
 @media (max-width: 640px) {
-  .filtersGrid {
-    grid-template-columns: 1fr;
-  }
   .ownerGrid {
     grid-template-columns: 1fr;
   }

@@ -1,7 +1,7 @@
 import { api } from "./api";
 import { getCurrentUser } from "./session";
 
-export type ChatMessageType = "TEXT" | "AUDIO" | "SYSTEM"; // verify against core.utils.choices.ChatMessageType
+export type ChatMessageType = "TEXT" | "AUDIO" | "IMAGE" | "SYSTEM";// verify against core.utils.choices.ChatMessageType
 
 export interface ChatSenderSummary {
   id: string;
@@ -12,11 +12,15 @@ export interface ChatSenderSummary {
   profile_photo_url: string | null;
 }
 
+
 export interface ChatMessage {
   id: string;
   team_id: string;
   sender: ChatSenderSummary | null; // null = deleted user account
   message_type: ChatMessageType;
+  image_url: string | null;          // NEW
+  image_file_size_bytes: number | null; // NEW
+  is_image_message: boolean;  
   content: string | null; // null when is_deleted, per backend serializer
   audio_url: string | null;
   audio_duration_seconds: number | null;
@@ -70,6 +74,22 @@ export async function sendTextMessage(teamSlug: string, content: string): Promis
   return res.data;
 }
 
+export async function sendImageMessage(teamSlug: string, imageFile: File): Promise<ChatMessage> {
+  const form = new FormData();
+  form.append("image_file", imageFile);
+  const res = await api.post<ChatMessage>(`${messagesBase(teamSlug)}/image/`, form, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return res.data;
+}
+
+
+export async function fetchImageBlobUrl(teamSlug: string, messageId: string): Promise<string> {
+  const res = await api.get(`${messagesBase(teamSlug)}/${messageId}/image/`, { responseType: "blob" });
+  return URL.createObjectURL(res.data as Blob);
+}
+
+
 export async function sendAudioMessage(
   teamSlug: string,
   audioFile: File | Blob,
@@ -112,13 +132,13 @@ export async function fetchAudioBlobUrl(teamSlug: string, messageId: string): Pr
     responseType: "blob",
   });
   return URL.createObjectURL(res.data as Blob);
-}
+} 
 
 /** Powers the navbar chat icon badge + its dropdown, one request. */
 export async function getUnreadSummary(): Promise<ChatUnreadSummary> {
   const res = await api.get<ChatUnreadSummary>("/chat/unread-summary/");
   return res.data;
-}
+} 
 
 // ---------- shared display helpers (used by AppShell + ChatPage) ----------
 
@@ -144,4 +164,16 @@ export function senderDisplayName(sender: ChatSenderSummary | null): string {
 export function isMine(sender: ChatSenderSummary | null): boolean {
   const me = getCurrentUser();
   return !!me && !!sender && sender.id === me.id;
+}
+
+export interface ChatTeamUnread {
+  team_id: string;
+  team_slug: string;
+  team_name: string;
+  team_logo: string | null;
+  unread_count: number;
+  last_message_time: string | null;
+  last_message_sender_name: string | null;
+  last_message_preview: string | null;
+  is_last_message_mine: boolean;
 }

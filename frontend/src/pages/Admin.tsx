@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import type { Pitch } from "../lib/pitches";
+import type { AdminOwnerStat, AdminPitchStat, AdminStats, Pitch } from "../lib/pitches";
 import AddButton from "../components/AddButton";
 import PitchWizardModal from "../components/PitchWizardModal";
 import PitchLocationModal from "../components/PitchLocationModal";
@@ -13,6 +13,9 @@ import {
   declineOwner,
   approvePitch,
   createPitch,
+  deleteAdminOwner,
+  deleteAdminPitch,
+  getAdminStats,
   listOwners,
   listPendingOwners,
   listPendingPitches,
@@ -24,6 +27,8 @@ type OwnerRow = {
   id: string;
   username: string;
   email: string;
+  full_name: string;
+  phone: string;
   is_approved: boolean;
 };
 
@@ -41,7 +46,8 @@ type ApprovalFilter = "all" | "approved" | "not_approved";
 
 type IconName =
   | "clock" | "pin" | "tag" | "shirt" | "droplet" | "car" | "bulb"
-  | "imageOff" | "mail" | "search" | "filter" | "x" | "check";
+  | "imageOff" | "mail" | "search" | "filter" | "x" | "check"
+  | "trash" | "cash" | "calendarCheck" | "users" | "layers" | "hourglass" | "checkCircle" | "ball";
 
 function Icon({ name, size = 15 }: { name: IconName; size?: number }) {
   const paths: Record<IconName, React.ReactNode> = {
@@ -97,6 +103,61 @@ function Icon({ name, size = 15 }: { name: IconName; size?: number }) {
     filter: <path d="M4 5h16M7 12h10M10 19h4" />,
     x: <path d="M18 6 6 18M6 6l12 12" />,
     check: <path d="M20 6 9 17l-5-5" />,
+    trash: (
+      <>
+        <path d="M4 7h16" />
+        <path d="M9 7V4h6v3M6 7l1 14h10l1-14" />
+        <path d="M10 11v6M14 11v6" />
+      </>
+    ),
+    cash: (
+      <>
+        <rect x="2.5" y="6" width="19" height="12" rx="2.5" />
+        <circle cx="12" cy="12" r="3" />
+        <path d="M6 9.2v-.01M18 14.8v.01" strokeLinecap="round" />
+      </>
+    ),
+    calendarCheck: (
+      <>
+        <rect x="3" y="4.5" width="18" height="16" rx="2" />
+        <path d="M3 9.5h18" />
+        <path d="M8 3v3M16 3v3" />
+        <path d="m8.5 14.5 2 2 4-4" />
+      </>
+    ),
+    users: (
+      <>
+        <circle cx="9" cy="8" r="3.2" />
+        <path d="M3.5 20c0-3.6 2.6-6 5.5-6s5.5 2.4 5.5 6" />
+        <path d="M16 8.5a3 3 0 1 1 0-6" />
+        <path d="M15 14.2c2.6.3 4.5 2.6 4.5 5.8" />
+      </>
+    ),
+    layers: (
+      <>
+        <path d="m12 2 9 5-9 5-9-5 9-5z" />
+        <path d="m3 12 9 5 9-5" />
+        <path d="m3 17 9 5 9-5" />
+      </>
+    ),
+    hourglass: (
+      <>
+        <path d="M6 3h12M6 21h12" strokeLinecap="round" />
+        <path d="M7 3c0 4 3.2 5.5 5 6.5-1.8 1-5 2.5-5 6.5M17 3c0 4-3.2 5.5-5 6.5 1.8 1 5 2.5 5 6.5" />
+      </>
+    ),
+    checkCircle: (
+      <>
+        <circle cx="12" cy="12" r="9" />
+        <path d="m8.5 12.5 2.3 2.3L16 10" />
+      </>
+    ),
+    ball: (
+      <>
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 3c3 3 3 15 0 18M3 12h18" />
+      </>
+    ),
   };
 
   return (
@@ -113,6 +174,11 @@ function Icon({ name, size = 15 }: { name: IconName; size?: number }) {
       {paths[name]}
     </svg>
   );
+}
+
+function formatBirr(value: string | number | undefined) {
+  const num = Number(value) || 0;
+  return `${num.toLocaleString(undefined, { maximumFractionDigits: 0 })} Br`;
 }
 
 function matchesSearch(p: Pitch, search: string) {
@@ -155,7 +221,7 @@ function matchesApproval(p: Pitch, approval: ApprovalFilter) {
   return !p.is_approved;
 }
 
-function CardImage({ pitch }: { pitch: Pitch }) {
+function CardImage({ pitch, onDelete }: { pitch: Pitch; onDelete: () => void }) {
   return (
     <div className={styles.cardImage}>
       {pitch.cover_image_url ? (
@@ -166,6 +232,24 @@ function CardImage({ pitch }: { pitch: Pitch }) {
           No photo yet
         </div>
       )}
+      <span
+        className={`${styles.sportTag} ${
+          pitch.sport_type === "BASKETBALL" ? styles.sportTagBasketball : styles.sportTagFootball
+        }`}
+      >
+        {pitch.sport_type === "BASKETBALL" ? "Basketball" : "Football"}
+      </span>
+      <button
+        type="button"
+        className={styles.deleteImgBtn}
+        onClick={(e) => {
+          e.stopPropagation();
+          onDelete();
+        }}
+        title="Delete pitch"
+      >
+        <Icon name="trash" size={13} />
+      </button>
     </div>
   );
 }
@@ -261,17 +345,186 @@ function OwnerAvatar({ owner }: { owner: PendingOwnerRow }) {
   if (owner?.profile_photo_url && !imgFailed) {
     return (
       <div className={styles.ownerAvatar}>
-        <img
-          src={owner?.profile_photo_url}
-          alt=""
-          onError={() => setImgFailed(true)}
-        />
+        <img src={owner?.profile_photo_url} alt="" onError={() => setImgFailed(true)} />
       </div>
     );
   }
   return (
     <div className={styles.ownerAvatarFallback}>
       {ownerInitial(owner.first_name, owner.username)}
+    </div>
+  );
+}
+
+function StatTile({
+  icon,
+  label,
+  value,
+  tone = "slate",
+}: {
+  icon: IconName;
+  label: string;
+  value: string | number | undefined;
+  tone?: "slate" | "green" | "red" | "blue" | "gold" | "court";
+}) {
+  return (
+    <div className={`${styles.statTile} ${styles[`statTile_${tone}`]}`}>
+      <div className={styles.statTileIcon}>
+        <Icon name={icon} size={15} />
+      </div>
+      <div>
+        <div className={styles.statTileValue}>{value ?? "—"}</div>
+        <div className={styles.statTileLabel}>{label}</div>
+      </div>
+    </div>
+  );
+}
+
+function AllOwnerRow({
+  owner,
+  stat,
+  onDelete,
+}: {
+  owner: OwnerRow;
+  stat: AdminOwnerStat | undefined;
+  onDelete: () => void;
+}) {
+  return (
+    <div className={styles.ownerListRow}>
+      <div className={styles.ownerListAvatar}>{owner.username?.[0]?.toUpperCase() || "?"}</div>
+      <div className={styles.ownerListInfo}>
+        <div className={styles.ownerListName}>{owner.full_name || owner.username}</div>
+        <div className={styles.ownerListMeta}>
+          <Icon name="pin" size={11} />
+          {owner.phone || "No phone"}
+        </div>
+      </div>
+      <span
+        className={`${styles.miniStatusPill} ${
+          owner.is_approved ? styles.miniStatusApproved : styles.miniStatusPending
+        }`}
+      >
+        {owner.is_approved ? "Approved" : "Pending"}
+      </span>
+      <div className={styles.ownerListStat}>
+        <Icon name="layers" size={13} />
+        {stat?.pitch_count ?? 0} pitches
+      </div>
+      <div className={styles.ownerListStat}>
+        <Icon name="cash" size={13} />
+        {formatBirr(stat?.revenue)}
+      </div>
+      <button type="button" className={styles.deleteIconBtn} onClick={onDelete} title="Delete owner">
+        <Icon name="trash" size={14} />
+      </button>
+    </div>
+  );
+}
+
+// ---------- Confirm modal (replaces window.confirm) ----------
+type ConfirmState = {
+  title: string;
+  message: string;
+  onConfirm: () => void;
+} | null;
+
+function ConfirmModal({
+  state,
+  onClose,
+}: {
+  state: ConfirmState;
+  onClose: () => void;
+}) {
+  if (!state) return null;
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(15, 23, 42, 0.55)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: 1000,
+        padding: 16,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: "#fff",
+          borderRadius: 14,
+          width: "100%",
+          maxWidth: 420,
+          padding: "20px 20px 16px",
+          position: "relative",
+          boxShadow: "0 20px 50px rgba(0,0,0,0.25)",
+        }}
+      >
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close"
+          style={{
+            position: "absolute",
+            top: 12,
+            right: 12,
+            border: "none",
+            background: "transparent",
+            cursor: "pointer",
+            color: "#64748b",
+            padding: 4,
+            display: "flex",
+          }}
+        >
+          <Icon name="x" size={16} />
+        </button>
+
+        <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 8, paddingRight: 24 }}>
+          {state.title}
+        </div>
+        <div style={{ fontSize: 14, color: "#475569", lineHeight: 1.5, marginBottom: 20 }}>
+          {state.message}
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              padding: "8px 16px",
+              borderRadius: 8,
+              border: "1px solid #e2e8f0",
+              background: "#fff",
+              color: "#334155",
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
+          >
+            No
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              state.onConfirm();
+              onClose();
+            }}
+            style={{
+              padding: "8px 16px",
+              borderRadius: 8,
+              border: "none",
+              background: "#dc2626",
+              color: "#fff",
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
+          >
+            Yes
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -283,6 +536,7 @@ export default function Admin() {
   const [owners, setOwners] = useState<OwnerRow[]>([]);
   const [pendingPitches, setPendingPitches] = useState<Pitch[]>([]);
   const [allPitches, setAllPitches] = useState<Pitch[]>([]);
+  const [adminStats, setAdminStats] = useState<AdminStats | null>(null);
   const [msg, setMsg] = useState("");
   const [openAdd, setOpenAdd] = useState(false);
   const [editingPitch, setEditingPitch] = useState<Pitch | null>(null);
@@ -297,6 +551,9 @@ export default function Admin() {
     dressing: false, showers: false, parking: false, lighting: false,
   });
 
+  // ✅ NEW: state for the custom confirm modal
+  const [confirmState, setConfirmState] = useState<ConfirmState>(null);
+
   const activeFilterCount =
     (search.trim() ? 1 : 0) +
     (approvalFilter !== "all" ? 1 : 0) +
@@ -308,17 +565,19 @@ export default function Admin() {
       setLoading(true);
       setMsg("");
 
-      const [po, o, pp, ap] = await Promise.all([
+      const [po, o, pp, ap, stats] = await Promise.all([
         listPendingOwners(),
         listOwners(),
         listPendingPitches(),
         listPitches(),
+        getAdminStats().catch(() => null),
       ]);
 
       setPendingOwners(po);
       setOwners(o);
       setPendingPitches(pp);
       setAllPitches(ap);
+      setAdminStats(stats);
     } catch {
       setMsg("Failed to load admin data. Check API / token.");
     } finally {
@@ -368,10 +627,60 @@ export default function Admin() {
     }
   }
 
+  // ✅ Actual delete logic split out — no window.confirm here anymore
+  async function performDeletePitch(id: string) {
+    try {
+      await deleteAdminPitch(id);
+      showToast("Pitch deleted.", "delete");
+      await refresh();
+    } catch {
+      showToast("Delete failed.", "delete");
+    }
+  }
+
+  async function performDeleteOwner(id: string) {
+    try {
+      await deleteAdminOwner(id);
+      showToast("Owner deleted.", "delete");
+      await refresh();
+    } catch {
+      showToast("Delete failed.", "delete");
+    }
+  }
+
+  // ✅ These now open the custom modal instead of window.confirm
+  function onDeletePitch(id: string, name: string) {
+    setConfirmState({
+      title: "Delete pitch?",
+      message: `Delete "${name}"? This permanently removes the pitch, its photos, and its booking history.`,
+      onConfirm: () => performDeletePitch(id),
+    });
+  }
+
+  function onDeleteOwnerAccount(id: string, username: string) {
+    setConfirmState({
+      title: "Delete owner?",
+      message: `Delete owner "${username}"? This permanently removes their account, tenant, pitches, and booking history.`,
+      onConfirm: () => performDeleteOwner(id),
+    });
+  }
+
   function goToPitch(pitch: Pitch) {
     if (!pitch.is_approved) return;
     navigate(`/app/pitches/${pitch.id}`);
   }
+
+  const pitchStatById = useMemo(() => {
+    const map = new Map<string, AdminPitchStat>();
+    (adminStats?.pitch_stats || []).forEach((s) => map.set(s.pitch_id, s));
+    return map;
+  }, [adminStats]);
+
+  const ownerStatById = useMemo(() => {
+    const map = new Map<string, AdminOwnerStat>();
+    (adminStats?.owner_stats || []).forEach((s) => map.set(s.owner_id, s));
+    return map;
+  }, [adminStats]);
 
   const filteredPendingPitches = useMemo(() => {
     return pendingPitches.filter(
@@ -392,16 +701,38 @@ export default function Admin() {
     setAmenities({ dressing: false, showers: false, parking: false, lighting: false });
   }
 
-
-
   return (
     <div>
       <div className={styles.page}>
         <ToastContainer />
         <div className={styles.container}>
-          <div className={styles.topBar}>
-            <h2 className={styles.title}>Admin</h2>
-            <AddButton onClick={() => setOpenAdd(true)} />
+          {/* ---------- Control panel header ---------- */}
+          <div className={styles.controlHeader}>
+            <div className={styles.controlHeaderPattern} />
+            <div className={styles.controlHeaderTop}>
+              <div>
+                <h1 className={styles.controlTitle}>Admin control panel</h1>
+                <div className={styles.controlSub}>
+                  Owners, pitches, and revenue across every tenant
+                </div>
+              </div>
+              <AddButton onClick={() => setOpenAdd(true)} title="Add pitch" />
+            </div>
+          </div>
+
+          {/* ---------- Platform stats ---------- */}
+          <div className={styles.statsGrid}>
+            <StatTile icon="users" label="Total owners" value={adminStats?.total_owners} tone="slate" />
+            <StatTile icon="checkCircle" label="Approved owners" value={adminStats?.approved_owners} tone="green" />
+            <StatTile icon="hourglass" label="Pending owners" value={adminStats?.pending_owners} tone="red" />
+            <StatTile icon="layers" label="Total pitches" value={adminStats?.total_pitches} tone="slate" />
+            <StatTile icon="checkCircle" label="Approved pitches" value={adminStats?.approved_pitches} tone="green" />
+            <StatTile icon="hourglass" label="Pending pitches" value={adminStats?.pending_pitches} tone="red" />
+            <StatTile icon="checkCircle" label="Active pitches" value={adminStats?.active_pitches} tone="blue" />
+            <StatTile icon="ball" label="Football pitches" value={adminStats?.football_pitches} tone="green" />
+            <StatTile icon="ball" label="Basketball pitches" value={adminStats?.basketball_pitches} tone="court" />
+            <StatTile icon="calendarCheck" label="Total bookings" value={adminStats?.total_bookings} tone="blue" />
+            <StatTile icon="cash" label="Total revenue" value={formatBirr(adminStats?.total_revenue)} tone="gold" />
           </div>
 
           {msg && <p className={styles.message}>{msg}</p>}
@@ -471,111 +802,8 @@ export default function Admin() {
             longitude={locationPitch?.longitude}
           />
 
-          {/* ---------- Filters ---------- */}
-<div className={styles.filterZone}>
-  <div className={styles.filterBar}>
-    <div className={styles.searchField}>
-      <Icon name="search" size={14} />
-      <input
-        className={styles.searchInput}
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        placeholder="Search pitches"
-      />
-      {search && (
-        <button
-          type="button"
-          className={styles.searchClear}
-          onClick={() => setSearch("")}
-          aria-label="Clear search"
-        >
-          <Icon name="x" size={10} />
-        </button>
-      )}
-    </div>
-
-    <div className={styles.pillDivider} />
-
-    <div className={styles.statusField}>
-      <select
-        className={styles.statusSelect}
-        value={approvalFilter}
-        onChange={(e) => setApprovalFilter(e.target.value as ApprovalFilter)}
-      >
-        <option value="all">All statuses</option>
-        <option value="approved">Approved</option>
-        <option value="not_approved">Not approved</option>
-      </select>
-    </div>
-
-    <div className={styles.pillDivider} />
-
-    <div className={styles.priceField}>
-      <span className={styles.priceLabel}>Max price</span>
-      <input
-        className={styles.priceInput}
-        value={maxPrice}
-        onChange={(e) => setMaxPrice(e.target.value)}
-        placeholder="Any"
-        inputMode="numeric"
-      />
-    </div>
-
-    <div className={styles.pillDivider} />
-
-    <div className={styles.amenityGroup}>
-      <button
-        type="button"
-        onClick={() => setAmenities((prev) => ({ ...prev, dressing: !prev.dressing }))}
-        className={`${styles.amenityToggle} ${amenities.dressing ? styles.amenityToggleOn : ""}`}
-        title="Dressing room"
-        aria-pressed={amenities.dressing}
-      >
-        <Icon name="shirt" size={14} />
-        <span className={styles.amenityToggleLabel}>Dressing room</span>
-      </button>
-      <button
-        type="button"
-        onClick={() => setAmenities((prev) => ({ ...prev, showers: !prev.showers }))}
-        className={`${styles.amenityToggle} ${amenities.showers ? styles.amenityToggleOn : ""}`}
-        title="Showers"
-        aria-pressed={amenities.showers}
-      >
-        <Icon name="droplet" size={14} />
-        <span className={styles.amenityToggleLabel}>Showers</span>
-      </button>
-      <button
-        type="button"
-        onClick={() => setAmenities((prev) => ({ ...prev, parking: !prev.parking }))}
-        className={`${styles.amenityToggle} ${amenities.parking ? styles.amenityToggleOn : ""}`}
-        title="Parking"
-        aria-pressed={amenities.parking}
-      >
-        <Icon name="car" size={14} />
-        <span className={styles.amenityToggleLabel}>Parking</span>
-      </button>
-      <button
-        type="button"
-        onClick={() => setAmenities((prev) => ({ ...prev, lighting: !prev.lighting }))}
-        className={`${styles.amenityToggle} ${amenities.lighting ? styles.amenityToggleOn : ""}`}
-        title="Lighting"
-        aria-pressed={amenities.lighting}
-      >
-        <Icon name="bulb" size={14} />
-        <span className={styles.amenityToggleLabel}>Lighting</span>
-      </button>
-    </div>
-
-    {activeFilterCount > 0 && (
-      <>
-        <div className={styles.pillDivider} />
-        <button className={styles.clearBtn} onClick={clearFilters}>
-          Clear
-        </button>
-      </>
-    )}
-  </div>
-</div>
+          {/* ✅ NEW: custom confirm modal, replaces window.confirm */}
+          <ConfirmModal state={confirmState} onClose={() => setConfirmState(null)} />
 
           <hr className={styles.divider} />
 
@@ -632,6 +860,141 @@ export default function Admin() {
 
           <hr className={styles.divider} />
 
+          {/* ---------- All owners ---------- */}
+          {!loading && (
+            <div className={styles.section}>
+              <div className={styles.sectionHeader}>
+                <div className={styles.sectionTitle}>All owners</div>
+                <span className={styles.countBadge}>{owners.length}</span>
+              </div>
+
+              {owners.length === 0 ? (
+                <p className={styles.emptyText}>No owners yet.</p>
+              ) : (
+                <div className={styles.ownerListWrap}>
+                  {owners.map((o) => (
+                    <AllOwnerRow
+                      key={o.id}
+                      owner={o}
+                      stat={ownerStatById.get(o.id)}
+                      onDelete={() => onDeleteOwnerAccount(o.id, o.username)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          <hr className={styles.divider} />
+
+          {/* ---------- Filters ---------- */}
+          <div className={styles.filterZone}>
+            <div className={styles.filterBar}>
+              <div className={styles.searchField}>
+                <Icon name="search" size={14} />
+                <input
+                  className={styles.searchInput}
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search pitches"
+                />
+                {search && (
+                  <button
+                    type="button"
+                    className={styles.searchClear}
+                    onClick={() => setSearch("")}
+                    aria-label="Clear search"
+                  >
+                    <Icon name="x" size={10} />
+                  </button>
+                )}
+              </div>
+
+              <div className={styles.pillDivider} />
+
+              <div className={styles.statusField}>
+                <select
+                  className={styles.statusSelect}
+                  value={approvalFilter}
+                  onChange={(e) => setApprovalFilter(e.target.value as ApprovalFilter)}
+                >
+                  <option value="all">All statuses</option>
+                  <option value="approved">Approved</option>
+                  <option value="not_approved">Not approved</option>
+                </select>
+              </div>
+
+              <div className={styles.pillDivider} />
+
+              <div className={styles.priceField}>
+                <span className={styles.priceLabel}>Max price</span>
+                <input
+                  className={styles.priceInput}
+                  value={maxPrice}
+                  onChange={(e) => setMaxPrice(e.target.value)}
+                  placeholder="Any"
+                  inputMode="numeric"
+                />
+              </div>
+
+              <div className={styles.pillDivider} />
+
+              <div className={styles.amenityGroup}>
+                <button
+                  type="button"
+                  onClick={() => setAmenities((prev) => ({ ...prev, dressing: !prev.dressing }))}
+                  className={`${styles.amenityToggle} ${amenities.dressing ? styles.amenityToggleOn : ""}`}
+                  title="Dressing room"
+                  aria-pressed={amenities.dressing}
+                >
+                  <Icon name="shirt" size={14} />
+                  <span className={styles.amenityToggleLabel}>Dressing room</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAmenities((prev) => ({ ...prev, showers: !prev.showers }))}
+                  className={`${styles.amenityToggle} ${amenities.showers ? styles.amenityToggleOn : ""}`}
+                  title="Showers"
+                  aria-pressed={amenities.showers}
+                >
+                  <Icon name="droplet" size={14} />
+                  <span className={styles.amenityToggleLabel}>Showers</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAmenities((prev) => ({ ...prev, parking: !prev.parking }))}
+                  className={`${styles.amenityToggle} ${amenities.parking ? styles.amenityToggleOn : ""}`}
+                  title="Parking"
+                  aria-pressed={amenities.parking}
+                >
+                  <Icon name="car" size={14} />
+                  <span className={styles.amenityToggleLabel}>Parking</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAmenities((prev) => ({ ...prev, lighting: !prev.lighting }))}
+                  className={`${styles.amenityToggle} ${amenities.lighting ? styles.amenityToggleOn : ""}`}
+                  title="Lighting"
+                  aria-pressed={amenities.lighting}
+                >
+                  <Icon name="bulb" size={14} />
+                  <span className={styles.amenityToggleLabel}>Lighting</span>
+                </button>
+              </div>
+
+              {activeFilterCount > 0 && (
+                <>
+                  <div className={styles.pillDivider} />
+                  <button className={styles.clearBtn} onClick={clearFilters}>
+                    Clear
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+
+          <hr className={styles.divider} />
+
           {!loading && (
             <div className={styles.section}>
               <div className={styles.sectionHeader}>
@@ -643,38 +1006,59 @@ export default function Admin() {
                 <p className={styles.emptyText}>No pending pitches match these filters.</p>
               ) : (
                 <div className={styles.cardGrid}>
-                  {filteredPendingPitches.map((p, index) => (
-                    <div
-                      key={p.id}
-                      onClick={() => goToPitch(p)}
-                      className={`${styles.pitchCard} ${!p.is_approved ? styles.pitchCardDisabled : ""}`}
-                      style={{ "--i": index } as React.CSSProperties}
-                    >
-                      <CardImage pitch={p} />
-                      <div className={styles.cardBody}>
-                        <div className={styles.cardTitleRow}>
-                          <div>
-                            <div className={styles.pitchName}>{p.name}</div>
-                            <div className={styles.pitchAddress}>
-                              <Icon name="pin" size={13} />
-                              {p.address || "No address on file"}
+                  {filteredPendingPitches.map((p, index) => {
+                    const stat = pitchStatById.get(p.id);
+                    return (
+                      <div
+                        key={p.id}
+                        onClick={() => goToPitch(p)}
+                        className={`${styles.pitchCard} ${!p.is_approved ? styles.pitchCardDisabled : ""}`}
+                        style={{ "--i": index } as React.CSSProperties}
+                      >
+                        <CardImage pitch={p} onDelete={() => onDeletePitch(p.id, p.name)} />
+                        <div className={styles.cardBody}>
+                          <div className={styles.cardTitleRow}>
+                            <div>
+                              <div className={styles.pitchName}>{p.name}</div>
+                              <div className={styles.pitchAddress}>
+                                <Icon name="pin" size={13} />
+                                {p.address || "No address on file"}
+                              </div>
                             </div>
+                            <button
+                              className={styles.approvePillBtn}
+                              onClick={(e) => { e.stopPropagation(); onApprovePitch(p.id); }}
+                            >
+                              Approve
+                            </button>
                           </div>
-                          <button
-                            className={styles.approvePillBtn}
-                            onClick={(e) => { e.stopPropagation(); onApprovePitch(p.id); }}
-                          >
-                            Approve
-                          </button>
+                          {stat && (
+                            <div className={styles.cardStatsRow}>
+                              <div className={styles.cardStat}>
+                                <Icon name="cash" size={14} />
+                                <div>
+                                  <div className={styles.cardStatValue}>{formatBirr(stat.revenue)}</div>
+                                  <div className={styles.cardStatLabel}>Earned</div>
+                                </div>
+                              </div>
+                              <div className={styles.cardStat}>
+                                <Icon name="calendarCheck" size={14} />
+                                <div>
+                                  <div className={styles.cardStatValue}>{stat.bookings_count}</div>
+                                  <div className={styles.cardStatLabel}>Booked</div>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                          <PitchHours pitch={p} />
                         </div>
-                        <PitchHours pitch={p} />
+                        <CardActions
+                          onEdit={() => { setMsg(""); setEditingPitch(p); }}
+                          onLocation={() => setLocationPitch(p)}
+                        />
                       </div>
-                      <CardActions
-                        onEdit={() => { setMsg(""); setEditingPitch(p); }}
-                        onLocation={() => setLocationPitch(p)}
-                      />
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -693,36 +1077,57 @@ export default function Admin() {
                 <p className={styles.emptyText}>No pitches match these filters.</p>
               ) : (
                 <div className={styles.cardGrid}>
-                  {filteredAllPitches.map((p, index) => (
-                    <div
-                      key={p.id}
-                      onClick={() => goToPitch(p)}
-                      className={`${styles.pitchCard} ${!p.is_approved ? styles.pitchCardDisabled : ""}`}
-                      style={{ "--i": index } as React.CSSProperties}
-                    >
-                      <CardImage pitch={p} />
-                      <div className={styles.cardBody}>
-                        <div className={styles.cardTitleRow}>
-                          <div>
-                            <div className={styles.pitchName}>{p.name}</div>
-                            <div className={styles.pitchAddress}>
-                              <Icon name="pin" size={13} />
-                              {p.address || "No address on file"}
+                  {filteredAllPitches.map((p, index) => {
+                    const stat = pitchStatById.get(p.id);
+                    return (
+                      <div
+                        key={p.id}
+                        onClick={() => goToPitch(p)}
+                        className={`${styles.pitchCard} ${!p.is_approved ? styles.pitchCardDisabled : ""}`}
+                        style={{ "--i": index } as React.CSSProperties}
+                      >
+                        <CardImage pitch={p} onDelete={() => onDeletePitch(p.id, p.name)} />
+                        <div className={styles.cardBody}>
+                          <div className={styles.cardTitleRow}>
+                            <div>
+                              <div className={styles.pitchName}>{p.name}</div>
+                              <div className={styles.pitchAddress}>
+                                <Icon name="pin" size={13} />
+                                {p.address || "No address on file"}
+                              </div>
                             </div>
+                            <span className={`${styles.statusPill} ${p.is_approved ? styles.statusApproved : styles.statusPending}`}>
+                              {p.is_approved ? "Approved" : "Pending"}
+                            </span>
                           </div>
-                          <span className={`${styles.statusPill} ${p.is_approved ? styles.statusApproved : styles.statusPending}`}>
-                            {p.is_approved ? "Approved" : "Pending"}
-                          </span>
+                          {stat && (
+                            <div className={styles.cardStatsRow}>
+                              <div className={styles.cardStat}>
+                                <Icon name="cash" size={14} />
+                                <div>
+                                  <div className={styles.cardStatValue}>{formatBirr(stat.revenue)}</div>
+                                  <div className={styles.cardStatLabel}>Earned</div>
+                                </div>
+                              </div>
+                              <div className={styles.cardStat}>
+                                <Icon name="calendarCheck" size={14} />
+                                <div>
+                                  <div className={styles.cardStatValue}>{stat.bookings_count}</div>
+                                  <div className={styles.cardStatLabel}>Booked</div>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                          <PitchHours pitch={p} />
+                          <AmenityTags pitch={p} />
                         </div>
-                        <PitchHours pitch={p} />
-                        <AmenityTags pitch={p} />
+                        <CardActions
+                          onEdit={() => { setMsg(""); setEditingPitch(p); }}
+                          onLocation={() => setLocationPitch(p)}
+                        />
                       </div>
-                      <CardActions
-                        onEdit={() => { setMsg(""); setEditingPitch(p); }}
-                        onLocation={() => setLocationPitch(p)}
-                      />
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

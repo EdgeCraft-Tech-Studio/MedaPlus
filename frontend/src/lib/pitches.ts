@@ -123,7 +123,7 @@ export async function createBooking(payload: {
   manual_cash?: boolean;
   booked_for_name?: string;
 }) {
-  const res = await api.post("/bookings/", payload);
+  const res = await api.post("/bookings/", payload); 
   return res.data;
 }
 
@@ -159,10 +159,120 @@ export async function declineOwner(ownerId: string) {
 
 export async function listOwners() {
   const res = await api.get("/admin/owners/");
-  return res.data.owners as Array<{ id: string; username: string; email: string; is_approved: boolean }>;
+  return res.data.owners as Array<{
+    id: string;
+    username: string;
+    email: string;
+    full_name: string;
+    phone: string;
+    is_approved: boolean;
+  }>;
 }
 
 export async function approveOwner(ownerId: string) {
   const res = await api.post(`/admin/owners/${ownerId}/approve/`);
+  return res.data;
+}
+
+
+export type OwnerPitchStat = {
+  pitch_id: string;
+  name: string;
+  revenue: string;
+  bookings_count: number;
+  is_approved: boolean;
+  is_active: boolean;
+};
+
+export type TodayScheduleItem = {
+  pitch_id: string;
+  pitch_name: string;
+  time_label: string;
+  booked_by: string;
+};
+
+export type OwnerStats = {
+  total_pitches: number;
+  active_pitches: number;
+  pending_pitches: number;
+  total_revenue: string;
+  total_bookings: number;
+  pitch_stats: OwnerPitchStat[];
+  today_schedule: TodayScheduleItem[];
+};
+
+export type OwnerPitchDetailStats = {
+  pitch: Pitch;
+  earnings_week: string;
+  earnings_month: string;
+  earnings_year: string;
+  bookings_1m: number;
+  bookings_3m: number;
+  bookings_6m: number;
+  bookings_1y: number;
+  total_bookings: number;
+  total_earnings: string;
+};
+
+export async function getOwnerStats() {
+  const res = await api.get("/pitches/owner/stats/");
+  return res.data as OwnerStats;
+}
+
+export async function getOwnerPitchStats(pitchId: string) {
+  const res = await api.get(`/pitches/${pitchId}/owner-stats/`);
+  return res.data as OwnerPitchDetailStats;
+}
+
+
+export type AdminPitchStat = {
+  pitch_id: string;
+  name: string;
+  sport_type: SportType;
+  owner_username: string;
+  tenant_name: string;
+  revenue: string;
+  bookings_count: number;
+  is_approved: boolean;
+  is_active: boolean;
+};
+
+export type AdminOwnerStat = {
+  owner_id: string;
+  username: string;
+  email: string;
+  is_approved: boolean;
+  pitch_count: number;
+  revenue: string;
+};
+
+export type AdminStats = {
+  total_owners: number;
+  approved_owners: number;
+  pending_owners: number;
+  total_pitches: number;
+  approved_pitches: number;
+  pending_pitches: number;
+  active_pitches: number;
+  football_pitches: number;
+  basketball_pitches: number;
+  total_bookings: number;
+  total_revenue: string;
+  pitch_stats: AdminPitchStat[];
+  owner_stats: AdminOwnerStat[];
+};
+
+export async function getAdminStats() {
+  const res = await api.get("/admin/stats/");
+  return res.data as AdminStats;
+}
+
+export async function deleteAdminPitch(pitchId: string) {
+  const res = await api.delete(`/admin/pitches/${pitchId}/delete/`);
+  return res.data;
+}
+
+export async function deleteAdminOwner(ownerId: string) {
+  const res = await api.delete(`/admin/owners/${ownerId}/delete/`);
   return res.data;
 }

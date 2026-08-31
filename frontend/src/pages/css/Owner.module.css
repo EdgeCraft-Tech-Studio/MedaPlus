@@ -8,19 +8,27 @@
   --color-text: #14181d;
   --color-text-muted: #6b7280;
   --color-text-faint: #9aa1ab;
-  --color-primary: #123522;
-  --color-primary-soft: #eaf2ed;
-  --color-accent: #e2a63b;
-  --color-accent-soft: #fbf1de;
+
+  --color-pitch-900: #0f2e1c;
+  --color-pitch-700: #1c5c37;
+  --color-chalk: #f5f3ea;
+
+  --color-gold: #e2a63b;
+  --color-gold-soft: #fbf1de;
+
   --color-success: #1f8a4c;
   --color-success-soft: #e9f7ef;
   --color-danger: #c0392b;
   --color-danger-soft: #fbeae7;
+
   --font-display: 'Inter', -apple-system, sans-serif;
   --font-mono: 'IBM Plex Mono', monospace;
+
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 18px;
+  --radius-xl: 28px;
+
   --shadow-card: 0 4px 14px rgba(20, 24, 29, 0.07);
   --shadow-card-hover: 0 16px 36px rgba(20, 24, 29, 0.14);
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
@@ -40,40 +48,57 @@
   width: 100%;
 }
 
-.topBar {
+/* ---------- Hero scoreboard ---------- */
+
+.hero {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-xl);
+  background: linear-gradient(135deg, var(--color-pitch-900) 0%, var(--color-pitch-700) 100%);
+  padding: 26px clamp(20px, 4vw, 36px) 28px;
+  color: var(--color-chalk);
+  box-shadow: 0 18px 40px rgba(15, 46, 28, 0.28);
+}
+
+.heroPattern {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  color: var(--color-chalk);
+  opacity: 0.14;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.5;
+  pointer-events: none;
+}
+
+.heroTop {
+  position: relative;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 6px;
+  flex-wrap: wrap;
 }
 
-.titleGroup {
-  display: grid;
-  gap: 3px;
+.heroGreeting {
+  font-size: clamp(20px, 2.6vw, 26px);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
 }
 
-.eyebrow {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--color-accent);
+.heroSub {
+  margin-top: 4px;
+  font-size: 13.5px;
+  color: rgba(245, 243, 234, 0.72);
 }
 
-.title {
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  color: var(--color-primary);
-}
-
-/* ---------- add button + status badge, tight gap ---------- */
-
-.topBarActions {
+.heroTopRight {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   flex-shrink: 0;
 }
 
@@ -82,17 +107,20 @@
 }
 
 .addWrapDisabled {
-  opacity: 0.5;
+  opacity: 0.55;
   pointer-events: none;
 }
 
 .statusBadge {
   display: grid;
   place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  background: rgba(245, 243, 234, 0.94);
   flex-shrink: 0;
-  line-height: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
-
 
 .statusBadgeApproved svg path:first-child {
   fill: #2563eb;
@@ -102,48 +130,280 @@
 .statusBadgeApproved svg path:last-child {
   stroke: #ffffff;
 }
-/* blue "verified" badge — white check on blue, with a double ring halo (like Upwork/LinkedIn verified) */
-.statusBadgeApproved {
-  color: #2563eb;
-}
 
 .statusBadgePending {
   color: var(--color-text-faint);
 }
-.editCornerBtn {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  padding: 12px 20px;
-  border: none;
-  background: var(--color-primary);
-  color: #ffffff;
+
+.scoreboard {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 26px;
+  flex-wrap: wrap;
+  margin-top: 24px;
+  padding-top: 22px;
+  border-top: 1px solid rgba(245, 243, 234, 0.16);
+}
+
+.scoreboardPrimary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.scoreboardIconWrap {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  background: rgba(226, 166, 59, 0.16);
+  color: var(--color-gold);
+  flex-shrink: 0;
+}
+
+.scoreboardPrimaryValue {
+  font-family: var(--font-mono);
+  font-size: clamp(26px, 3.6vw, 36px);
+  font-weight: 600;
+  line-height: 1;
+}
+
+.scoreboardPrimaryLabel {
+  margin-top: 4px;
   font-size: 12.5px;
+  color: rgba(245, 243, 234, 0.68);
+}
+
+.scoreboardDivider {
+  width: 1px;
+  align-self: stretch;
+  min-height: 44px;
+  background: rgba(245, 243, 234, 0.18);
+}
+
+.scoreboardStats {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.scoreboardStat {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: rgba(245, 243, 234, 0.85);
+}
+
+.scoreboardStatValue {
+  font-family: var(--font-mono);
+  font-size: 21px;
+  font-weight: 600;
+  color: var(--color-chalk);
+  line-height: 1.15;
+}
+
+.scoreboardStatValueWarn {
+  font-family: var(--font-mono);
+  font-size: 21px;
+  font-weight: 600;
+  color: var(--color-gold);
+  line-height: 1.15;
+}
+
+.scoreboardStatLabel {
+  margin-top: 1px;
+  font-size: 11.5px;
+  color: rgba(245, 243, 234, 0.68);
+}
+
+@media (max-width: 640px) {
+  .scoreboard {
+    gap: 18px;
+  }
+  .scoreboardDivider {
+    display: none;
+  }
+}
+
+/* ---------- Insight cards: sit below the hero, own space, scrollable lists ---------- */
+
+.insightRow {
+  margin: 22px 0 0;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+@media (max-width: 900px) {
+  .insightRow {
+    grid-template-columns: 1fr;
+  }
+}
+
+.insightCard {
+  display: flex;
+  flex-direction: column;
+  min-height: 270px;
+  background: #ffffff;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 16px 18px;
+  box-shadow: var(--shadow-card);
+}
+
+.insightHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  flex-shrink: 0;
+}
+
+.insightIconWrap {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  flex-shrink: 0;
+}
+
+.insightIconBlue {
+  background: #eaf1fe;
+  color: #2563eb;
+}
+
+.insightIconRed {
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+}
+
+.insightIconGold {
+  background: var(--color-gold-soft);
+  color: var(--color-gold);
+}
+
+.insightTitle {
+  font-size: 13.5px;
   font-weight: 700;
-  letter-spacing: 0.01em;
-  cursor: pointer;
-  border-top-left-radius: 16px;
-  border-bottom-right-radius: var(--radius-lg);
-  transition: filter 0.2s ease, padding-left 0.2s ease;
-  z-index: 2;
+  color: var(--color-text);
 }
 
-.editCornerBtn:hover {
-  filter: brightness(1.18);
-  padding-left: 26px;
+.insightScrollList {
+  list-style: none;
+  margin: 0;
+  padding: 0 4px 0 0;
+  flex: 1;
+  overflow-y: auto;
+  display: grid;
+  align-content: start;
+  gap: 10px;
 }
 
-.editCornerBtn:active {
-  filter: brightness(0.95);
+.insightScrollList::-webkit-scrollbar {
+  width: 6px;
+}
+
+.insightScrollList::-webkit-scrollbar-thumb {
+  background: var(--color-border-strong);
+  border-radius: 999px;
+}
+
+.insightRowItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12.5px;
+}
+
+.insightItemName {
+  color: var(--color-text);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.insightItemWhen {
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.insightEmpty {
+  font-size: 12.5px;
+  color: var(--color-text-faint);
+  padding: 6px 0 2px;
+}
+
+.rankItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.rankBadge {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.rank_green {
+  background: var(--color-success-soft);
+  color: var(--color-success);
+}
+
+.rank_gold {
+  background: var(--color-gold-soft);
+  color: var(--color-gold);
+}
+
+.rank_bronze {
+  background: #fbe4d8;
+  color: #b3572a;
+}
+
+.rank_neutral {
+  background: var(--color-surface-alt);
+  color: var(--color-text-faint);
+}
+
+.rankName {
+  flex: 1;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rankValue {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  flex-shrink: 0;
 }
 
 .message {
   margin-top: 18px;
   padding: 12px 16px;
   border-radius: var(--radius-sm);
-  background: var(--color-primary-soft);
+  background: var(--color-success-soft);
   border: 1px solid #d3e5da;
-  color: var(--color-primary);
+  color: var(--color-pitch-900);
   font-size: 13.5px;
   font-weight: 500;
   animation: slideIn 0.35s var(--ease);
@@ -162,23 +422,40 @@
 .sectionHeader {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 10px;
-  margin-bottom: 14px;
+  margin-bottom: 16px;
+}
+
+.sectionTitleWrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sectionAccent {
+  width: 4px;
+  height: 20px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--color-gold), var(--color-pitch-700));
 }
 
 .sectionTitle {
-  font-size: 18px;
-  font-weight: 700;
+  font-size: 19px;
+  font-weight: 800;
   color: var(--color-text);
+  letter-spacing: -0.01em;
+  margin: 0;
 }
 
 .countBadge {
   font-family: var(--font-mono);
   font-size: 12px;
-  color: var(--color-text-faint);
-  background: var(--color-surface-alt);
-  border: 1px solid var(--color-border);
-  padding: 2px 9px;
+  font-weight: 600;
+  color: var(--color-gold);
+  background: var(--color-gold-soft);
+  border: 1px solid rgba(226, 166, 59, 0.35);
+  padding: 5px 12px;
   border-radius: 999px;
 }
 
@@ -194,7 +471,7 @@
   padding: 18px 0;
 }
 
-/* ---------- responsive card grid: same deterministic columns as admin ---------- */
+/* ---------- pitch card grid ---------- */
 
 .cardGrid {
   display: grid;
@@ -232,8 +509,6 @@
   }
 }
 
-/* ---------- pitch card: identical image sizing/mechanism to admin ---------- */
-
 .pitchCard {
   position: relative;
   display: flex;
@@ -257,6 +532,7 @@
 }
 
 .cardImage {
+  position: relative;
   width: 100%;
   height: clamp(180px, 20vw, 240px);
   overflow: hidden;
@@ -287,17 +563,63 @@
   font-weight: 600;
 }
 
+.sportTag {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 11px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #ffffff;
+  backdrop-filter: blur(2px);
+}
+
+.sportTagFootball {
+  background: rgba(15, 46, 28, 0.82);
+}
+
+.sportTagBasketball {
+  background: rgba(199, 98, 43, 0.86);
+}
+
+.imgStatusPill {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.imgStatusPill::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.imgStatusApproved {
+  background: rgba(233, 247, 239, 0.95);
+  color: var(--color-success);
+}
+
+.imgStatusPending {
+  background: rgba(251, 234, 231, 0.95);
+  color: var(--color-danger);
+}
+
 .cardBody {
   display: grid;
   gap: 14px;
-  padding: 18px;
-}
-
-.cardTitleRow {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 10px;
+  padding: 18px 18px 60px;
 }
 
 .pitchName {
@@ -321,34 +643,58 @@
   color: var(--color-text-faint);
 }
 
-.statusPill {
-  display: inline-flex;
+.cardStatsRow {
+  display: flex;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.cardStat {
+  flex: 1;
+  display: flex;
   align-items: center;
-  gap: 5px;
-  font-size: 11.5px;
-  font-weight: 600;
-  padding: 5px 11px;
-  border-radius: 999px;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--color-surface-alt);
+}
+
+.cardStat + .cardStat {
+  border-left: 1px solid var(--color-border);
+}
+
+.cardStat svg {
+  color: var(--color-gold);
   flex-shrink: 0;
-  white-space: nowrap;
 }
 
-.statusPill::before {
-  content: "";
-  width: 6px;
+.cardStatValue {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 14.5px;
+  color: var(--color-text);
+  line-height: 1.2;
+}
+
+.cardStatLabel {
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.revenueBar {
   height: 6px;
-  border-radius: 50%;
-  background: currentColor;
+  width: 100%;
+  border-radius: 999px;
+  background: var(--color-surface-alt);
+  overflow: hidden;
+  margin-top: -6px;
 }
 
-.statusApproved {
-  background: var(--color-success-soft);
-  color: var(--color-success);
-}
-
-.statusPending {
-  background: var(--color-danger-soft);
-  color: var(--color-danger);
+.revenueBarFill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--color-gold), var(--color-pitch-700));
+  transition: width 0.5s var(--ease);
 }
 
 .metaGrid {
@@ -371,7 +717,7 @@
 
 .metaItem svg {
   flex-shrink: 0;
-  color: var(--color-accent);
+  color: var(--color-gold);
 }
 
 .metaItem b {
@@ -424,12 +770,52 @@
   font-weight: 600;
 }
 
-.hintText {
-  font-size: 12px;
-  color: var(--color-text-faint);
-  display: flex;
+.editCornerBtn,
+.bookCornerBtn {
+  position: absolute;
+  bottom: 0;
+  display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
+  padding: 12px 18px;
+  border: none;
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition: filter 0.2s ease, padding 0.2s ease;
+  z-index: 2;
+}
+
+.editCornerBtn {
+  right: 0;
+  background: var(--color-pitch-900);
+  color: #ffffff;
+  border-top-left-radius: 16px;
+  border-bottom-right-radius: var(--radius-lg);
+}
+
+.editCornerBtn:hover {
+  filter: brightness(1.25);
+  padding-right: 24px;
+}
+
+.bookCornerBtn {
+  left: 0;
+  background: var(--color-gold);
+  color: var(--color-pitch-900);
+  border-top-right-radius: 16px;
+  border-bottom-left-radius: var(--radius-lg);
+}
+
+.bookCornerBtn:hover {
+  filter: brightness(1.08);
+  padding-left: 24px;
+}
+
+.editCornerBtn:active,
+.bookCornerBtn:active {
+  filter: brightness(0.95);
 }
 
 @keyframes cardIn {
@@ -461,18 +847,12 @@
   }
 }
 
-@media (max-width: 900px) {
-  .cardTitleRow {
-    flex-direction: column;
-  }
-}
-
-/* ---------- Filters: pill bar, matches Admin ---------- */
+/* ---------- Filters, centered ---------- */
 
 .filterZone {
   display: flex;
   justify-content: center;
-  margin-top: 18px;
+  margin-top: 20px;
 }
 
 .filterBar {
@@ -624,13 +1004,13 @@
 }
 
 .amenityToggleOn {
-  background: var(--color-accent-soft);
-  color: var(--color-accent);
+  background: var(--color-gold-soft);
+  color: var(--color-gold);
 }
 
 .amenityToggleOn:hover {
-  background: var(--color-accent-soft);
-  color: var(--color-accent);
+  background: var(--color-gold-soft);
+  color: var(--color-gold);
 }
 
 .amenityToggleOn .amenityToggleLabel {

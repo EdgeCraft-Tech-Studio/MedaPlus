@@ -195,9 +195,7 @@ export default function TeamDashboard() {
           />
         )}
 
-        {tab === "matches" && (
-          <Placeholder icon={VersusIcon} text="This team's matches will show up here." ctaLabel="Make a match" ctaTo="/match/create" />
-        )}
+       
         {tab === "bookings" && (
           <Placeholder icon={MapPinIcon} text="This team's pitch bookings will show up here." ctaLabel="Find a pitch" ctaTo="/discover/pitches" />
         )}

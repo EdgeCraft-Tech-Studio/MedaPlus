@@ -1,0 +1,429 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@500&display=swap');
+
+:root {
+  --color-bg: #ffffff;
+  --color-surface-alt: #f7f8f9;
+  --color-border: #e6e8eb;
+  --color-border-strong: #d6dade;
+  --color-text: #14181d;
+  --color-text-muted: #6b7280;
+  --color-text-faint: #9aa1ab;
+
+  --color-pitch-900: #0f2e1c;
+  --color-pitch-700: #1c5c37;
+
+  --color-gold: #e2a63b;
+  --color-gold-soft: #fbf1de;
+
+  --color-success: #1f8a4c;
+  --color-success-soft: #e9f7ef;
+  --color-danger: #c0392b;
+  --color-danger-soft: #fbeae7;
+
+  --font-display: 'Inter', -apple-system, sans-serif;
+  --font-mono: 'IBM Plex Mono', monospace;
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+
+  --shadow-card: 0 4px 14px rgba(20, 24, 29, 0.07);
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.page {
+  min-height: 100vh;
+  background: var(--color-bg);
+  font-family: var(--font-display);
+  color: var(--color-text);
+  padding: 26px clamp(20px, 4vw, 56px) 90px;
+}
+
+.container {
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.backBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-family: var(--font-display);
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 6px 4px;
+  margin-bottom: 18px;
+  transition: color 0.15s ease;
+}
+
+.backBtn:hover {
+  color: var(--color-pitch-900);
+}
+
+.emptyText {
+  color: var(--color-text-faint);
+  font-size: 13.5px;
+}
+
+.message {
+  padding: 12px 16px;
+  border-radius: var(--radius-sm);
+  background: var(--color-success-soft);
+  border: 1px solid #d3e5da;
+  color: var(--color-pitch-900);
+  font-size: 13.5px;
+  font-weight: 500;
+  margin-bottom: 16px;
+}
+
+.headRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+.titleRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.pitchTitle {
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  margin: 0;
+  color: var(--color-text);
+}
+
+.sportPill {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.sportPillFootball {
+  background: var(--color-pitch-900);
+}
+
+.sportPillBasketball {
+  background: #c7622b;
+}
+
+.statusPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 5px 11px;
+  border-radius: 999px;
+}
+
+.statusPill::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.statusApproved {
+  background: var(--color-success-soft);
+  color: var(--color-success);
+}
+
+.statusPending {
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+}
+
+.pitchAddress {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-text-muted);
+  font-size: 13.5px;
+  margin-top: 6px;
+}
+
+.editBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 18px;
+  border-radius: 999px;
+  border: none;
+  background: var(--color-pitch-900);
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: filter 0.15s ease;
+}
+
+.editBtn:hover {
+  filter: brightness(1.2);
+}
+
+/* ---------- Gallery ---------- */
+
+.gallery {
+  margin-top: 6px;
+  margin-bottom: 26px;
+}
+
+.galleryMain {
+  width: 100%;
+  height: clamp(220px, 34vw, 380px);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--color-surface-alt);
+  border: 1px solid var(--color-border);
+}
+
+.galleryMain img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.galleryEmpty {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  color: var(--color-text-faint);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.galleryThumbs {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.galleryThumb {
+  flex-shrink: 0;
+  width: 68px;
+  height: 52px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 2px solid transparent;
+  padding: 0;
+  cursor: pointer;
+  background: var(--color-surface-alt);
+}
+
+.galleryThumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.galleryThumbActive {
+  border-color: var(--color-gold);
+}
+
+/* ---------- Section label ---------- */
+
+.sectionLabel {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--color-text);
+  margin: 26px 0 12px;
+  padding-left: 10px;
+  border-left: 3px solid var(--color-gold);
+}
+
+/* ---------- Earnings scoreboard ---------- */
+
+.scoreRow {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+}
+
+@media (min-width: 700px) {
+  .scoreRow {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.scoreCard {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: #ffffff;
+  box-shadow: var(--shadow-card);
+  color: var(--color-gold);
+}
+
+.scoreCardGold {
+  background: var(--color-pitch-900);
+  border-color: var(--color-pitch-900);
+  color: var(--color-gold);
+}
+
+.scoreCardGold .scoreValue,
+.scoreCardGold .scoreLabel {
+  color: #f5f3ea;
+}
+
+.scoreValue {
+  font-family: var(--font-mono);
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.scoreLabel {
+  font-size: 11.5px;
+  color: var(--color-text-muted);
+  margin-top: 1px;
+}
+
+/* ---------- Bookings breakdown ---------- */
+
+.bookingRow {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+@media (min-width: 700px) {
+  .bookingRow {
+    grid-template-columns: repeat(5, 1fr);
+  }
+}
+
+.bookingCard {
+  padding: 14px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-alt);
+  text-align: center;
+}
+
+.bookingCardGold {
+  background: var(--color-gold-soft);
+  border-color: rgba(226, 166, 59, 0.35);
+}
+
+.bookingValue {
+  font-family: var(--font-mono);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.bookingLabel {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  margin-top: 2px;
+}
+
+/* ---------- Pitch details ---------- */
+
+.detailsGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+@media (min-width: 700px) {
+  .detailsGrid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.detailItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: #ffffff;
+}
+
+.detailItem svg {
+  color: var(--color-gold);
+  flex-shrink: 0;
+}
+
+.detailValue {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.detailLabel {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  margin-top: 1px;
+}
+
+.amenityRow {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.amenityChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 999px;
+}
+
+.amenityChipOn {
+  background: var(--color-success-soft);
+  color: var(--color-success);
+}
+
+.amenityChipOff {
+  background: #ffffff;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-faint);
+}
+
+.otherServices {
+  margin-top: 18px;
+  font-size: 13px;
+  color: var(--color-text-muted);
+  padding-top: 12px;
+  border-top: 1px dashed var(--color-border);
+}
+
+.otherServices b {
+  color: var(--color-text);
+  font-weight: 600;
+}

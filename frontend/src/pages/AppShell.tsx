@@ -3,13 +3,13 @@ import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, Link, useNavigate } from "react-router-dom";
 import styles from "./css/AppShell.module.css";
 import {
-  BallIcon, HomeIcon, UsersIcon, CompassIcon, UserCircleIcon,
+  BallIcon, HomeIcon, UsersIcon, CompassIcon,
   BellIcon, XIcon, InboxEmptyIcon,
   FootballPitchIcon,
 } from "./Icons";
 import { mockNotifications } from "./mockData";
 import { type AppNotification, type NotificationCategory } from "./types";
-import { getUnreadSummary, colorFromId, initialFromName, type ChatUnreadSummary } from "../lib/chat";
+import { getUnreadSummary, type ChatUnreadSummary } from "../lib/chat";
 import { me } from "../lib/auth";
 import type { SessionUser } from "../lib/session";
 
@@ -18,7 +18,6 @@ const NAV_ITEMS = [
   { to: "/teams", label: "My Teams", icon: UsersIcon },
   { to: "/app", label: "pitchs", icon: FootballPitchIcon },
   { to: "/discover", label: "Discover", icon: CompassIcon },
-  { to: "/profile", label: "Profile", icon: UserCircleIcon },
 ];
 
 const CATEGORY_LABEL: Record<NotificationCategory, string> = {
@@ -60,8 +59,6 @@ export default function AppShell() {
   const bellRef = useRef<HTMLButtonElement>(null);
 
   const [chatSummary, setChatSummary] = useState<ChatUnreadSummary | null>(null);
-  const [chatDrawerOpen, setChatDrawerOpen] = useState(false);
-  const chatBtnRef = useRef<HTMLButtonElement>(null);
 
   const [user, setUser] = useState<SessionUser | null>(null);
 
@@ -95,18 +92,17 @@ export default function AppShell() {
   const unreadCount = notifications.filter((n) => !n.read).length;
   const unreadChatCount = chatSummary?.total_unread ?? 0;
 
-  // Both drawers: close on Escape.
+  // Notification drawer: close on Escape.
   useEffect(() => {
-    if (!notifDrawerOpen && !chatDrawerOpen) return;
+    if (!notifDrawerOpen) return;
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") {
         setNotifDrawerOpen(false);
-        setChatDrawerOpen(false);
       }
     }
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [notifDrawerOpen, chatDrawerOpen]);
+  }, [notifDrawerOpen]);
 
   function markAllRead() {
     setNotifications((list) => list.map((n) => ({ ...n, read: true })));
@@ -124,17 +120,8 @@ export default function AppShell() {
     console.log("TODO: respond to notification", notif.id, response);
   }
 
-  function openChat(teamSlug: string, teamName: string) {
-    setChatDrawerOpen(false);
-    nav(`/chat/${teamSlug}`, { state: { teamName } });
-  }
-
-  function toggleChatDrawer() {
-    setChatDrawerOpen((v) => {
-      const next = !v;
-      if (next) refreshChatSummary(); // fresh counts every time it's opened
-      return next;
-    });
+  function goToChat() {
+    nav("/chat");
   }
 
   return (
@@ -164,11 +151,9 @@ export default function AppShell() {
 
         <div className={styles.topbarActions}>
           <button
-            ref={chatBtnRef}
             className={styles.bellBtn}
-            onClick={toggleChatDrawer}
+            onClick={goToChat}
             aria-label={`Team chats${unreadChatCount ? `, ${unreadChatCount} unread` : ""}`}
-            aria-expanded={chatDrawerOpen}
           >
             <ChatBubbleIcon width={20} height={20} />
             {unreadChatCount > 0 && (
@@ -278,62 +263,7 @@ export default function AppShell() {
           </div>
         </>
       )}
-
-      {/* Chat drawer — slides in from the RIGHT */}
-      {chatDrawerOpen && (
-        <>
-          <div className={styles.drawerOverlay} onClick={() => setChatDrawerOpen(false)} />
-          <div className={styles.chatDrawer} role="dialog" aria-label="Team chats" aria-modal="true">
-            <div className={styles.chatDrawerHead}>
-              <span>Chats</span>
-              <button className={styles.closePanelBtn} onClick={() => setChatDrawerOpen(false)} aria-label="Close">
-                <XIcon width={15} height={15} />
-              </button>
-            </div>
-
-            <div className={styles.chatDrawerList}>
-              {!chatSummary && (
-                <div className={styles.notifEmpty}>
-                  <span>Loading…</span>
-                </div>
-              )}
-
-              {chatSummary && chatSummary.teams.length === 0 && (
-                <div className={styles.notifEmpty}>
-                  <InboxEmptyIcon width={30} height={30} />
-                  <span>No team chats yet</span>
-                </div>
-              )}
-
-              {chatSummary?.teams.map((team) => (
-                <button
-                  key={team.team_id}
-                  className={`${styles.chatDrawerItem} ${team.unread_count > 0 ? styles.chatListItemUnread : ""}`}
-                  onClick={() => openChat(team.team_slug, team.team_name)}
-                >
-                  <span className={styles.chatAvatar} style={{ background: colorFromId(team.team_id) }}>
-                    {team.team_logo ? (
-                      <img
-                        src={team.team_logo}
-                        alt=""
-                        style={{ width: "100%", height: "100%", borderRadius: "inherit", objectFit: "cover" }}
-                      />
-                    ) : (
-                      initialFromName(team.team_name)
-                    )}
-                  </span>
-                  <span className={styles.chatDrawerItemName}>{team.team_name}</span>
-                  {team.unread_count > 0 && (
-                    <span className={styles.chatItemUnreadDot}>
-                      {team.unread_count > 9 ? "9+" : team.unread_count}
-                    </span>
-                  )}
-                </button>
-              ))}
-            </div>
-          </div>
-        </>
-      )}
     </div>
   );
 }
+ 

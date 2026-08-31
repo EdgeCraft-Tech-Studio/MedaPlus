@@ -1,23 +1,22 @@
 import { Link } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import styles from "./css/Home.module.css";
 import {
   VersusIcon, UsersIcon, ChevronRightIcon, TrophyIcon, FootballPitchIcon,
-  ClockIcon, MapPinIcon,BookPitchIcon
+  ClockIcon, MapPinIcon, BookPitchIcon,
 } from "./Icons";
 import { type TournamentStatus } from "./types";
 import type { SessionUser } from "../lib/session";
 import { me } from "../lib/auth";
 
-const PITCH_OWNER_ROLE = "OWNER"; 
-
-const ADMIN_ROLE = "ADMIN"; 
+const PITCH_OWNER_ROLE = "OWNER";
+const ADMIN_ROLE = "ADMIN";
 
 const baseQuickActions = [
   { key: "pitchbook", to: "/app", icon: BookPitchIcon, label: "Book Pitch" },
-  { key: "match", to: "/match/create", icon: VersusIcon, label: "Make match" },
   { key: "createteam", to: "/team/create", icon: UsersIcon, label: "Create team" },
 ];
+
 const TOURNAMENT_STATUS_LABEL: Record<TournamentStatus, string> = {
   registration_open: "Registration open",
   upcoming: "Upcoming",
@@ -26,23 +25,17 @@ const TOURNAMENT_STATUS_LABEL: Record<TournamentStatus, string> = {
 };
 
 /* =============================================================
-   MOCK DATA — everything below is UI-only demo data for the
-   sections added in this pass (matches, tournaments, week
-   snapshot, activity feed). None of it is fetched. Swap each
-   TODO for the real call once the endpoint exists; keep the
-   same shape and the JSX below needs no changes.
+   MOCK DATA — unchanged from before, UI-only demo data.
    ============================================================= */
 
 interface HomeMatch {
   id: string;
-  teamName: string; // which of the user's teams — shown because a
-  // person can belong to more than one team, so "vs Friday FC" alone
-  // is ambiguous without knowing which of your squads is playing.
+  teamName: string;
   opponentLabel: string;
   sport: string;
   pitchName: string;
   pitchArea: string;
-  date: string; // ISO
+  date: string;
   time: string;
   status: "confirmed" | "pending_payment" | "open";
 }
@@ -69,7 +62,7 @@ const mockUpcomingMatches: HomeMatch[] = [
 interface HomeTournament {
   id: string;
   name: string;
-  teamName: string; // which of the user's teams is registered
+  teamName: string;
   sport: string;
   location: string;
   status: TournamentStatus;
@@ -99,9 +92,6 @@ const mockWeekSnapshot = {
   tournamentsOpen: 1,
 };
 
-
-
-
 function formatDate(iso: string) {
   const d = new Date(iso);
   return {
@@ -123,24 +113,29 @@ function todayLabel() {
   return new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
 }
 
+const HERO_IMAGE_SRC = "/homeimage.png";
+
 export default function Home() {
   const [user, setUser] = useState<SessionUser | null>(null);
+  const [heroLoaded, setHeroLoaded] = useState(false);
+  const preloadedRef = useRef(false);
+
   const pitchOwnerAction = {
-  key: "pitch", to: "/owner", icon: FootballPitchIcon, label: "Manage pitch",
-};
+    key: "pitch", to: "/owner", icon: FootballPitchIcon, label: "Manage pitch",
+  };
 
-const adminAction = {
-  key: "pitch", to: "/admin", icon: FootballPitchIcon, label: "Dashboard",
-};
+  const adminAction = {
+    key: "pitch", to: "/admin", icon: FootballPitchIcon, label: "Dashboard",
+  };
 
-const roleAction =
-  user?.role === PITCH_OWNER_ROLE
-    ? pitchOwnerAction
-    : user?.role === ADMIN_ROLE
-    ? adminAction
-    : null;
+  const roleAction =
+    user?.role === PITCH_OWNER_ROLE
+      ? pitchOwnerAction
+      : user?.role === ADMIN_ROLE
+      ? adminAction
+      : null;
 
-const quickActions = roleAction ? [...baseQuickActions, roleAction] : baseQuickActions;
+  const quickActions = roleAction ? [...baseQuickActions, roleAction] : baseQuickActions;
 
   useEffect(() => {
     async function loadUser() {
@@ -154,21 +149,46 @@ const quickActions = roleAction ? [...baseQuickActions, roleAction] : baseQuickA
     loadUser();
   }, []);
 
+  // Best-effort <link rel="preload"> for the hero image so it starts
+  // fetching as early as possible. For a real production LCP win this
+  // preload tag should live in index.html's <head> directly (it fires
+  // before React even loads) — this is a same-effect fallback for
+  // when that's not editable here.
+  useEffect(() => {
+    if (preloadedRef.current) return;
+    preloadedRef.current = true;
+    const link = document.createElement("link");
+    link.rel = "preload";
+    link.as = "image";
+    link.href = HERO_IMAGE_SRC;
+    document.head.appendChild(link);
+    return () => { document.head.removeChild(link); };
+  }, []);
+
   return (
     <div className={styles.page}>
-      <header className={styles.hero}>
-        <div className={styles.heroTop}>
-          <div>
-            <span className={styles.eyebrow}>{todayLabel()}</span>
-            <h1 className={styles.heroTitle}>{getGreeting()}, {user?.username ?? "there"}</h1>
-          </div>
-        </div>
+      {/* ---------------- HERO BANNER (full-bleed, scrolls under the sticky AppShell nav) ---------------- */}
+      <div className={styles.heroBanner}>
+        {!heroLoaded && <div className={styles.heroShimmer} />}
+        <img
+          src={HERO_IMAGE_SRC}
+          alt=""
+          className={`${styles.heroImg} ${heroLoaded ? styles.heroImgLoaded : ""}`}
+          decoding="async"
+          onLoad={() => setHeroLoaded(true)}
+          {...({ fetchpriority: "high" } as any)}
+        />
+        <div className={styles.heroOverlay} />
 
-         {/* ---------------- QUICK ACTIONS ---------------- */}
-      <section className={styles.section}>
-        <div className={styles.sectionHead}>
-          <span className={styles.sectionTitle}>Quick actions</span>
+        <div className={styles.heroContent}>
+          <span className={styles.heroEyebrow}>{todayLabel()}</span>
+          <h1 className={styles.heroTitle}>{getGreeting()}, {user?.username ?? "there"}</h1>
+          <p className={styles.heroSubtitle}>Book a pitch, build your squad, and get on the field.</p>
         </div>
+      </div>
+
+      {/* ---------------- QUICK ACTIONS — floating card overlapping the hero's bottom edge ---------------- */}
+      <div className={styles.quickCard}>
         <div className={styles.quickGrid}>
           {quickActions.map((a) => {
             const Icon = a.icon;
@@ -181,10 +201,9 @@ const quickActions = roleAction ? [...baseQuickActions, roleAction] : baseQuickA
             );
           })}
         </div>
-      </section>
+      </div>
 
-      </header>
-
+      <div className={styles.content}>
         {/* ---------------- WEEK SNAPSHOT ---------------- */}
         <div className={styles.snapshotRow}>
           <div className={styles.snapshotItem}>
@@ -202,102 +221,97 @@ const quickActions = roleAction ? [...baseQuickActions, roleAction] : baseQuickA
             <span className={styles.snapshotLabel}>Tournaments open</span>
           </div>
         </div>
-     
 
-      {/* ---------------- UPCOMING MATCHES ---------------- */}
-      <section className={styles.section}>
-        <div className={styles.sectionHead}>
-          <span className={styles.sectionTitle}>Upcoming matches</span>
-          <Link to="" className={styles.seeAllLink}>See all <ChevronRightIcon width={13} height={13} /></Link>
-        </div>
+        {/* ---------------- UPCOMING MATCHES ---------------- */}
+        <section className={styles.section}>
+          <div className={styles.sectionHead}>
+            <span className={styles.sectionTitle}>Upcoming matches</span>
+            <Link to="" className={styles.seeAllLink}>See all <ChevronRightIcon width={13} height={13} /></Link>
+          </div>
 
-        {mockUpcomingMatches.length === 0 ? (
-          <EmptyState icon={VersusIcon} text="No matches on your calendar yet." ctaLabel="Make a match" ctaTo="/match/create" />
-        ) : (
-          <div className={styles.matchList}>
-            {mockUpcomingMatches.map((m) => {
-              const { day, month, weekday } = formatDate(m.date);
-              return (
-                <Link key={m.id} to=""/*{`/matches/${m.id}`}*/ className={styles.matchRow}>
-                  <div className={styles.matchDateBlock}>
-                    <span className={styles.matchWeekday}>{weekday}</span>
-                    <span className={styles.matchDay}>{day}</span>
-                    <span className={styles.matchMonth}>{month}</span>
-                  </div>
-
-                  <div className={styles.matchDivider} />
-
-                  <div className={styles.matchInfo}>
-                    <div className={styles.matchTeamRow}>
-                      <span className={styles.matchTeamTag}>{m.teamName}</span>
-                      <span className={styles.matchSport}>{m.sport}</span>
+          {mockUpcomingMatches.length === 0 ? (
+            <EmptyState2 icon={VersusIcon} text="No matches on your calendar yet." />
+          ) : (
+            <div className={styles.matchList}>
+              {mockUpcomingMatches.map((m) => {
+                const { day, month, weekday } = formatDate(m.date);
+                return (
+                  <Link key={m.id} to="" className={styles.matchRow}>
+                    <div className={styles.matchDateBlock}>
+                      <span className={styles.matchWeekday}>{weekday}</span>
+                      <span className={styles.matchDay}>{day}</span>
+                      <span className={styles.matchMonth}>{month}</span>
                     </div>
-                    <div className={styles.matchTitle}>{m.opponentLabel}</div>
-                    <div className={styles.matchMeta}>
-                      <ClockIcon width={12} height={12} /> {m.time}
-                      <span className={styles.matchMetaDot} />
-                      <MapPinIcon width={12} height={12} /> {m.pitchName}, {m.pitchArea}
-                    </div>
-                  </div>
 
-                  <span className={styles.statusPill} data-status={m.status}>
-                    {m.status === "confirmed" && "Confirmed"}
-                    {m.status === "pending_payment" && "Payment pending"}
-                    {m.status === "open" && "Open"}
-                  </span>
-                  <ChevronRightIcon className={styles.matchChevron} width={16} height={16} />
+                    <div className={styles.matchDivider} />
+
+                    <div className={styles.matchInfo}>
+                      <div className={styles.matchTeamRow}>
+                        <span className={styles.matchTeamTag}>{m.teamName}</span>
+                        <span className={styles.matchSport}>{m.sport}</span>
+                      </div>
+                      <div className={styles.matchTitle}>{m.opponentLabel}</div>
+                      <div className={styles.matchMeta}>
+                        <ClockIcon width={12} height={12} /> {m.time}
+                        <span className={styles.matchMetaDot} />
+                        <MapPinIcon width={12} height={12} /> {m.pitchName}, {m.pitchArea}
+                      </div>
+                    </div>
+
+                    <span className={styles.statusPill} data-status={m.status}>
+                      {m.status === "confirmed" && "Confirmed"}
+                      {m.status === "pending_payment" && "Payment pending"}
+                      {m.status === "open" && "Open"}
+                    </span>
+                    <ChevronRightIcon className={styles.matchChevron} width={16} height={16} />
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
+        {/* ---------------- UPCOMING TOURNAMENTS ---------------- */}
+        <section className={styles.section}>
+          <div className={styles.sectionHead}>
+            <span className={styles.sectionTitle}>Upcoming tournaments</span>
+            <Link to="" className={styles.seeAllLink}>See all <ChevronRightIcon width={13} height={13} /></Link>
+          </div>
+
+          {mockUpcomingTournaments.length === 0 ? (
+            <EmptyState2 icon={TrophyIcon} text="No tournaments to show right now." />
+          ) : (
+            <div className={styles.tournamentRow}>
+              {mockUpcomingTournaments.map((t) => (
+                <Link key={t.id} to="" className={styles.tournamentCard}>
+                  <div className={styles.tournamentTop}>
+                    <span className={styles.tournamentIconWrap}><TrophyIcon width={16} height={16} /></span>
+                    <span className={styles.statusPill} data-status={t.status}>{TOURNAMENT_STATUS_LABEL[t.status]}</span>
+                  </div>
+                  <div className={styles.tournamentTeamTag}>{t.teamName}</div>
+                  <div className={styles.tournamentName}>{t.name}</div>
+                  <div className={styles.tournamentMeta}>{t.sport} · {t.location}</div>
+                  <div className={styles.tournamentFoot}>
+                    <span>{t.teamsJoined}/{t.teamsMax} teams</span>
+                    <span>{new Date(t.startDate).toLocaleDateString(undefined, { day: "numeric", month: "short" })}</span>
+                  </div>
                 </Link>
-              );
-            })}
-          </div>
-        )}
-      </section>
-
-      {/* ---------------- UPCOMING TOURNAMENTS ---------------- */}
-      <section className={styles.section}>
-        <div className={styles.sectionHead}>
-          <span className={styles.sectionTitle}>Upcoming tournaments</span>
-          <Link to="" className={styles.seeAllLink}>See all <ChevronRightIcon width={13} height={13} /></Link>
-        </div>
-
-        {mockUpcomingTournaments.length === 0 ? (
-          <EmptyState icon={TrophyIcon} text="No tournaments to show right now." ctaLabel="Browse tournaments" ctaTo="/discover/tournaments" />
-        ) : (
-          <div className={styles.tournamentRow}>
-            {mockUpcomingTournaments.map((t) => (
-              <Link key={t.id} to=""/*{`/discover/tournaments/${t.id}`}*/ className={styles.tournamentCard}>
-                <div className={styles.tournamentTop}>
-                  <span className={styles.tournamentIconWrap}><TrophyIcon width={16} height={16} /></span>
-                  <span className={styles.statusPill} data-status={t.status}>{TOURNAMENT_STATUS_LABEL[t.status]}</span>
-                </div>
-                <div className={styles.tournamentTeamTag}>{t.teamName}</div>
-                <div className={styles.tournamentName}>{t.name}</div>
-                <div className={styles.tournamentMeta}>{t.sport} · {t.location}</div>
-                <div className={styles.tournamentFoot}>
-                  <span>{t.teamsJoined}/{t.teamsMax} teams</span>
-                  <span>{new Date(t.startDate).toLocaleDateString(undefined, { day: "numeric", month: "short" })}</span>
-                </div>
-              </Link>
-            ))}
-          </div>
-        )}
-      </section>
-
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
     </div>
   );
 }
 
-function EmptyState({
-  icon: Icon, text, ctaLabel, ctaTo,
-}: { icon: React.ComponentType<React.SVGProps<SVGSVGElement>>; text: string; ctaLabel: string; ctaTo: string }) {
+function EmptyState2({
+  icon: Icon, text,
+}: { icon: React.ComponentType<React.SVGProps<SVGSVGElement>>; text: string }) {
   return (
     <div className={styles.emptyState}>
       <span className={styles.emptyIconWrap}><Icon width={20} height={20} /></span>
       <p>{text}</p>
-      <div className={styles.emptyActions}>
-        <Link to={ctaTo} className={styles.emptyCta}>{ctaLabel}</Link>
-        <Link to="/join" className={styles.emptyCtaGhost}>Join a team</Link>
-      </div>
     </div>
   );
 }
