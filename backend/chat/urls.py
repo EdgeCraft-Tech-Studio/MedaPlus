@@ -1,6 +1,6 @@
 from django.urls import path
 
-from .views import ChatAudioFileView, ChatUnreadSummaryView, TeamChatViewSet
+from .views import ChatAudioFileView, ChatImageFileView, ChatUnreadSummaryView, TeamChatViewSet
 
 app_name = "chat"
 
@@ -35,6 +35,19 @@ urlpatterns = [
         ChatAudioFileView.as_view(),
         name="message-audio-file",
     ),
+
+    path(
+    "teams/<slug:team_slug>/chat/messages/image/",
+    TeamChatViewSet.as_view({"post": "send_image"}),
+    name="message-send-image",
+    ),
+    path(
+        "teams/<slug:team_slug>/chat/messages/<uuid:pk>/image/",
+        ChatImageFileView.as_view(),
+        name="message-image-file",
+    ),
+
+
     path(
         "teams/<slug:team_slug>/chat/mark-read/",
         TeamChatViewSet.as_view({"post": "mark_read"}),
@@ -45,4 +58,5 @@ urlpatterns = [
         ChatUnreadSummaryView.as_view(),
         name="unread-summary",
     ),
+
 ]

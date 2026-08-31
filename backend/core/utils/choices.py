@@ -147,4 +147,11 @@ class ChatMessageType(models.TextChoices):
     TEXT = "text", "Text"
     AUDIO = "audio", "Audio"
     SYSTEM = "system", "System"
- 
+
+
+
+class ChatMessageType(models.TextChoices):
+    TEXT = "TEXT", "Text"
+    AUDIO = "AUDIO", "Audio"
+    IMAGE = "IMAGE", "Image"      # NEW
+    SYSTEM = "SYSTEM", "System"

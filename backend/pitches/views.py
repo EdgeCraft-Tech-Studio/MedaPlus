@@ -1,6 +1,7 @@
 from datetime import datetime, time, timedelta
 
 from django.contrib.auth import get_user_model
+from django.db.models.aggregates import Sum
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes, parser_classes
@@ -9,7 +10,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
 from accounts.models.user import UserRole
-from bookings.models import Slot, SlotStatus
+from bookings.models import BookingStatus, Slot, SlotStatus
 from .models import Tenant, Pitch, PitchImage
 from .serializers import PitchSerializer, PitchCreateSerializer, PitchUpdateSerializer
 
@@ -408,9 +409,210 @@ def admin_approve_pitch(request, pitch_id: str):
     except Pitch.DoesNotExist:
         return Response({"detail": "Pitch not found"}, status=404)
 
-    if not pitch.tenant.is_approved:
+    if not pitch.tenant.is_approved: 
         return Response({"detail": "Tenant is not approved yet"}, status=400)
 
     pitch.is_approved = True
     pitch.save()
     return Response({"ok": True, "pitch_id": str(pitch.id), "is_approved": pitch.is_approved})
+
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def owner_dashboard_stats(request):
+    u = request.user
+    if not is_owner(u):
+        return Response({"detail": "Forbidden"}, status=403)
+
+    tenant, _ = Tenant.objects.get_or_create(
+        owner=u,
+        defaults={
+            "name": f"{u.username}'s Business",
+            "is_active": True,
+            "is_approved": bool(getattr(u, "is_approved", False)),
+        },
+    )
+
+    pitches = Pitch.objects.filter(tenant=tenant)
+
+    total_revenue = Decimal("0")
+    total_bookings = 0
+    active_count = 0
+    pending_count = 0
+    pitch_stats = []
+
+    for p in pitches:
+        bookings_qs = Booking.objects.filter(pitch=p, status=BookingStatus.CONFIRMED)
+        p_revenue = bookings_qs.aggregate(total=Sum("total_price"))["total"] or Decimal("0")
+        p_bookings = bookings_qs.count()
+
+        total_revenue += p_revenue
+        total_bookings += p_bookings
+
+        if p.is_approved and p.is_active:
+            active_count += 1
+        elif not p.is_approved:
+            pending_count += 1
+
+        pitch_stats.append({
+            "pitch_id": str(p.id),
+            "name": p.name,
+            "revenue": str(p_revenue),
+            "bookings_count": p_bookings,
+            "is_approved": p.is_approved,
+            "is_active": p.is_active,
+        })
+
+    return Response({
+        "total_pitches": pitches.count(),
+        "active_pitches": active_count,
+        "pending_pitches": pending_count,
+        "total_revenue": str(total_revenue),
+        "total_bookings": total_bookings,
+        "pitch_stats": pitch_stats,
+    })
+
+
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def owner_pitch_detail_stats(request, pitch_id: str):
+    pitch = get_object_or_404(Pitch, id=pitch_id)
+
+    if not _can_edit_pitch(request.user, pitch):
+        return Response({"detail": "Forbidden"}, status=403)
+
+    now = timezone.now()
+    today = timezone.localdate()
+
+    week_start = today - timedelta(days=today.weekday())
+    week_start_dt = timezone.make_aware(datetime.combine(week_start, time.min), timezone.get_current_timezone())
+
+    month_start_dt = timezone.make_aware(datetime.combine(today.replace(day=1), time.min), timezone.get_current_timezone())
+    year_start_dt = timezone.make_aware(datetime.combine(today.replace(month=1, day=1), time.min), timezone.get_current_timezone())
+
+    def revenue_since(dt):
+        return Booking.objects.filter(
+            pitch=pitch, status=BookingStatus.CONFIRMED, start_dt__gte=dt
+        ).aggregate(total=Sum("total_price"))["total"] or Decimal("0")
+
+    def bookings_since(dt):
+        return Booking.objects.filter(
+            pitch=pitch, status=BookingStatus.CONFIRMED, start_dt__gte=dt
+        ).count()
+
+    all_bookings = Booking.objects.filter(pitch=pitch, status=BookingStatus.CONFIRMED)
+
+    return Response({
+        "pitch": PitchSerializer(pitch, context={"request": request}).data,
+        "earnings_week": str(revenue_since(week_start_dt)),
+        "earnings_month": str(revenue_since(month_start_dt)),
+        "earnings_year": str(revenue_since(year_start_dt)),
+        "bookings_1m": bookings_since(now - timedelta(days=30)),
+        "bookings_3m": bookings_since(now - timedelta(days=90)),
+        "bookings_6m": bookings_since(now - timedelta(days=180)),
+        "bookings_1y": bookings_since(now - timedelta(days=365)),
+        "total_bookings": all_bookings.count(),
+        "total_earnings": str(all_bookings.aggregate(total=Sum("total_price"))["total"] or Decimal("0")),
+    })
+
+
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def admin_platform_stats(request):
+    if not is_admin(request.user):
+        return Response({"detail": "Forbidden"}, status=403)
+
+    owners_qs = User.objects.filter(role=UserRole.OWNER)
+    total_owners = owners_qs.count()
+    approved_owners = owners_qs.filter(is_approved=True).count()
+    pending_owners = total_owners - approved_owners
+
+    pitches_qs = Pitch.objects.all()
+    total_pitches = pitches_qs.count()
+    approved_pitches = pitches_qs.filter(is_approved=True).count()
+    pending_pitches = total_pitches - approved_pitches
+    active_pitches = pitches_qs.filter(is_active=True).count()
+    football_pitches = pitches_qs.filter(sport_type="FOOTBALL").count()
+    basketball_pitches = pitches_qs.filter(sport_type="BASKETBALL").count()
+
+    confirmed_bookings = Booking.objects.filter(status=BookingStatus.CONFIRMED)
+    total_bookings = confirmed_bookings.count()
+    total_revenue = confirmed_bookings.aggregate(total=Sum("total_price"))["total"] or Decimal("0")
+
+    pitch_stats = []
+    for p in pitches_qs.select_related("tenant", "tenant__owner").order_by("-created_at"):
+        p_bookings = Booking.objects.filter(pitch=p, status=BookingStatus.CONFIRMED)
+        p_revenue = p_bookings.aggregate(total=Sum("total_price"))["total"] or Decimal("0")
+        pitch_stats.append({
+            "pitch_id": str(p.id),
+            "name": p.name,
+            "sport_type": p.sport_type,
+            "owner_username": p.tenant.owner.username if p.tenant_id else "",
+            "tenant_name": p.tenant.name if p.tenant_id else "",
+            "revenue": str(p_revenue),
+            "bookings_count": p_bookings.count(),
+            "is_approved": p.is_approved,
+            "is_active": p.is_active,
+        })
+
+    owner_stats = []
+    for o in owners_qs.select_related("tenant"):
+        tenant = getattr(o, "tenant", None)
+        owner_pitches = Pitch.objects.filter(tenant=tenant) if tenant else Pitch.objects.none()
+        o_bookings = Booking.objects.filter(pitch__in=owner_pitches, status=BookingStatus.CONFIRMED)
+        o_revenue = o_bookings.aggregate(total=Sum("total_price"))["total"] or Decimal("0")
+        owner_stats.append({
+            "owner_id": str(o.id),
+            "username": o.username,
+            "email": getattr(o, "email", ""),
+            "is_approved": bool(getattr(o, "is_approved", False)),
+            "pitch_count": owner_pitches.count(),
+            "revenue": str(o_revenue),
+        })
+
+    return Response({
+        "total_owners": total_owners,
+        "approved_owners": approved_owners,
+        "pending_owners": pending_owners,
+        "total_pitches": total_pitches,
+        "approved_pitches": approved_pitches,
+        "pending_pitches": pending_pitches,
+        "active_pitches": active_pitches,
+        "football_pitches": football_pitches,
+        "basketball_pitches": basketball_pitches,
+        "total_bookings": total_bookings,
+        "total_revenue": str(total_revenue),
+        "pitch_stats": pitch_stats,
+        "owner_stats": owner_stats,
+    })
+
+
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def admin_delete_pitch(request, pitch_id: str):
+    if not is_admin(request.user):
+        return Response({"detail": "Forbidden"}, status=403)
+    try:
+        pitch = Pitch.objects.get(id=pitch_id)
+    except Pitch.DoesNotExist:
+        return Response({"detail": "Pitch not found"}, status=404)
+    pitch.delete()
+    return Response({"ok": True})
+
+
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def admin_delete_owner(request, owner_id: str):
+    if not is_admin(request.user):
+        return Response({"detail": "Forbidden"}, status=403)
+    try:
+        owner = User.objects.get(id=owner_id, role=UserRole.OWNER)
+    except User.DoesNotExist:
+        return Response({"detail": "Owner not found"}, status=404)
+    owner.delete()
+    return Response({"ok": True})

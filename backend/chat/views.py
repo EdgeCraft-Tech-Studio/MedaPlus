@@ -13,6 +13,7 @@ from core.utils.choices import ChatMessageType
 from .models import TeamChatMessage
 from .serializers import (
     ChatAudioMessageCreateSerializer,
+    ChatImageMessageCreateSerializer,
     ChatTextMessageCreateSerializer,
     TeamChatMessageSerializer,
 )
@@ -22,6 +23,7 @@ from chat.chat_services import (
     get_unread_counts_for_user,
     mark_team_as_read,
     send_audio_message,
+    send_image_message,
     send_text_message,
 )
 from .throttling import ChatMessageSendThrottle
@@ -50,7 +52,7 @@ class TeamChatViewSet(TeamLookupMixin, viewsets.GenericViewSet):
             raise PermissionDenied(permission.message)
 
     def get_throttles(self):
-        if self.action in ("send_text", "send_audio"):
+        if self.action in ("send_text", "send_audio", "send_image"):  # add send_image
             return [ChatMessageSendThrottle()]
         return super().get_throttles()
 
@@ -163,6 +165,29 @@ class TeamChatViewSet(TeamLookupMixin, viewsets.GenericViewSet):
             status=201,
         )
 
+
+    @action(detail=False, methods=["post"], url_path="image")
+    def send_image(self, request, *args, **kwargs):
+        team = self.get_team()
+        serializer = ChatImageMessageCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        uploaded_file = serializer.validated_data["image_file"]
+        try:
+            message = send_image_message(
+                team=team,
+                sender=request.user,
+                image_file=uploaded_file,
+                image_mime_type=getattr(uploaded_file, "content_type", "") or "",
+                image_file_size_bytes=uploaded_file.size,
+            )
+        except ValueError as exc:
+            raise ValidationError(str(exc))
+
+        return Response(
+            TeamChatMessageSerializer(message, context=self.get_serializer_context()).data,
+            status=201,
+        )
     # ------------------------------------------------------------------
     # Deleting
     # ------------------------------------------------------------------
@@ -228,6 +253,37 @@ class ChatAudioFileView(TeamLookupMixin, APIView):
             message.audio_file.open("rb"),
             content_type=message.audio_mime_type or "application/octet-stream",
         )
+
+
+
+class ChatImageFileView(TeamLookupMixin, APIView):
+    """GET /teams/{team_slug}/chat/messages/{pk}/image/
+    Same authenticated-membership-per-request pattern as
+    ChatAudioFileView — private team images are never served from a
+    raw public MEDIA_URL.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, team_slug, pk):
+        team = self.get_team()
+        permission = IsActiveTeamMember()
+        if not permission.has_object_permission(request, self, team):
+            raise PermissionDenied(permission.message)
+
+        message = get_object_or_404(
+            TeamChatMessage.objects.for_team(team),
+            pk=pk,
+            message_type=ChatMessageType.IMAGE,
+        )
+        if message.is_deleted or not message.image_file:
+            raise Http404
+
+        return FileResponse(
+            message.image_file.open("rb"),
+            content_type=message.image_mime_type or "application/octet-stream",
+        )
+
+
 class ChatUnreadSummaryView(APIView):
    
 
@@ -258,15 +314,44 @@ class ChatUnreadSummaryView(APIView):
                     else team.logo.url
                 )
 
-            rows.append(
-                {
-                    "team_id": team_id_str,
-                    "team_slug": team.slug,
-                    "team_name": team.name,
-                    "team_logo": team_logo,
-                    "unread_count": count,
-                }
+            last_message = (
+                TeamChatMessage.objects.for_team(team)
+                .visible()
+                .select_related("sender")
+                .order_by("-created_at", "-id")
+                .first()
             )
+
+            last_message_time = last_message.created_at.isoformat() if last_message else None
+            last_message_sender_name = None
+            last_message_preview = None
+            is_last_message_mine = False
+
+            if last_message:
+                if last_message.is_audio_message:
+                    last_message_preview = "🎤 Voice message"
+                elif last_message.is_image_message:
+                    last_message_preview = "📷 Photo"
+                else:
+                    last_message_preview = last_message.content
+
+                if last_message.sender_id:
+                    last_message_sender_name = last_message.sender.first_name or last_message.sender.username
+                    is_last_message_mine = last_message.sender_id == request.user.id
+                else:
+                    last_message_sender_name = "Deleted user"
+
+            rows.append({
+                "team_id": team_id_str,
+                "team_slug": team.slug,
+                "team_name": team.name,
+                "team_logo": team_logo,
+                "unread_count": count,
+                "last_message_time": last_message_time,             # NEW
+                "last_message_sender_name": last_message_sender_name, # NEW
+                "last_message_preview": last_message_preview,         # NEW
+                "is_last_message_mine": is_last_message_mine,         # NEW
+            })
         rows.sort(key=lambda r: r["unread_count"], reverse=True)
 
         return Response({"total_unread": summary["total"], "teams": rows})

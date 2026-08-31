@@ -7,6 +7,7 @@ from team.models import TeamMembership
 from team.services.exceptions import InsufficientPermissionError
 from team.services.membership_service import get_active_membership_or_raise
 
+from .models import ALLOWED_IMAGE_CONTENT_TYPES, MAX_IMAGE_FILE_SIZE_BYTES
 from core.utils.choices import ChatMessageType
 from .models import (
     MAX_AUDIO_DURATION_SECONDS,
@@ -16,8 +17,83 @@ from .models import (
     TeamChatReadState,
 )
 
+
+
+from PIL import Image, UnidentifiedImageError
+
+
 DEFAULT_RETENTION_DAYS = 30
 DEFAULT_PURGE_BATCH_SIZE = 500
+
+
+
+
+
+def _validate_real_image(file_obj) -> None:
+    """Verifies the uploaded bytes are actually a decodable image,
+    not just a file with a spoofed Content-Type header. The client-
+    reported content_type is a label the browser sends; it proves
+    nothing about the real bytes. This opens and decodes the file
+    itself — the same principle already applied to audio_file_size_bytes
+    (derived from the real file, never trusted from the client).
+    """
+    try:
+        file_obj.seek(0)
+        img = Image.open(file_obj)
+        img.verify()  # raises if the data isn't a valid image
+    except (UnidentifiedImageError, OSError):
+        raise ValueError("Uploaded file is not a valid image.")
+    finally:
+        file_obj.seek(0)  # reset so it can still be saved afterward
+
+_AUDIO_MAGIC_SIGNATURES = (
+    b"OggS",           # ogg
+    b"\x1aE\xdf\xa3",  # webm/matroska
+    b"ID3",            # mp3 with ID3 tag
+    b"RIFF",           # wav
+)
+
+def _validate_real_audio(file_obj) -> None:
+    """Same principle as _validate_real_image — checks the actual
+    file header bytes instead of trusting the client-supplied
+    Content-Type, which is spoofable.
+    """
+    file_obj.seek(0)
+    header = file_obj.read(16)
+    file_obj.seek(0)
+    if not any(header.startswith(sig) for sig in _AUDIO_MAGIC_SIGNATURES):
+        raise ValueError("Uploaded file does not look like a valid audio file.")
+
+
+@transaction.atomic
+def send_image_message(
+    *, team, sender, image_file, image_mime_type: str, image_file_size_bytes: int
+) -> TeamChatMessage:
+    """A photo attachment. Same membership gate and belt-and-braces
+    validation pattern as send_audio_message — the real upload-size
+    limit belongs at the proxy layer, this is the fallback for any
+    direct caller.
+    """
+    _require_active_membership(team, sender)
+
+    if not image_file:
+        raise ValueError("Image message requires an image_file.")
+    if image_mime_type not in ALLOWED_IMAGE_CONTENT_TYPES:
+        raise ValueError("Only JPEG or PNG images are allowed.")
+    if image_file_size_bytes is not None and image_file_size_bytes > MAX_IMAGE_FILE_SIZE_BYTES:
+        raise ValueError(f"Image exceeds the {MAX_IMAGE_FILE_SIZE_BYTES} byte limit.")
+
+    _validate_real_image(image_file)
+
+    return TeamChatMessage.objects.create(
+        team=team,
+        sender=sender,
+        message_type=ChatMessageType.IMAGE,
+        content="",
+        image_file=image_file,
+        image_mime_type=image_mime_type,
+        image_file_size_bytes=image_file_size_bytes,
+    )
 
 
 def _require_active_membership(team, user) -> TeamMembership:
@@ -58,6 +134,7 @@ def send_audio_message(
 
     if not audio_file:
         raise ValueError("Audio message requires an audio_file.")
+    _validate_real_audio(audio_file) 
     if audio_duration_seconds is None or audio_duration_seconds <= 0:
         raise ValueError("Audio message requires a positive audio_duration_seconds.")
     if audio_duration_seconds > MAX_AUDIO_DURATION_SECONDS:

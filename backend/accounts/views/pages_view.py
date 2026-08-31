@@ -64,7 +64,7 @@ class AdminListOwnersView(APIView):
             return Response({"detail": "Forbidden"}, status=403)
 
         owners = User.objects.filter(role=UserRole.OWNER).values(
-            "id", "phone", "email", "is_approved"
+            "id", "phone", "email","username","first_name","last_name", "is_approved"
         )
         # convert UUID -> string
         owners = [

@@ -9,8 +9,9 @@ from core.utils.choices import ChatMessageType
 MAX_MESSAGE_LENGTH = 4000
 MAX_AUDIO_DURATION_SECONDS = 300  # 5 minutes — a sane voice-note cap
 MAX_AUDIO_FILE_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB
-
-
+MAX_IMAGE_FILE_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB, per your spec
+ALLOWED_IMAGE_CONTENT_TYPES = {"image/jpeg", "image/png"}
+ 
 class TeamChatMessageQuerySet(models.QuerySet):
 
 
@@ -104,6 +105,20 @@ class TeamChatMessage(models.Model):
 
     content = models.TextField(max_length=MAX_MESSAGE_LENGTH, blank=True)
 
+    # Image attachment — same null/blank-together pattern as audio fields.
+    image_file = models.ImageField(
+        upload_to="chat/images/%Y/%m/",
+        null=True,
+        blank=True,
+        help_text=(
+            "Stored on your MEDIA storage backend. Like audio, never "
+            "expose via a public MEDIA_URL — served through an "
+            "authenticated endpoint the same way audio is."
+        ),
+    )
+    image_mime_type = models.CharField(max_length=50, blank=True)
+    image_file_size_bytes = models.PositiveIntegerField(null=True, blank=True)
+
     audio_file = models.FileField(
         upload_to="chat/audio/%Y/%m/",
         null=True,
@@ -152,10 +167,16 @@ class TeamChatMessage(models.Model):
                 | ~models.Q(audio_file=""),
                 name="chat_message_audio_requires_file",
             ),
+            
             models.CheckConstraint(
-                condition=models.Q(message_type=ChatMessageType.AUDIO)
+                condition=~models.Q(message_type=ChatMessageType.TEXT)
                 | ~models.Q(content=""),
                 name="chat_message_text_requires_content",
+            ),
+                        models.CheckConstraint(
+                condition=~models.Q(message_type=ChatMessageType.IMAGE)
+                | ~models.Q(image_file=""),
+                name="chat_message_image_requires_file",
             ),
         ]
         indexes = [
@@ -174,6 +195,10 @@ class TeamChatMessage(models.Model):
     @property
     def is_audio_message(self) -> bool:
         return self.message_type == ChatMessageType.AUDIO
+
+    @property
+    def is_image_message(self) -> bool:
+        return self.message_type == ChatMessageType.IMAGE
 
 
 class TeamChatReadStateQuerySet(models.QuerySet):
