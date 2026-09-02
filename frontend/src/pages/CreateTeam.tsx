@@ -1,11 +1,15 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css"; // safe even if already imported globally
+import { MapContainer, Marker, TileLayer, useMap, useMapEvents } from "react-leaflet";
 import styles from "./css/FormPage.module.css";
 import { BackArrowIcon, UsersIcon } from "./Icons";
 import {
   FieldWrap, TextField, TextAreaField, SelectField, ChipGroup, SegmentedControl, LogoUpload,
 } from "../components/FormControls";
 import { createTeam } from "../lib/team";
+import { api } from "../lib/api";
 
 const SPORTS = [
   { value: "football", label: "Football" },
@@ -30,7 +34,6 @@ const PLAY_TIMES = [
   { value: "evening", label: "Evening (5–10)" },
 ];
 
-
 const AGE_CATEGORIES = [
   { value: "open", label: "Open" },
   { value: "u18", label: "Under 18" },
@@ -44,14 +47,144 @@ const VISIBILITY = [
   { value: "private", label: "Private", hint: "Invite only" },
 ];
 
+const ADDIS_ABABA = { lat: 8.9806, lng: 38.7578 };
+
+/* ---------------- pin icon ---------------- */
+
+function MapPinIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 21s-7-7.58-7-12a7 7 0 0 1 14 0c0 4.42-7 12-7 12z" />
+      <circle cx="12" cy="9" r="2.5" />
+    </svg>
+  );
+}
+
+function buildPinIcon() {
+  const html = `
+    <div class="team-pin">
+      <svg width="32" height="40" viewBox="0 0 32 40" xmlns="http://www.w3.org/2000/svg">
+        <path d="M16 1C7.8 1 1.2 7.4 1.2 15.4c0 9.8 14.8 23.6 14.8 23.6s14.8-13.8 14.8-23.6C30.8 7.4 24.2 1 16 1z"
+          fill="var(--accent)" stroke="rgba(0,0,0,0.25)" stroke-width="1.2"/>
+        <circle cx="16" cy="15.4" r="6.2" fill="#fff"/>
+        <circle cx="16" cy="15.4" r="2.6" fill="var(--accent)"/>
+      </svg>
+    </div>`;
+  return L.divIcon({ html, className: "team-pin-marker", iconSize: [32, 40], iconAnchor: [16, 40], popupAnchor: [0, -36] });
+}
+
+/* ---------------- reverse geocode (via backend proxy) ---------------- */
+
+async function reverseGeocode(lat: number, lng: number): Promise<string> {
+  const res = await api.get("/geocode/reverse/", { params: { lat, lon: lng } });
+  return res.data.area as string;
+}
+
+/* ---------------- map internals ---------------- */
+
+function LocationClickHandler({ onPick }: { onPick: (lat: number, lng: number) => void }) {
+  useMapEvents({
+    click(e) { onPick(e.latlng.lat, e.latlng.lng); },
+  });
+  return null;
+}
+
+function MapFlyTo({ lat, lng }: { lat: number | null; lng: number | null }) {
+  const map = useMap();
+  useEffect(() => {
+    if (lat != null && lng != null) {
+      map.flyTo([lat, lng], Math.max(map.getZoom(), 14), { duration: 0.6 });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lat, lng]);
+  return null;
+}
+
+/* ---------------- team location field ---------------- */
+
+function TeamLocationField({
+  latitude, longitude, area, onLocationChange,
+}: {
+  latitude: number | null;
+  longitude: number | null;
+  area: string;
+  onLocationChange: (lat: number, lng: number, area: string) => void;
+}) {
+  const [geocoding, setGeocoding] = useState(false);
+  const center = latitude != null && longitude != null ? { lat: latitude, lng: longitude } : ADDIS_ABABA;
+
+  async function handlePick(lat: number, lng: number) {
+    setGeocoding(true);
+    try {
+      const name = await reverseGeocode(lat, lng);
+      onLocationChange(lat, lng, name);
+    } catch {
+      onLocationChange(lat, lng, area);
+    } finally {
+      setGeocoding(false);
+    }
+  }
+
+  return (
+    <div className={styles.mapField}>
+      <div className={styles.mapBox}>
+        <MapContainer
+          center={[center.lat, center.lng]}
+          zoom={latitude != null ? 15 : 12}
+          style={{ width: "100%", height: "100%" }}
+          scrollWheelZoom={false}
+        >
+          <TileLayer attribution="&copy; OpenStreetMap contributors" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+          <LocationClickHandler onPick={handlePick} />
+          <MapFlyTo lat={latitude} lng={longitude} />
+          {latitude != null && longitude != null && (
+            <Marker
+              position={[latitude, longitude]}
+              icon={buildPinIcon()}
+              draggable
+              eventHandlers={{
+                dragend: (e) => {
+                  const m = (e.target as L.Marker).getLatLng();
+                  handlePick(m.lat, m.lng);
+                },
+              }}
+            />
+          )}
+        </MapContainer>
+      </div>
+
+      {latitude != null && longitude != null ? (
+        <div className={styles.mapConfirm}>
+          <span className={styles.mapConfirmIcon}><MapPinIcon size={15} /></span>
+          <div className={styles.mapConfirmInfo}>
+            <div className={styles.mapConfirmLabel}>Home ground</div>
+            <div className={styles.mapConfirmValue}>
+              {geocoding ? "Finding the area name…" : (area || "Pin dropped — name it below")}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className={styles.mapEmpty}>
+          <MapPinIcon size={14} />
+          Tap the map to drop a pin on your home ground — drag it to fine-tune
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ---------------- form ---------------- */
+
 interface FormState {
   name: string;
   logo: string | null;
-  logoFile: File | null; 
+  logoFile: File | null;
   description: string;
   sport: string;
   sportOther: string;
   homeArea: string;
+  latitude: number | null;
+  longitude: number | null;
   skillLevel: string;
   preferredDays: string[];
   playTime: string;
@@ -62,7 +195,7 @@ interface FormState {
 
 const initialState: FormState = {
   name: "", logo: null, logoFile: null, description: "", sport: "", sportOther: "",
-  homeArea: "", skillLevel: "", preferredDays: [], playTime: "",
+  homeArea: "", latitude: null, longitude: null, skillLevel: "", preferredDays: [], playTime: "",
   ageCategory: "open", capacity: "", visibility: "public",
 };
 
@@ -78,6 +211,11 @@ export default function CreateTeam() {
     if (errors[key]) setErrors((e) => ({ ...e, [key]: undefined }));
   }
 
+  function handleLocationChange(lat: number, lng: number, areaName: string) {
+    setForm((f) => ({ ...f, latitude: lat, longitude: lng, homeArea: areaName || f.homeArea }));
+    if (errors.homeArea) setErrors((e) => ({ ...e, homeArea: undefined }));
+  }
+
   function validate(): Partial<Record<keyof FormState, string>> {
     const e: Partial<Record<keyof FormState, string>> = {};
 
@@ -88,7 +226,9 @@ export default function CreateTeam() {
     if (!form.sport) e.sport = "Choose a sport.";
     if (form.sport === "other" && !form.sportOther.trim()) e.sportOther = "Tell us which sport.";
 
-    if (!form.homeArea.trim()) e.homeArea = "Home area is required.";
+    if (form.latitude == null || form.longitude == null || !form.homeArea.trim()) {
+      e.homeArea = "Select your team's home ground on the map, then confirm the area name.";
+    }
 
     if (!form.skillLevel) e.skillLevel = "Choose a skill level.";
 
@@ -118,6 +258,8 @@ export default function CreateTeam() {
         description: form.description.trim(),
         sport: form.sport === "other" ? form.sportOther.trim() : form.sport,
         area: form.homeArea.trim(),
+        latitude: form.latitude as number,
+        longitude: form.longitude as number,
         skill_level: form.skillLevel,
         preferred_days: form.preferredDays,
         play_time: form.playTime,
@@ -129,15 +271,16 @@ export default function CreateTeam() {
       nav(`/teams/${slug}`);
     } catch (err: any) {
       if (err.response?.status === 400) {
-      const raw = err.response.data as Record<string, string[]>;
-      const flat: Partial<Record<keyof FormState, string>> = {};
-      Object.entries(raw).forEach(([key, msgs]) => {
-        flat[key as keyof FormState] = Array.isArray(msgs) ? msgs[0] : String(msgs);
-      });
-      setErrors(flat);
-    } else {
-      setSubmitErr("Couldn't create the team. Please try again.");
-    }
+        const raw = err.response.data as Record<string, string[]>;
+        const flat: Partial<Record<keyof FormState, string>> = {};
+        Object.entries(raw).forEach(([key, msgs]) => {
+          const k = (key === "latitude" || key === "longitude") ? "homeArea" : (key as keyof FormState);
+          flat[k] = Array.isArray(msgs) ? msgs[0] : String(msgs);
+        });
+        setErrors(flat);
+      } else {
+        setSubmitErr("Couldn't create the team. Please try again.");
+      }
     } finally {
       setLoading(false);
     }
@@ -145,15 +288,18 @@ export default function CreateTeam() {
 
   return (
     <div className={styles.page} data-accent="team">
-      <nav className={styles.nav}>
+      <header className={styles.hero}>
+        <svg className={styles.heroArt} viewBox="0 0 600 260" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+          <line x1="300" y1="0" x2="300" y2="260" stroke="white" strokeWidth="1.5" opacity="0.14" />
+          <circle cx="300" cy="130" r="64" fill="none" stroke="white" strokeWidth="1.5" opacity="0.14" />
+          <circle cx="300" cy="130" r="3" fill="white" opacity="0.2" />
+        </svg>
+
         <Link to="/home" className={styles.backLink}>
-          <BackArrowIcon width={15} height={15} />
+          <BackArrowIcon width={14} height={14} />
           Back to menu
         </Link>
-        <span className={styles.navBrand}>MedaPlus</span>
-      </nav>
 
-      <header className={styles.hero}>
         <div className={styles.heroIconBadge}>
           <UsersIcon width={26} height={26} />
         </div>
@@ -176,39 +322,40 @@ export default function CreateTeam() {
 
           <FieldWrap label="Team logo">
             <LogoUpload
-  value={form.logo}
-  onChange={(v) => set("logo", v)}
-  onFileChange={(f) => set("logoFile", f)}   
-/>
+              value={form.logo}
+              onChange={(v) => set("logo", v)}
+              onFileChange={(f) => set("logoFile", f)}
+            />
           </FieldWrap>
 
           <FieldWrap label="Short description" htmlFor="t-desc" error={errors.description} hint="Optional — what makes your team, your team?">
             <TextAreaField id="t-desc" value={form.description} onChange={(v) => set("description", v)} placeholder="Weekend 7-a-side crew, big on passing, low on drama." maxLength={220} disabled={loading} error={errors.description} />
           </FieldWrap>
 
-          <div className={styles.sectionTitle}>Sport & home area</div>
+          <div className={styles.sectionTitle}>Sport & home ground</div>
 
-          <div className={styles.row2}>
-            <FieldWrap label="Sport" htmlFor="t-sport" required error={errors.sport}>
-              <SelectField id="t-sport" value={form.sport} onChange={(v) => set("sport", v)} options={SPORTS} placeholder="Select sport" error={errors.sport} disabled={loading} />
-            </FieldWrap>
-
-            {form.sport === "other" ? (
-              <FieldWrap label="Which sport?" htmlFor="t-sport-other" required error={errors.sportOther}>
-                <TextField id="t-sport-other" value={form.sportOther} onChange={(v) => set("sportOther", v)} placeholder="e.g. Futsal" error={errors.sportOther} disabled={loading} />
-              </FieldWrap>
-            ) : (
-              <FieldWrap label="Home area" htmlFor="t-area" required error={errors.homeArea}>
-                <TextField id="t-area" value={form.homeArea} onChange={(v) => set("homeArea", v)} placeholder="e.g. Bole, Addis Ababa" error={errors.homeArea} disabled={loading} />
-              </FieldWrap>
-            )}
-          </div>
+          <FieldWrap label="Sport" htmlFor="t-sport" required error={errors.sport}>
+            <SelectField id="t-sport" value={form.sport} onChange={(v) => set("sport", v)} options={SPORTS} placeholder="Select sport" error={errors.sport} disabled={loading} />
+          </FieldWrap>
 
           {form.sport === "other" && (
-            <FieldWrap label="Home area" htmlFor="t-area2" required error={errors.homeArea}>
-              <TextField id="t-area2" value={form.homeArea} onChange={(v) => set("homeArea", v)} placeholder="e.g. Bole, Addis Ababa" error={errors.homeArea} disabled={loading} />
+            <FieldWrap label="Which sport?" htmlFor="t-sport-other" required error={errors.sportOther}>
+              <TextField id="t-sport-other" value={form.sportOther} onChange={(v) => set("sportOther", v)} placeholder="e.g. Futsal" error={errors.sportOther} disabled={loading} />
             </FieldWrap>
           )}
+
+          <FieldWrap label="Home ground" required hint="Tap the map to drop a pin where your team plays.">
+            <TeamLocationField
+              latitude={form.latitude}
+              longitude={form.longitude}
+              area={form.homeArea}
+              onLocationChange={handleLocationChange}
+            />
+          </FieldWrap>
+
+          <FieldWrap label="Area name" htmlFor="t-area" required error={errors.homeArea} hint="Auto-filled from the map — edit if it's not quite right.">
+            <TextField id="t-area" value={form.homeArea} onChange={(v) => set("homeArea", v)} placeholder="e.g. Bole" error={errors.homeArea} disabled={loading} />
+          </FieldWrap>
 
           <div className={styles.sectionTitle}>Level & schedule</div>
 

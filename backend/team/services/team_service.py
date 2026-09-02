@@ -14,6 +14,8 @@ def create_team(
     description: str = "",
     area: str = "",
     city: str = "",
+    latitude: str = "",
+    longitude: str = "",
     skill_level: str = "",
     age_category: str = None,
     preferred_days: list | None = None,
@@ -45,6 +47,8 @@ def create_team(
         area=area,
         city=city or "Addis Ababa",
         skill_level=skill_level,
+        latitude=latitude,   # ← add this line
+        longitude=longitude,
         logo=logo,
         **team_kwargs,
     )

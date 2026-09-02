@@ -427,3 +427,125 @@
   color: var(--color-text);
   font-weight: 600;
 }
+
+/* ---------------------------------------------------------------------- */
+/* Skeleton / shimmer loading state (light green)                          */
+/* ---------------------------------------------------------------------- */
+
+.shimmer {
+  border-radius: 8px;
+  background: linear-gradient(90deg, #e6f5ee 25%, #f2fbf7 37%, #e6f5ee 63%);
+  background-size: 400% 100%;
+  animation: shimmerMove 1.4s ease infinite;
+}
+
+@keyframes shimmerMove {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
+}
+
+.skelBackBtn {
+  width: 130px;
+  height: 14px;
+  border-radius: 5px;
+  margin-bottom: 18px;
+}
+
+.skelTitle {
+  width: 180px;
+  height: 22px;
+  border-radius: 6px;
+}
+
+.skelPill {
+  width: 80px;
+  height: 22px;
+  border-radius: 999px;
+}
+
+.skelAddress {
+  width: 220px;
+  height: 13px;
+  border-radius: 5px;
+  margin-top: 8px;
+}
+
+.skelEditBtn {
+  width: 100px;
+  height: 36px;
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+
+.skelGalleryMain {
+  width: 100%;
+  height: 280px;
+  border-radius: 18px;
+  margin-top: 16px;
+}
+
+.skelThumb {
+  width: 64px;
+  height: 64px;
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+
+.skelSectionLabel {
+  width: 140px;
+  height: 13px;
+  border-radius: 5px;
+  margin: 22px 0 10px;
+}
+
+.skelIconDot {
+  width: 18px;
+  height: 18px;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+.skelScoreValue {
+  width: 70px;
+  height: 16px;
+  border-radius: 5px;
+  margin-bottom: 6px;
+}
+
+.skelScoreLabel {
+  width: 60px;
+  height: 10px;
+  border-radius: 4px;
+}
+
+.skelBookingValue {
+  width: 30px;
+  height: 18px;
+  border-radius: 5px;
+  margin-bottom: 6px;
+}
+
+.skelBookingLabel {
+  width: 70px;
+  height: 10px;
+  border-radius: 4px;
+}
+
+.skelDetailValue {
+  width: 100px;
+  height: 14px;
+  border-radius: 5px;
+  margin-bottom: 6px;
+}
+
+.skelDetailLabel {
+  width: 70px;
+  height: 10px;
+  border-radius: 4px;
+}
+
+.skelAmenityChip {
+  width: 110px;
+  height: 30px;
+  border-radius: 999px;
+}

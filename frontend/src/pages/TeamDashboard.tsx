@@ -5,7 +5,7 @@ import {
   BackArrowIcon, GlobeIcon, LockIcon, UsersIcon, VersusIcon,
   MapPinIcon, TrophyIcon, SettingsIcon,
 } from "./Icons";
-import ManageRoster from "./ManageRoster";
+import ManageRoster from "./ManageRoster"; 
 import {
   getTeamDashboard, getRoster, getInvitations, getJoinRequests,
   type TeamDashboardData, type RosterMember, type TeamInvitationItem, type JoinRequestItem,
@@ -37,6 +37,70 @@ const PLAY_TIME_LABEL: Record<string, string> = {
   afternoon: "Afternoon (11–5)",
   evening: "Evening (5–10)",
 };
+
+/* ---------------------------------------------------------------------- */
+/* Skeleton loading state — mirrors header band + tab bar + overview       */
+/* grid layout so nothing "jumps" once real data arrives.                  */
+/* ---------------------------------------------------------------------- */
+
+function SkeletonBlock({ className }: { className: string }) {
+  return <div className={`${styles.shimmer} ${className}`} />;
+}
+
+function TeamDashboardSkeleton() {
+  return (
+    <div className={styles.page} aria-busy="true" aria-live="polite">
+      <div className={styles.headerBand}>
+        <div className={styles.headerInner}>
+          <div className={styles.headerTop}>
+            <SkeletonBlock className={styles.skelBackLink} />
+          </div>
+
+          <SkeletonBlock className={styles.skelLogo} />
+
+          <div className={styles.headerText}>
+            <SkeletonBlock className={styles.skelTeamName} />
+            <SkeletonBlock className={styles.skelMetaRow} />
+          </div>
+
+          <SkeletonBlock className={styles.skelRoleBadge} />
+        </div>
+      </div>
+
+      <div className={styles.tabBar}>
+        <div className={styles.tabBarInner}>
+          {Array.from({ length: 5 }).map((_, i) => (
+            <SkeletonBlock key={i} className={styles.skelTab} />
+          ))}
+        </div>
+      </div>
+
+      <div className={styles.content}>
+        <div className={styles.statsGrid}>
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div className={styles.statCard} key={i}>
+              <SkeletonBlock className={styles.skelStatValue} />
+              <SkeletonBlock className={styles.skelStatLabel} />
+            </div>
+          ))}
+        </div>
+
+        <SkeletonBlock className={styles.skelSectionTitle} />
+        <SkeletonBlock className={styles.skelAboutCard} />
+
+        <SkeletonBlock className={styles.skelSectionTitle} />
+        <div className={styles.infoGrid}>
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div className={styles.infoItem} key={i}>
+              <SkeletonBlock className={styles.skelInfoLabel} />
+              <SkeletonBlock className={styles.skelInfoValue} />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function TeamDashboard() {
   const { slug } = useParams<{ slug: string }>();
@@ -91,7 +155,7 @@ export default function TeamDashboard() {
   }
 
   if (loading || !team) {
-    return <div className={styles.page} aria-busy="true" />;
+    return <TeamDashboardSkeleton />;
   }
 
   const pendingInvitesCount = invitations.filter((i) => i.status === "pending").length;

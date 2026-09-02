@@ -369,6 +369,59 @@ function PhoneChangeSection({
 }
 
 /* ---------------------------------------------------------------------- */
+/* Skeleton loading state — mirrors the real layout so nothing "jumps"     */
+/* once the data arrives, instead of a blank/faded page.                   */
+/* ---------------------------------------------------------------------- */
+
+function SkeletonBlock({ className }: { className: string }) {
+  return <div className={`${styles.shimmer} ${className}`} />;
+}
+
+function SkeletonRow({ withValue = false }: { withValue?: boolean }) {
+  return (
+    <div className={styles.row}>
+      <SkeletonBlock className={styles.skelLineShort} />
+      {withValue && <SkeletonBlock className={styles.skelLineTiny} />}
+    </div>
+  );
+}
+
+function ProfileSkeleton() {
+  return (
+    <div className={styles.page} aria-busy="true" aria-live="polite">
+      <div className={styles.headCard}>
+        <SkeletonBlock className={styles.skelAvatar} />
+        <div style={{ flex: 1 }}>
+          <SkeletonBlock className={styles.skelName} />
+          <SkeletonBlock className={styles.skelMeta} />
+        </div>
+      </div>
+
+      <SkeletonBlock className={styles.skelSectionTitle} />
+      <div className={styles.card}>
+        <SkeletonRow />
+      </div>
+
+      <SkeletonBlock className={styles.skelSectionTitle} />
+      <div className={styles.card}>
+        <SkeletonRow />
+      </div>
+
+      <SkeletonBlock className={styles.skelSectionTitle} />
+      <div className={styles.card}>
+        <SkeletonRow />
+        <SkeletonRow />
+      </div>
+
+      <SkeletonBlock className={styles.skelSectionTitle} />
+      <div className={styles.card}>
+        <SkeletonRow />
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------------- */
 /* Main page                                                                */
 /* ---------------------------------------------------------------------- */
 
@@ -517,7 +570,7 @@ export default function ProfilePage() {
   }
 
   if (loading) {
-    return <div className={styles.page}><div className={styles.headCard} style={{ opacity: 0.5 }} /></div>;
+    return <ProfileSkeleton />;
   }
 
   if (loadError || !user) {

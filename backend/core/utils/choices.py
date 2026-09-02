@@ -10,6 +10,7 @@ class SportType(models.TextChoices):
     """
 
     FOOTBALL = "football", "Football"
+    BASKETBALL = "basketball", "Basketball"
 
 
 class TeamVisibility(models.TextChoices):

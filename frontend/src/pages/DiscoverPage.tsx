@@ -23,6 +23,76 @@ const AGE_LABEL: Record<string, string> = {
   other: "Other",
 };
 
+/* ---------------- sport theming ---------------- */
+
+function isBasketballSport(sport?: string | null) {
+  return !!sport && sport.toLowerCase().includes("basket");
+}
+
+interface SportTheme {
+  isBasketball: boolean;
+  border: string;
+  soft: string;
+  text: string;
+  grad: string;
+  ballSrc: string;
+}
+
+/** Football -> grass theme (the app's existing green palette).
+ * Basketball -> a muted terracotta/amber theme — distinct at a glance
+ * but deliberately not a loud/childish orange. Both feed into CSS
+ * custom properties on the card, so buttons, borders, and hover
+ * states all pick up the right color without per-element inline hacks. */
+function getSportTheme(sport?: string | null): SportTheme {
+  if (isBasketballSport(sport)) {
+    return {
+      isBasketball: true,
+      border: "#c97a2e",
+      soft: "#fbeee0",
+      text: "#a15c1c",
+      grad: "linear-gradient(135deg, #8a4a12, #c97a2e)",
+      ballSrc: "/basketball.png",
+    };
+  }
+  return {
+    isBasketball: false,
+    border: "var(--grass)",
+    soft: "var(--grass-soft)",
+    text: "var(--green-700)",
+    grad: "linear-gradient(135deg, var(--green-700), var(--grass))",
+    ballSrc: "/football.png",
+  };
+}
+
+function sportCssVars(theme: SportTheme): React.CSSProperties {
+  return {
+    ["--sport-border" as any]: theme.border,
+    ["--sport-soft" as any]: theme.soft,
+    ["--sport-text" as any]: theme.text,
+    ["--sport-grad" as any]: theme.grad,
+  };
+}
+
+/* ---------------- ball image (shimmer while loading) ---------------- */
+
+function BallImage({ sport, className }: { sport?: string | null; className?: string }) {
+  const [loaded, setLoaded] = useState(false);
+  const theme = getSportTheme(sport);
+
+  return (
+    <span className={`${styles.ballWrap} ${className || ""}`}>
+      {!loaded && <span className={`${styles.ballShimmer} ${styles.shimmer}`} />}
+      <img
+        src={theme.ballSrc}
+        alt={theme.isBasketball ? "Basketball" : "Football"}
+        className={styles.ballImg}
+        style={{ opacity: loaded ? 1 : 0 }}
+        onLoad={() => setLoaded(true)}
+      />
+    </span>
+  );
+}
+
 /* ---------------- icons ---------------- */
 
 function LocationIcon(props: React.SVGProps<SVGSVGElement>) {
@@ -96,26 +166,6 @@ function ChevronIcon(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
-function FootballIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" {...props}>
-      <circle cx="12" cy="12" r="9" />
-      <path d="M12 7.2l3.6 2.6-1.4 4.2H9.8L8.4 9.8 12 7.2z" fill="currentColor" stroke="none" />
-      <path d="M12 3v4.2M12 20.8V16.8M4.5 8.3l3.9 1.5M19.5 8.3l-3.9 1.5M4.5 15.7l3.9-1.5M19.5 15.7l-3.9-1.5" />
-    </svg>
-  );
-}
-
-function BasketballIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" {...props}>
-      <circle cx="12" cy="12" r="9" />
-      <path d="M12 3v18M3 12h18" />
-      <path d="M5.6 5.6c2.9 3 2.9 9.8 0 12.8M18.4 5.6c-2.9 3-2.9 9.8 0 12.8" />
-    </svg>
-  );
-}
-
 /* ---------------- helpers ---------------- */
 
 function formatBirr(value: string | number | null | undefined) {
@@ -141,12 +191,10 @@ export default function DiscoverPage() {
   const [mode, setMode] = useState<DiscoverMode>(
     searchParams.get("mode") === "matches" ? "matches" : "teams"
   );
-  /* ---------- shared: location ---------- */
   const [nearMeCity, setNearMeCity] = useState<string | null>(null);
   const [locating, setLocating] = useState(false);
   const [locateError, setLocateError] = useState(false);
 
-  /* ---------- teams state ---------- */
   const [query, setQuery] = useState("");
   const [teams, setTeams] = useState<PublicTeam[]>([]);
   const [teamsLoading, setTeamsLoading] = useState(true);
@@ -157,7 +205,6 @@ export default function DiscoverPage() {
   const [ageFilter, setAgeFilter] = useState("");
   const [sportFilter, setSportFilter] = useState("");
 
-  /* ---------- matches state ---------- */
   const [matchQuery, setMatchQuery] = useState("");
   const [matches, setMatches] = useState<Match[]>([]);
   const [pitches, setPitches] = useState<Pitch[]>([]);
@@ -168,7 +215,6 @@ export default function DiscoverPage() {
   const [matchSportFilter, setMatchSportFilter] = useState<"" | "FOOTBALL" | "BASKETBALL">("");
   const [matchTypeFilter, setMatchTypeFilter] = useState<MatchTypeFilter>("");
 
-  /* ---------- load teams (unchanged behaviour) ---------- */
   useEffect(() => {
     async function load() {
       try {
@@ -195,7 +241,6 @@ export default function DiscoverPage() {
     load();
   }, []);
 
-  /* ---------- load matches lazily, first time "matches" mode is opened ---------- */
   useEffect(() => {
     if (mode !== "matches" || matchesLoaded) return;
 
@@ -221,8 +266,6 @@ export default function DiscoverPage() {
     }
     loadMatches();
   }, [mode, matchesLoaded]);
-
-  /* ---------- teams actions (unchanged) ---------- */
 
   async function handleRequestJoin(slug: string) {
     setBusySlug(slug);
@@ -253,8 +296,6 @@ export default function DiscoverPage() {
       setBusySlug(null);
     }
   }
-
-  /* ---------- shared: near me ---------- */
 
   async function handleNearMe() {
     if (nearMeCity) {
@@ -296,8 +337,6 @@ export default function DiscoverPage() {
     );
   }
 
-  /* ---------- teams derived data (unchanged) ---------- */
-
   const BASE_SPORTS = ["Football", "Basketball"];
 
   const sportOptions = useMemo(() => {
@@ -330,24 +369,17 @@ export default function DiscoverPage() {
     setNearMeCity(null);
   }
 
-  /* ---------- matches derived data ---------- */
-
   const pitchById = useMemo(() => {
     const map = new Map<string, Pitch>();
     pitches.forEach((p) => map.set(p.id, p));
     return map;
   }, [pitches]);
 
-  // Every team the current user belongs to, in ANY role — owner, admin, or plain
-  // member. A match created by any of these teams is "ours", not something to
-  // discover: the owner shouldn't see their own posted challenge in Discover,
-  // and neither should a regular member of that same team.
   const myTeamIds = useMemo(() => new Set(myTeams.map((t) => t.id)), [myTeams]);
 
   const filteredMatches = useMemo(() => {
     const q = matchQuery.trim().toLowerCase();
     return matches.filter((m) => {
-      // Hide anything posted by one of the user's own teams, regardless of role.
       if (myTeamIds.has(m.creator_team_id)) return false;
 
       const pitch = pitchById.get(m.pitch_id);
@@ -361,7 +393,6 @@ export default function DiscoverPage() {
         const loc = (pitch?.address || "").toLowerCase();
         if (!loc.includes(nearMeCity.toLowerCase())) return false;
       }
-      // Hide challenges already accepted, and open-slots matches with no room left.
       if (m.match_type === "team_vs_team" && m.opponent_team_id) return false;
       if (m.match_type === "open_slots" && (m.available_slots ?? 0) <= 0) return false;
       return true;
@@ -382,9 +413,7 @@ export default function DiscoverPage() {
   return (
     <div className={styles.page}>
       <span className={styles.eyebrow}>Explore</span>
-      <h1 className={styles.title}>{isTeams ? "Find a team" : "Find a match"}</h1>
 
-      {/* ---------------- mode toggle ---------------- */}
       <div className={styles.modeToggle}>
         <button
           type="button"
@@ -406,7 +435,6 @@ export default function DiscoverPage() {
 
       {isTeams ? (
         <>
-          {/* ---------------- teams filter bar ---------------- */}
           <div className={styles.filterBar}>
             <div className={styles.searchField}>
               <SearchIcon width={16} height={16} />
@@ -506,16 +534,20 @@ export default function DiscoverPage() {
                 const isPending = pendingRequests.has(t.slug);
                 const isBusy = busySlug === t.slug;
                 const spotsLeft = Math.max(t.max_roster_size - t.active_member_count, 0);
+                const theme = getSportTheme(t.sport);
 
                 return (
-                  <div key={t.id} className={styles.card}>
+                  <div key={t.id} className={styles.card} style={sportCssVars(theme)}>
                     <div className={styles.cardTop}>
                       <span className={styles.logo}>
                         {t.logo ? <img src={t.logo} alt="" /> : t.name.split(" ").map((w) => w[0]).slice(0, 2).join("")}
                       </span>
-                      <span className={styles.pill} data-tone="team">
-                        {t.skill_level ? SKILL_LABEL[t.skill_level] ?? t.skill_level : "Any skill level"}
-                      </span>
+                      <div className={styles.cardTopRight}>
+                        <BallImage sport={t.sport} className={styles.ballCard} />
+                        <span className={styles.pill} data-tone="team">
+                          {t.skill_level ? SKILL_LABEL[t.skill_level] ?? t.skill_level : "Any skill level"}
+                        </span>
+                      </div>
                     </div>
 
                     <div className={styles.name}>{t.name}</div>
@@ -527,7 +559,7 @@ export default function DiscoverPage() {
 
                     <div className={styles.capBar}>
                       <div
-                        className={styles.capFill}
+                        className={styles.capFillThemed}
                         style={{ width: `${Math.min((t.active_member_count / t.max_roster_size) * 100, 100)}%` }}
                       />
                     </div>
@@ -556,7 +588,7 @@ export default function DiscoverPage() {
                       </div>
                     ) : (
                       <button
-                        className={`${styles.actionBtn} ${t.is_full ? styles.actionBtnDisabled : ""}`}
+                        className={`${styles.actionBtn} ${t.is_full ? styles.actionBtnDisabled : styles.actionBtnThemed}`}
                         onClick={() => !t.is_full && handleRequestJoin(t.slug)}
                         disabled={isBusy || t.is_full}
                       >
@@ -571,7 +603,6 @@ export default function DiscoverPage() {
         </>
       ) : (
         <>
-          {/* ---------------- matches filter bar ---------------- */}
           <div className={`${styles.filterBar} ${styles.filterBarMatch}`}>
             <div className={styles.searchField}>
               <SearchIcon width={16} height={16} />
@@ -659,20 +690,21 @@ export default function DiscoverPage() {
               {filteredMatches.map((m) => {
                 const pitch = pitchById.get(m.pitch_id);
                 const isOpenSlots = m.match_type === "open_slots";
-                const SportIcon = pitch?.sport_type === "BASKETBALL" ? BasketballIcon : FootballIcon;
+                const theme = getSportTheme(pitch?.sport_type);
 
                 return (
                   <div
                     key={m.id}
                     className={styles.matchCard}
+                    style={sportCssVars(theme)}
                     onClick={() => navigate(`/discover/matches/${m.id}`)}
                     role="button"
                     tabIndex={0}
                   >
-                                        <div className={styles.matchCardTop}>
-                      <span className={styles.logoMatch}>
-                        <SportIcon width={20} height={20} />
-                      </span>
+                   
+
+                    <div className={styles.matchCardTop}>
+                      <BallImage sport={pitch?.sport_type} className={styles.ballLogo} />
                       <span className={styles.pill} data-tone={isOpenSlots ? "tournament" : "match"}>
                         {isOpenSlots ? "Open slots" : "Team vs team"}
                       </span>
@@ -698,7 +730,7 @@ export default function DiscoverPage() {
                       <>
                         <div className={styles.capBar}>
                           <div
-                            className={styles.capFillMatch}
+                            className={styles.capFillThemed}
                             style={{
                               width: `${Math.min(
                                 ((m.confirmed_participant_count || 0) / (m.slots_needed || 1)) * 100,
@@ -711,7 +743,7 @@ export default function DiscoverPage() {
                           <span className={styles.capText}>
                             {m.confirmed_participant_count}/{m.slots_needed} joined
                           </span>
-                          <span className={styles.spotsBadgeMatch}>
+                          <span className={styles.spotsBadgeThemed}>
                             {m.available_slots} spot{m.available_slots === 1 ? "" : "s"} left
                           </span>
                         </div>
@@ -722,7 +754,7 @@ export default function DiscoverPage() {
                       </>
                     ) : (
                       <>
-                        <div className={styles.challengeRow}>
+                        <div className={styles.challengeRowThemed}>
                           <span className={styles.challengeOpen}>Open challenge — waiting for an opponent</span>
                         </div>
                         <div className={styles.priceRowMatch}>
@@ -732,7 +764,7 @@ export default function DiscoverPage() {
                       </>
                     )}
 
-                    <div className={styles.viewDetailRow}>
+                    <div className={styles.viewDetailRowThemed}>
                       View match details
                       <ChevronIcon width={14} height={14} />
                     </div>

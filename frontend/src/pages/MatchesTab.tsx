@@ -13,7 +13,7 @@ const ADDIS_ABABA = { lat: 8.9806, lng: 38.7578 };
 
 type IconName =
   | "plus" | "pin" | "clock" | "x" | "pencil" | "trash"
-  | "users" | "swords" | "calendar" | "football" | "basketball" | "cash" | "check";
+  | "users" | "swords" | "calendar" | "cash" | "check" | "arrowRight" | "note" | "alertTriangle";
 
 function Icon({ name, size = 15 }: { name: IconName; size?: number }) {
   const paths: Record<IconName, React.ReactNode> = {
@@ -60,20 +60,6 @@ function Icon({ name, size = 15 }: { name: IconName; size?: number }) {
         <path d="M8 3v3M16 3v3" />
       </>
     ),
-    football: (
-      <>
-        <circle cx="12" cy="12" r="9" />
-        <path d="M12 7.5 14.9 9.6l-1.1 3.4h-3.6L9.1 9.6 12 7.5z" fill="currentColor" stroke="none" />
-        <path d="M12 3v4.5M12 20.5V17M4.7 8.3l3.4 1.3M19.3 8.3l-3.4 1.3M4.7 15.7l3.4-1.3M19.3 15.7l-3.4-1.3" />
-      </>
-    ),
-    basketball: (
-      <>
-        <circle cx="12" cy="12" r="9" />
-        <path d="M12 3v18M3 12h18" />
-        <path d="M5.8 5.8c2.7 2.9 2.7 9.5 0 12.4M18.2 5.8c-2.7 2.9-2.7 9.5 0 12.4" />
-      </>
-    ),
     cash: (
       <>
         <rect x="2.5" y="6" width="19" height="12" rx="2.5" />
@@ -81,6 +67,20 @@ function Icon({ name, size = 15 }: { name: IconName; size?: number }) {
       </>
     ),
     check: <path d="M20 6 9 17l-5-5" />,
+    arrowRight: <path d="M5 12h14M13 6l6 6-6 6" />,
+    note: (
+      <>
+        <path d="M7 3h8l4 4v14H7z" />
+        <path d="M15 3v4h4" />
+        <path d="M9 12h6M9 16h6" />
+      </>
+    ),
+    alertTriangle: (
+      <>
+        <path d="M12 3 2 20h20L12 3z" />
+        <path d="M12 10v4M12 17v.01" />
+      </>
+    ),
   };
 
   return (
@@ -88,6 +88,11 @@ function Icon({ name, size = 15 }: { name: IconName; size?: number }) {
       {paths[name]}
     </svg>
   );
+}
+
+function SportBall({ sport, size = 20, className }: { sport?: "FOOTBALL" | "BASKETBALL"; size?: number; className?: string }) {
+  const src = sport === "BASKETBALL" ? "/basketball.png" : "/football.png";
+  return <img src={src} alt="" width={size} height={size} className={className} />;
 }
 
 /* ---------------- helpers ---------------- */
@@ -113,6 +118,23 @@ function statusTone(status: Match["status"]) {
   return "grass"; // open
 }
 
+// Confirmed matches are the "live and locked in" ones — surface them first,
+// then open, then completed/cancelled at the bottom. Ties broken by soonest.
+const STATUS_ORDER: Record<Match["status"], number> = {
+  confirmed: 0,
+  open: 1,
+  completed: 2,
+  cancelled: 3,
+};
+
+function sortMatches(list: Match[]) {
+  return [...list].sort((a, b) => {
+    const rankDiff = (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9);
+    if (rankDiff !== 0) return rankDiff;
+    return new Date(a.start_time).getTime() - new Date(b.start_time).getTime();
+  });
+}
+
 function toLocalDateInput(d: Date) {
   return d.toLocaleDateString("en-CA");
 }
@@ -133,25 +155,19 @@ const DURATION_OPTIONS = [
 function buildBallDivIcon(sport: "FOOTBALL" | "BASKETBALL", selected: boolean) {
   const isBasketball = sport === "BASKETBALL";
   const pinColor = isBasketball ? "#c9942a" : "#3fae7f";
+  const ballSrc = isBasketball ? "/basketball.png" : "/football.png";
   const w = selected ? 42 : 30;
   const h = selected ? 52 : 37;
-
-  const ballGlyph = isBasketball
-    ? `<path d="M12 3v18M3 12h18" stroke="${pinColor}" stroke-width="1.6" fill="none"/>
-       <path d="M5.8 5.8c2.7 2.9 2.7 9.5 0 12.4M18.2 5.8c-2.7 2.9-2.7 9.5 0 12.4" stroke="${pinColor}" stroke-width="1.4" fill="none"/>
-       <circle cx="12" cy="12" r="9" stroke="${pinColor}" stroke-width="1.6" fill="none"/>`
-    : `<circle cx="12" cy="12" r="9" stroke="${pinColor}" stroke-width="1.6" fill="none"/>
-       <path d="M12 7.5 14.9 9.6l-1.1 3.4h-3.6L9.1 9.6 12 7.5z" fill="${pinColor}"/>
-       <path d="M12 3v4.5M12 20.5V17M4.7 8.3l3.4 1.3M19.3 8.3l-3.4 1.3M4.7 15.7l3.4-1.3M19.3 15.7l-3.4-1.3" stroke="${pinColor}" stroke-width="1.3"/>`;
+  const ballSize = selected ? 24 : 17;
 
   const html = `
     <div class="${selected ? "ball-marker ball-marker-selected" : "ball-marker"}">
       <svg width="${w}" height="${h}" viewBox="0 0 30 37" xmlns="http://www.w3.org/2000/svg">
         <path d="M15 1C7.8 1 2 6.6 2 13.4c0 9 13 22 13 22s13-13 13-22C28 6.6 22.2 1 15 1z"
           fill="${selected ? pinColor : "#ffffff"}" stroke="${pinColor}" stroke-width="1.8"/>
-        <circle cx="15" cy="13.4" r="9.3" fill="${selected ? "#ffffff" : "#ffffff"}"/>
-        <g transform="translate(3,1.4)">${ballGlyph}</g>
+        <circle cx="15" cy="13.4" r="9.3" fill="#ffffff"/>
       </svg>
+      <img src="${ballSrc}" width="${ballSize}" height="${ballSize}" style="position:absolute; top:${selected ? 12 : 8}px; left:50%; transform:translateX(-50%);" />
     </div>`;
 
   return L.divIcon({
@@ -163,7 +179,7 @@ function buildBallDivIcon(sport: "FOOTBALL" | "BASKETBALL", selected: boolean) {
   });
 }
 
-/* ---------------- map + confirmation banner ---------------- */
+/* ---------------- pitch map field ---------------- */
 
 function PitchMapField({
   pitches,
@@ -205,16 +221,13 @@ function PitchMapField({
 
       {selected ? (
         <div className={styles.pitchConfirm}>
-          <div className={`${styles.pitchConfirmIcon} ${selected.sport_type === "BASKETBALL" ? styles.pitchConfirmIconBball : styles.pitchConfirmIconFball}`}>
-            <Icon name={selected.sport_type === "BASKETBALL" ? "basketball" : "football"} size={17} />
-          </div>
+          <span className={styles.pitchConfirmBall}>
+            <SportBall sport={selected.sport_type} size={22} />
+          </span>
           <div className={styles.pitchConfirmInfo}>
-            <div className={styles.pitchConfirmName}>
-              {selected.name}
-              <span className={styles.pitchConfirmCheck}><Icon name="check" size={12} /> Selected</span>
-            </div>
+            <div className={styles.pitchConfirmName}>{selected.name}</div>
             <div className={styles.pitchConfirmAddress}>
-              <Icon name="pin" size={12} />
+              <Icon name="pin" size={11} />
               {selected.address || "No address on file"}
             </div>
           </div>
@@ -223,14 +236,14 @@ function PitchMapField({
       ) : (
         <div className={styles.pitchConfirmEmpty}>
           <Icon name="pin" size={14} />
-          Tap a pitch marker on the map to select it
+          Tap a marker on the map to pick a pitch
         </div>
       )}
     </div>
   );
 }
 
-/* ---------------- create / edit modal ---------------- */
+/* ---------------- create / edit drawer ---------------- */
 
 function MatchFormModal({
   open,
@@ -307,6 +320,7 @@ function MatchFormModal({
   const totalPriceNum = Number(totalPrice) || 0;
   const slotsNum = Number(slotsNeeded) || 0;
   const priceSlotNum = Number(pricePerSlot) || 0;
+  const isTeamType = matchType === "team_vs_team";
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -370,136 +384,156 @@ function MatchFormModal({
   }
 
   return (
-    <div className={styles.modalOverlay} onClick={onClose}>
-      <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
-        <div className={styles.modalHead}>
-          <h3 className={styles.modalTitle}>{mode === "create" ? "Create a match" : "Edit match"}</h3>
-          <button type="button" className={styles.modalCloseBtn} onClick={onClose} aria-label="Close">
+    <div className={styles.drawerOverlay} onClick={onClose}>
+      <div
+        className={`${styles.drawer} ${isTeamType ? styles.drawerTeam : styles.drawerOpen}`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className={styles.drawerHeader}>
+          <span className={styles.drawerHeaderIcon}>
+            <Icon name={isTeamType ? "swords" : "users"} size={18} />
+          </span>
+          <div className={styles.drawerHeaderText}>
+            <h3 className={styles.drawerTitle}>{mode === "create" ? "Create a match" : "Edit match"}</h3>
+            <p className={styles.drawerSubtitle}>
+              {isTeamType ? "Challenge another team, split the pitch cost" : "Open spots for players to join"}
+            </p>
+          </div>
+          <button type="button" className={styles.drawerCloseBtn} onClick={onClose} aria-label="Close">
             <Icon name="x" size={16} />
           </button>
         </div>
 
-        <form className={styles.form} onSubmit={handleSubmit}>
-          <div className={styles.field}>
-            <label className={styles.fieldLabel}>Match type</label>
-            <div className={styles.typeCards}>
-              <button
-                type="button"
-                className={`${styles.typeCard} ${styles.typeCardTeam} ${matchType === "team_vs_team" ? styles.typeCardOn : ""}`}
-                onClick={() => setMatchType("team_vs_team")}
-                disabled={mode === "edit"}
-              >
-                <span className={styles.typeCardIcon}><Icon name="swords" size={18} /></span>
-                <span className={styles.typeCardTitle}>Team vs team</span>
-                <span className={styles.typeCardDesc}>Challenge another team — pitch cost is split 50/50.</span>
-              </button>
-              <button
-                type="button"
-                className={`${styles.typeCard} ${styles.typeCardOpen} ${matchType === "open_slots" ? styles.typeCardOn : ""}`}
-                onClick={() => setMatchType("open_slots")}
-                disabled={mode === "edit"}
-              >
-                <span className={styles.typeCardIcon}><Icon name="users" size={18} /></span>
-                <span className={styles.typeCardTitle}>Open slots</span>
-                <span className={styles.typeCardDesc}>Open spots for outside players who pay individually to join.</span>
-              </button>
-            </div>
-            {mode === "edit" && <div className={styles.fieldHint}>Match type can't be changed after creation.</div>}
-          </div>
-
-          <div className={styles.field}>
-            <label className={styles.fieldLabel}>Pitch</label>
-            <PitchMapField pitches={pitches} selectedId={pitchId} onSelect={(p) => setPitchId(p.id)} />
-          </div>
-
-          <div className={styles.fieldRow}>
-            <div className={styles.field}>
-              <label className={styles.fieldLabel}>Date</label>
-              <div className={styles.inputWithIcon}>
-                <Icon name="calendar" size={14} />
-                <input type="date" className={styles.input} value={date} onChange={(e) => setDate(e.target.value)} />
-              </div>
-            </div>
-            <div className={styles.field}>
-              <label className={styles.fieldLabel}>Start time</label>
-              <div className={styles.inputWithIcon}>
-                <Icon name="clock" size={14} />
-                <input type="time" className={styles.input} value={startTime} onChange={(e) => setStartTime(e.target.value)} />
-              </div>
-            </div>
-            <div className={styles.field}>
-              <label className={styles.fieldLabel}>Duration</label>
-              <select className={styles.select} value={durationMinutes} onChange={(e) => setDurationMinutes(Number(e.target.value))}>
-                {DURATION_OPTIONS.map((o) => (
-                  <option key={o.minutes} value={o.minutes}>{o.label}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {matchType === "team_vs_team" ? (
-            <div className={`${styles.pricePanel} ${styles.pricePanelTeam}`}>
-              <div className={styles.pricePanelHead}>
-                <Icon name="cash" size={16} />
-                Pitch cost — split between both teams
-              </div>
-              <div className={styles.priceInputWrap}>
-                <input
-                  type="number" min={0} className={styles.priceInput}
-                  value={totalPrice}
-                  onChange={(e) => { setTotalPrice(e.target.value); setPriceTouched(true); }}
-                  placeholder="0"
+        <form className={styles.drawerForm} onSubmit={handleSubmit}>
+          <div className={styles.drawerBody}>
+            <div className={styles.block}>
+              <span className={styles.blockLabel}>Match type</span>
+              <div className={styles.typeToggle} data-disabled={mode === "edit" || undefined}>
+                <span
+                  className={styles.typeToggleThumb}
+                  style={{ transform: isTeamType ? "translateX(0%)" : "translateX(100%)" }}
                 />
-                <span className={styles.priceInputSuffix}>Br total</span>
+                <button
+                  type="button"
+                  className={`${styles.typeToggleBtn} ${isTeamType ? styles.typeToggleBtnActive : ""}`}
+                  onClick={() => setMatchType("team_vs_team")}
+                  disabled={mode === "edit"}
+                >
+                  <Icon name="swords" size={14} />
+                  Team vs team
+                </button>
+                <button
+                  type="button"
+                  className={`${styles.typeToggleBtn} ${!isTeamType ? styles.typeToggleBtnActive : ""}`}
+                  onClick={() => setMatchType("open_slots")}
+                  disabled={mode === "edit"}
+                >
+                  <Icon name="users" size={14} />
+                  Open slots
+                </button>
               </div>
-              <div className={styles.pricePanelSplit}>
-                <span>Your team pays</span>
-                <b>{formatBirr(totalPriceNum / 2)}</b>
+              {mode === "edit" && <div className={styles.fieldHint}>Match type can't be changed after creation.</div>}
+            </div>
+
+            <div className={styles.divider} />
+
+            <div className={styles.block}>
+              <span className={styles.blockLabel}>Pitch</span>
+              <PitchMapField pitches={pitches} selectedId={pitchId} onSelect={(p) => setPitchId(p.id)} />
+            </div>
+
+            <div className={styles.divider} />
+
+            <div className={styles.block}>
+              <span className={styles.blockLabel}>When</span>
+              <div className={styles.fieldGrid}>
+                <label className={styles.field}>
+                  <span className={styles.fieldSubLabel}><Icon name="calendar" size={12} /> Date</span>
+                  <input type="date" className={styles.input} value={date} onChange={(e) => setDate(e.target.value)} />
+                </label>
+                <label className={styles.field}>
+                  <span className={styles.fieldSubLabel}><Icon name="clock" size={12} /> Start time</span>
+                  <input type="time" className={styles.input} value={startTime} onChange={(e) => setStartTime(e.target.value)} />
+                </label>
+                <label className={styles.field}>
+                  <span className={styles.fieldSubLabel}>Duration</span>
+                  <select className={styles.select} value={durationMinutes} onChange={(e) => setDurationMinutes(Number(e.target.value))}>
+                    {DURATION_OPTIONS.map((o) => (
+                      <option key={o.minutes} value={o.minutes}>{o.label}</option>
+                    ))}
+                  </select>
+                </label>
               </div>
             </div>
-          ) : (
-            <div className={`${styles.pricePanel} ${styles.pricePanelOpen}`}>
-              <div className={styles.pricePanelHead}>
-                <Icon name="users" size={16} />
-                Open slots for outside players
-              </div>
-              <div className={styles.pricePanelGrid}>
-                <div>
-                  <label className={styles.fieldLabel}>Players needed</label>
-                  <input type="number" min={1} className={styles.input} value={slotsNeeded} onChange={(e) => setSlotsNeeded(e.target.value)} />
-                </div>
-                <div>
-                  <label className={styles.fieldLabel}>Price per player</label>
-                  <div className={styles.priceInputWrap}>
-                    <input type="number" min={0} className={styles.priceInput} value={pricePerSlot} onChange={(e) => setPricePerSlot(e.target.value)} placeholder="0" />
-                    <span className={styles.priceInputSuffix}>Br</span>
+
+            <div className={styles.divider} />
+
+            <div className={styles.block}>
+              <span className={styles.blockLabel}>Pricing</span>
+
+              {isTeamType ? (
+                <div className={styles.priceCard}>
+                  <label className={styles.field}>
+                    <span className={styles.fieldSubLabel}>Total pitch cost</span>
+                    <div className={styles.priceInputWrap}>
+                      <input
+                        type="number" min={0} className={styles.priceInput}
+                        value={totalPrice}
+                        onChange={(e) => { setTotalPrice(e.target.value); setPriceTouched(true); }}
+                        placeholder="0"
+                      />
+                      <span className={styles.priceInputSuffix}>Br</span>
+                    </div>
+                  </label>
+                  <div className={styles.priceSplitRow}>
+                    <span>Your team pays</span>
+                    <b>{formatBirr(totalPriceNum / 2)}</b>
                   </div>
                 </div>
-              </div>
-              <div className={styles.pricePanelSplit}>
-                <span>Total collected if all slots fill</span>
-                <b>{formatBirr(slotsNum * priceSlotNum)}</b>
-              </div>
+              ) : (
+                <div className={styles.priceCard}>
+                  <div className={styles.fieldGridTwo}>
+                    <label className={styles.field}>
+                      <span className={styles.fieldSubLabel}>Players needed</span>
+                      <input type="number" min={1} className={styles.input} value={slotsNeeded} onChange={(e) => setSlotsNeeded(e.target.value)} />
+                    </label>
+                    <label className={styles.field}>
+                      <span className={styles.fieldSubLabel}>Price per player</span>
+                      <div className={styles.priceInputWrap}>
+                        <input type="number" min={0} className={styles.priceInput} value={pricePerSlot} onChange={(e) => setPricePerSlot(e.target.value)} placeholder="0" />
+                        <span className={styles.priceInputSuffix}>Br</span>
+                      </div>
+                    </label>
+                  </div>
+                  <div className={styles.priceSplitRow}>
+                    <span>Total if every slot fills</span>
+                    <b>{formatBirr(slotsNum * priceSlotNum)}</b>
+                  </div>
+                </div>
+              )}
             </div>
-          )}
 
-          <div className={styles.field}>
-            <label className={styles.fieldLabel}>Notes (optional)</label>
-            <textarea
-              className={styles.textarea}
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="e.g. Bring your own bibs, meet 15 minutes early"
-              rows={3}
-            />
+            <div className={styles.divider} />
+
+            <div className={styles.block}>
+              <span className={styles.blockLabel}><Icon name="note" size={13} /> Notes (optional)</span>
+              <textarea
+                className={styles.textarea}
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="e.g. Bring your own bibs, meet 15 minutes early"
+                rows={3}
+              />
+            </div>
+
+            {formError && <div className={styles.formError}>{formError}</div>}
           </div>
 
-          {formError && <div className={styles.formError}>{formError}</div>}
-
-          <div className={styles.formActions}>
+          <div className={styles.drawerFooter}>
             <button type="button" className={styles.cancelBtn} onClick={onClose}>Cancel</button>
-            <button type="submit" className={styles.submitBtn} disabled={submitting}>
+            <button type="submit" className={`${styles.submitBtn} ${isTeamType ? styles.submitBtnTeam : styles.submitBtnOpen}`} disabled={submitting}>
               {submitting ? "Saving…" : mode === "create" ? "Create match" : "Save changes"}
+              {!submitting && <Icon name="arrowRight" size={15} />}
             </button>
           </div>
         </form>
@@ -508,7 +542,42 @@ function MatchFormModal({
   );
 }
 
-/* ---------------- match card ---------------- */
+/* ---------------- cancel-match confirm popup ---------------- */
+
+function CancelMatchDialog({
+  match, onConfirm, onDismiss, cancelling,
+}: {
+  match: Match;
+  onConfirm: () => void;
+  onDismiss: () => void;
+  cancelling: boolean;
+}) {
+  return (
+    <div className={styles.confirmOverlay} onClick={cancelling ? undefined : onDismiss}>
+      <div className={styles.confirmCard} role="alertdialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+        <span className={styles.confirmIcon}>
+          <Icon name="alertTriangle" size={20} />
+        </span>
+        <h3 className={styles.confirmTitle}>Cancel this match?</h3>
+        <p className={styles.confirmText}>
+          {match.match_type === "team_vs_team"
+            ? `This will cancel the match against ${match.opponent_team_name || "the other team"}. This can't be undone.`
+            : "Players who already joined will be freed from their slots. This can't be undone."}
+        </p>
+        <div className={styles.confirmActions}>
+          <button type="button" className={styles.confirmNoBtn} onClick={onDismiss} disabled={cancelling}>
+            No, keep it
+          </button>
+          <button type="button" className={styles.confirmYesBtn} onClick={onConfirm} disabled={cancelling}>
+            {cancelling ? "Cancelling…" : "Yes, cancel match"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- match ticket card ---------------- */
 
 function MatchCard({
   match, pitch, canManage, onEdit, onCancel, cancelling,
@@ -524,60 +593,115 @@ function MatchCard({
   const canEdit = canManage && match.status === "open";
   const canCancel = canManage && (match.status === "open" || match.status === "confirmed");
   const isOpenSlots = match.match_type === "open_slots";
- 
+  const isConfirmed = match.status === "confirmed";
+
   return (
     <div
-      className={`${styles.matchCard} ${isOpenSlots ? styles.matchCardOpen : styles.matchCardTeam} ${
-        match.status === "confirmed" ? styles.matchCardConfirmed : ""
+      className={`${styles.ticket} ${isOpenSlots ? styles.ticketOpenType : styles.ticketTeamType} ${
+        isConfirmed ? styles.ticketConfirmed : ""
       }`}
     >
-      <div className={styles.matchCardTop}>
-        <span className={`${styles.typePill} ${isOpenSlots ? styles.typePillOpen : styles.typePillTeam}`}>
-          <Icon name={isOpenSlots ? "users" : "swords"} size={12} />
-          {isOpenSlots ? "Open slots" : "Team vs team"}
+      {isConfirmed && (
+        <span className={styles.confirmedFlag}>
+          <Icon name="check" size={11} /> Confirmed
         </span>
-        <span className={`${styles.statusPill} ${styles[`status_${tone}`]}`}>
-          {match.status[0].toUpperCase() + match.status.slice(1)}
-        </span>
-      </div>
+      )}
 
-      <div className={styles.matchWhen}><Icon name="clock" size={14} />{formatWhen(match.start_time, match.end_time)}</div>
-
-      <div className={styles.matchPitchRow}>
-        <span className={`${styles.matchPitchIcon} ${pitch?.sport_type === "BASKETBALL" ? styles.matchPitchIconBball : styles.matchPitchIconFball}`}>
-          <Icon name={pitch?.sport_type === "BASKETBALL" ? "basketball" : "football"} size={13} />
-        </span>
-        {pitch ? `${pitch.name}${pitch.address ? ` · ${pitch.address}` : ""}` : "Pitch details unavailable"}
-      </div>
-
-            {match.match_type === "team_vs_team" ? (
-        <div className={styles.matchDetailRow}>
-          <span className={styles.matchVsLine}>
-            {match.creator_team_name}
-            <span className={styles.matchVsWord}>vs</span>
-            {match.opponent_team_name || "Waiting for an opponent"}
+      <div className={styles.ticketMain}>
+        <div className={styles.ticketTopRow}>
+          <span className={styles.typeTag}>
+            <Icon name={isOpenSlots ? "users" : "swords"} size={12} />
+            {isOpenSlots ? "Open slots" : "Team vs team"}
           </span>
-          <span className={styles.matchMoney}>{formatBirr(match.total_price)} total · {formatBirr(match.price_per_team)}/team</span>
+          <span className={styles.matchPitchBall}>
+            <SportBall sport={pitch?.sport_type} size={18} />
+          </span>
         </div>
-      ) : (
-        <div className={styles.matchDetailRow}>
-          <span className={styles.slotsProgress}>{match.confirmed_participant_count}/{match.slots_needed} joined</span>
-          <span className={styles.matchMoney}>{formatBirr(match.price_per_slot)}/player</span>
-        </div>
-      )}
 
-      {match.description && <div className={styles.matchNotes}>{match.description}</div>}
+        {match.match_type === "team_vs_team" ? (
+          <div className={styles.matchup}>
+            <span className={styles.matchupTeam}>{match.creator_team_name}</span>
+            <span className={styles.matchupVs}>vs</span>
+            <span className={styles.matchupTeam}>{match.opponent_team_name || "..."}</span>
+          </div>
+        ) : (
+          <div className={styles.matchup}>
+            <span className={styles.slotsCount}>{match.confirmed_participant_count}/{match.slots_needed}</span>
+            <span className={styles.matchupVs}>players joined</span>
+          </div>
+        )}
 
-      {canManage && (
-        <div className={styles.matchActions}>
-          <button type="button" className={styles.matchEditBtn} onClick={onEdit} disabled={!canEdit} title={canEdit ? "Edit match" : "Only an open match can be edited"}>
-            <Icon name="pencil" size={13} />Edit
-          </button>
-          <button type="button" className={styles.matchCancelBtn} onClick={onCancel} disabled={!canCancel || cancelling} title={canCancel ? "Cancel match" : "This match can't be cancelled"}>
-            <Icon name="trash" size={13} />{cancelling ? "Cancelling…" : "Cancel"}
-          </button>
+        <div className={styles.metaLine}>
+          <Icon name="clock" size={13} />
+          {formatWhen(match.start_time, match.end_time)}
         </div>
-      )}
+        <div className={styles.metaLine}>
+          <Icon name="pin" size={13} />
+          {pitch ? `${pitch.name}${pitch.address ? ` · ${pitch.address}` : ""}` : "Pitch details unavailable"}
+        </div>
+
+        {match.description && <div className={styles.matchNotes}>{match.description}</div>}
+      </div>
+
+      <div className={styles.ticketStub}>
+        <span className={`${styles.statusDot} ${styles[`dot_${tone}`]}`} />
+        <span className={styles.statusText}>{match.status[0].toUpperCase() + match.status.slice(1)}</span>
+
+        <div className={styles.stubPrice}>
+          {match.match_type === "team_vs_team"
+            ? formatBirr(match.price_per_team)
+            : formatBirr(match.price_per_slot)}
+          <span className={styles.stubPriceUnit}>{match.match_type === "team_vs_team" ? "/ team" : "/ player"}</span>
+        </div>
+
+        {canManage && (
+          <div className={styles.stubActions}>
+            <button type="button" className={styles.stubIconBtn} onClick={onEdit} disabled={!canEdit} title={canEdit ? "Edit match" : "Only an open match can be edited"}>
+              <Icon name="pencil" size={13} />
+            </button>
+            <button type="button" className={`${styles.stubIconBtn} ${styles.stubIconBtnDanger}`} onClick={onCancel} disabled={!canCancel || cancelling} title={canCancel ? "Cancel match" : "This match can't be cancelled"}>
+              <Icon name="trash" size={13} />
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- ticket skeleton (loading state) ---------------- */
+
+function SkeletonBlock({ className }: { className: string }) {
+  return <div className={`${styles.shimmer} ${className}`} />;
+}
+
+function TicketSkeleton() {
+  return (
+    <div className={styles.ticket}>
+      <div className={styles.ticketMain}>
+        <div className={styles.ticketTopRow}>
+          <SkeletonBlock className={styles.skelTag} />
+          <SkeletonBlock className={styles.skelBall} />
+        </div>
+        <SkeletonBlock className={styles.skelMatchup} />
+        <SkeletonBlock className={styles.skelMeta} />
+        <SkeletonBlock className={styles.skelMetaShort} />
+      </div>
+      <div className={styles.ticketStub}>
+        <SkeletonBlock className={styles.skelDot} />
+        <SkeletonBlock className={styles.skelStatusText} />
+        <SkeletonBlock className={styles.skelPrice} />
+      </div>
+    </div>
+  );
+}
+
+function MatchesSkeleton() {
+  return (
+    <div className={styles.ticketList} aria-busy="true" aria-live="polite">
+      {Array.from({ length: 4 }).map((_, i) => (
+        <TicketSkeleton key={i} />
+      ))}
     </div>
   );
 }
@@ -594,6 +718,7 @@ export default function MatchesTab({
   const [modalMode, setModalMode] = useState<"create" | "edit" | null>(null);
   const [editingMatch, setEditingMatch] = useState<Match | null>(null);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
+  const [matchPendingCancel, setMatchPendingCancel] = useState<Match | null>(null);
 
   async function refresh() {
     try {
@@ -623,6 +748,10 @@ export default function MatchesTab({
     return map;
   }, [pitches]);
 
+  // Confirmed matches surface first, so managers and members immediately
+  // see what's locked in before scanning open/completed/cancelled ones.
+  const orderedMatches = useMemo(() => sortMatches(matches), [matches]);
+
   async function handleCreate(payload: any) {
     await createMatch(payload);
     setModalMode(null);
@@ -637,14 +766,22 @@ export default function MatchesTab({
     await refresh();
   }
 
-  async function handleCancel(match: Match) {
-    if (!window.confirm("Cancel this match? Players who joined will be freed from their slots.")) return;
-    setCancellingId(match.id);
+  // "Cancel" click now just opens the confirm popup — the actual API call
+  // only fires once the person taps "Yes, cancel match" inside it.
+  function requestCancel(match: Match) {
+    setMatchPendingCancel(match);
+  }
+
+  async function confirmCancel() {
+    if (!matchPendingCancel) return;
+    setCancellingId(matchPendingCancel.id);
     try {
-      await cancelMatch(match.id);
+      await cancelMatch(matchPendingCancel.id);
+      setMatchPendingCancel(null);
       await refresh();
     } catch {
       setMsg("Couldn't cancel that match. Try again.");
+      setMatchPendingCancel(null);
     } finally {
       setCancellingId(null);
     }
@@ -671,8 +808,8 @@ export default function MatchesTab({
       {msg && <div className={styles.msg}>{msg}</div>}
 
       {loading ? (
-        <div className={styles.emptyText}>Loading matches...</div>
-      ) : matches.length === 0 ? (
+        <MatchesSkeleton />
+      ) : orderedMatches.length === 0 ? (
         <div className={styles.emptyState}>
           <Icon name="swords" size={26} />
           <div className={styles.emptyStateTitle}>No matches yet</div>
@@ -683,15 +820,15 @@ export default function MatchesTab({
           </div>
         </div>
       ) : (
-        <div className={styles.matchGrid}>
-          {matches.map((m) => (
+        <div className={styles.ticketList}>
+          {orderedMatches.map((m) => (
             <MatchCard
               key={m.id}
               match={m}
               pitch={pitchById.get(m.pitch_id)}
               canManage={canManage}
               onEdit={() => { setEditingMatch(m); setModalMode("edit"); }}
-              onCancel={() => handleCancel(m)}
+              onCancel={() => requestCancel(m)}
               cancelling={cancellingId === m.id}
             />
           ))}
@@ -707,6 +844,15 @@ export default function MatchesTab({
         pitches={pitches}
         onSubmit={modalMode === "edit" ? handleUpdate : handleCreate}
       />
+
+      {matchPendingCancel && (
+        <CancelMatchDialog
+          match={matchPendingCancel}
+          cancelling={cancellingId === matchPendingCancel.id}
+          onConfirm={confirmCancel}
+          onDismiss={() => setMatchPendingCancel(null)}
+        />
+      )}
     </div>
   );
 }

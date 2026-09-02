@@ -107,6 +107,86 @@ function sportLabel(sport: string) {
   return sport === "BASKETBALL" ? "Basketball" : "Football";
 }
 
+/* ---------------------------------------------------------------------- */
+/* Skeleton loading state — mirrors gallery, scoreboard, bookings,         */
+/* details grid, and amenities so the layout doesn't jump on load.         */
+/* ---------------------------------------------------------------------- */
+
+function SkeletonBlock({ className }: { className: string }) {
+  return <div className={`${styles.shimmer} ${className}`} />;
+}
+
+function OwnerPitchDetailSkeleton() {
+  return (
+    <div className={styles.page}>
+      <div className={styles.container} aria-busy="true" aria-live="polite">
+        <SkeletonBlock className={styles.skelBackBtn} />
+
+        <div className={styles.headRow}>
+          <div style={{ flex: 1 }}>
+            <div className={styles.titleRow}>
+              <SkeletonBlock className={styles.skelTitle} />
+              <SkeletonBlock className={styles.skelPill} />
+              <SkeletonBlock className={styles.skelPill} />
+            </div>
+            <SkeletonBlock className={styles.skelAddress} />
+          </div>
+          <SkeletonBlock className={styles.skelEditBtn} />
+        </div>
+
+        <SkeletonBlock className={styles.skelGalleryMain} />
+        <div className={styles.galleryThumbs}>
+          {Array.from({ length: 4 }).map((_, i) => (
+            <SkeletonBlock key={i} className={styles.skelThumb} />
+          ))}
+        </div>
+
+        <SkeletonBlock className={styles.skelSectionLabel} />
+        <div className={styles.scoreRow}>
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div className={styles.scoreCard} key={i}>
+              <SkeletonBlock className={styles.skelIconDot} />
+              <div style={{ flex: 1 }}>
+                <SkeletonBlock className={styles.skelScoreValue} />
+                <SkeletonBlock className={styles.skelScoreLabel} />
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <SkeletonBlock className={styles.skelSectionLabel} />
+        <div className={styles.bookingRow}>
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div className={styles.bookingCard} key={i}>
+              <SkeletonBlock className={styles.skelBookingValue} />
+              <SkeletonBlock className={styles.skelBookingLabel} />
+            </div>
+          ))}
+        </div>
+
+        <SkeletonBlock className={styles.skelSectionLabel} />
+        <div className={styles.detailsGrid}>
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div className={styles.detailItem} key={i}>
+              <SkeletonBlock className={styles.skelIconDot} />
+              <div style={{ flex: 1 }}>
+                <SkeletonBlock className={styles.skelDetailValue} />
+                <SkeletonBlock className={styles.skelDetailLabel} />
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className={styles.amenityRow}>
+          {Array.from({ length: 4 }).map((_, i) => (
+            <SkeletonBlock key={i} className={styles.skelAmenityChip} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function OwnerPitchDetail() {
   const { pitchId } = useParams<{ pitchId: string }>();
   const navigate = useNavigate();
@@ -140,13 +220,7 @@ export default function OwnerPitchDetail() {
   const photos = pitch?.images && pitch.images.length > 0 ? pitch.images : [];
 
   if (loading) {
-    return (
-      <div className={styles.page}>
-        <div className={styles.container}>
-          <p className={styles.emptyText}>Loading pitch...</p>
-        </div>
-      </div>
-    );
+    return <OwnerPitchDetailSkeleton />;
   }
 
   if (!pitch) {
@@ -165,7 +239,7 @@ export default function OwnerPitchDetail() {
 
   return (
     <div className={styles.page}>
-      <div className={styles.container}>
+      <div className={styles.container}> 
         <button className={styles.backBtn} onClick={() => navigate(-1)}>
           <Icon name="arrowLeft" size={16} />
           Back to my pitches

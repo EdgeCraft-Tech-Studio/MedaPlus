@@ -561,3 +561,147 @@
   background: var(--c-match-soft);
   border-color: var(--c-match);
 }
+
+
+/* ---------------- sport theming additions ---------------- */
+
+.cardTopRight {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.sportBallIcon {
+  flex-shrink: 0;
+}
+
+.matchCard {
+  position: relative;
+}
+
+.matchCornerBadge {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+
+/* ---------------- sport theming: cards, buttons, badges ---------------- */
+
+.card {
+  border-color: var(--sport-border, var(--line));
+}
+
+.matchCard {
+  position: relative;
+  border-left-color: var(--sport-border, var(--c-match));
+}
+
+.capFillThemed {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--sport-grad);
+  transition: width 0.3s ease;
+}
+
+.spotsBadgeThemed {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-family: var(--font-mono); font-size: 10px; font-weight: 700;
+  padding: 4px 10px; border-radius: 999px;
+  background: var(--sport-soft); color: var(--sport-text);
+}
+
+.challengeRowThemed {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin-top: 12px; padding: 10px 12px;
+  background: var(--sport-soft); border-radius: 12px;
+}
+
+.viewDetailRowThemed {
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 14px;
+  border-radius: 999px;
+  border: 1.5px solid var(--sport-soft);
+  color: var(--sport-text);
+  font-weight: 700;
+  font-size: 12.5px;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.matchCard:hover .viewDetailRowThemed {
+  background: var(--sport-soft);
+  border-color: var(--sport-border);
+}
+
+/* Primary action button picks up the sport gradient — same shape/
+   weight as the default .actionBtn, only the fill color changes. */
+.actionBtnThemed {
+  background: var(--sport-grad);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.16);
+}
+.actionBtnThemed:hover:not(:disabled) { filter: brightness(1.06); }
+
+/* ---------------- ball images ---------------- */
+
+.ballWrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: 50%;
+  overflow: hidden;
+  background: #fff;
+}
+
+.ballImg {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  transition: opacity 0.25s ease;
+}
+
+.ballShimmer {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+}
+
+/* Team card badge — sits above the skill pill, top-right */
+.ballCard { width: 44px; height: 44px; }
+
+/* Match card corner badge */
+.matchCornerBadge {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 1;
+}
+.ballCorner { width: 40px; height: 40px; }
+
+/* Match card top-left sport badge (replaces the old plain icon tile) */
+.ballLogo { width: 52px; height: 52px; }
+
+.cardTopRight {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+@media (max-width: 640px) {
+  .ballCard { width: 36px; height: 36px; }
+  .ballCorner { width: 32px; height: 32px; }
+  .ballLogo { width: 42px; height: 42px; }
+}

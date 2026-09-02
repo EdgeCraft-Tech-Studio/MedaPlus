@@ -31,7 +31,7 @@ class BookingType(models.TextChoices):
     MONTHLY = "MONTHLY", "Monthly"
 
 
-class SportType(models.TextChoices):
+class SportType(models.TextChoices): 
     FOOTBALL = "FOOTBALL", "Football"
     BASKETBALL = "BASKETBALL", "Basketball"
 

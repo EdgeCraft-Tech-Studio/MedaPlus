@@ -7,6 +7,8 @@ export interface CreateTeamPayload {
   description: string;
   sport: string;
   area: string;
+  latitude: number;
+  longitude: number;
   skill_level: string;
   preferred_days: string[];
   play_time: string;
@@ -19,7 +21,7 @@ export interface CreateTeamPayload {
 export async function createTeam(payload: CreateTeamPayload) {
   const form = new FormData();
   Object.entries(payload).forEach(([key, value]) => {
-    if (key === "logoFile") {
+    if (key === "logoFile") { 
       if (value) form.append("logo", value as File);
       return;
     }
