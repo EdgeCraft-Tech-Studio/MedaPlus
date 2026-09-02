@@ -3,6 +3,7 @@
   --grass: #3fae7f; --grass-bright: #4fd897; --grass-soft: #e6f5ee;
   --c-team: #2f5d8a; --c-team-soft: #eaf1f8;
   --c-tournament: #c9942a; --c-tournament-soft: #fbf1dd;
+  --owner-gold: #b8862f; --owner-gold-bright: #e3ac48; --owner-soft: #fdf6e6;
   --danger: #c0392b; --danger-soft: #fdeeec;
   --ink: #0e1712; --muted: #6b7a72; --faint: #b7c2bb; --line: #ece9df;
   --font-mono: 'IBM Plex Mono', monospace;
@@ -38,7 +39,7 @@
 
 .heroActions { display: flex; gap: 10px; }
 
-.btnPrimary, .btnGhost {
+.btnGhost {
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -50,25 +51,12 @@
   border-radius: 999px;
   cursor: pointer;
   border: none;
-}
-
-.btnPrimary {
-  background: linear-gradient(135deg, var(--green-700), var(--grass));
-  color: #fff;
-  box-shadow: 0 8px 20px rgba(63, 174, 127, 0.3);
-}
-
-.btnPrimary2 {
-  background: linear-gradient(135deg, var(--green-700), var(--grass));
-  color: #fff;
-  box-shadow: 0 8px 20px rgba(164, 255, 217, 0.3);
-}
-
-
-.btnGhost {
   background: var(--grass-soft);
   color: var(--green-800);
+  transition: background 0.15s ease;
 }
+
+.btnGhost:hover { background: #d9efe4; }
 
 .searchRow {
   display: flex;
@@ -86,6 +74,12 @@
   border-radius: 12px;
   padding: 10px 14px;
   color: var(--muted);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.searchBox:focus-within {
+  border-color: var(--grass);
+  box-shadow: 0 0 0 3px var(--grass-soft);
 }
 
 .searchBox input {
@@ -95,6 +89,7 @@
   font-size: 13.5px;
   font-family: inherit;
   color: var(--ink);
+  background: transparent;
 }
 
 .grid {
@@ -103,20 +98,56 @@
   gap: 14px;
 }
 
+.gridIn { animation: gridFadeIn 0.25s ease both; }
+
+@keyframes gridFadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 @media (max-width: 860px) { .grid { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 560px) { .grid { grid-template-columns: 1fr; } }
 
 .card {
+  position: relative;
   text-decoration: none;
   color: var(--ink);
   background: #fff;
   border: 1px solid var(--line);
   border-radius: 18px;
   padding: 18px;
-  transition: transform 0.18s ease, box-shadow 0.18s ease;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
 }
 
 .card:hover { transform: translateY(-3px); box-shadow: 0 16px 30px rgba(14, 47, 36, 0.09); }
+
+/* Owner teams get their own visual tier: warm gold edge + ribbon, not just a badge */
+.cardOwner {
+  border-color: var(--owner-gold-bright);
+  background: linear-gradient(180deg, var(--owner-soft) 0%, #fff 60%);
+  box-shadow: 0 0 0 1px rgba(184, 134, 47, 0.15);
+}
+
+.cardOwner:hover {
+  box-shadow: 0 16px 30px rgba(184, 134, 47, 0.18);
+}
+
+.ownerRibbon {
+  position: absolute;
+  top: -9px;
+  left: 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: linear-gradient(135deg, var(--owner-gold), var(--owner-gold-bright));
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 4px 9px;
+  border-radius: 999px;
+  box-shadow: 0 3px 8px rgba(184, 134, 47, 0.35);
+}
 
 .cardTop { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
 
@@ -125,6 +156,10 @@
   background: linear-gradient(135deg, var(--green-700), var(--grass));
   color: #fff; font-weight: 700; font-size: 15px;
   display: grid; place-items: center; overflow: hidden;
+}
+
+.cardOwner .logo {
+  background: linear-gradient(135deg, var(--owner-gold), var(--owner-gold-bright));
 }
 
 .logo img { width: 100%; height: 100%; object-fit: cover; }
@@ -137,7 +172,6 @@
   border-radius: 999px;
 }
 
-.roleBadge[data-role="OWNER"] { background: var(--c-tournament-soft); color: var(--c-tournament); }
 .roleBadge[data-role="ADMIN"] { background: var(--c-team-soft); color: var(--c-team); }
 .roleBadge[data-role="MEMBER"] { background: var(--grass-soft); color: var(--green-700); }
 
@@ -147,6 +181,8 @@
 .capRow { display: flex; flex-direction: column; gap: 6px; }
 .capBar { height: 5px; border-radius: 999px; background: var(--grass-soft); overflow: hidden; }
 .capFill { height: 100%; background: var(--grass); border-radius: 999px; }
+.cardOwner .capBar { background: var(--owner-soft); }
+.cardOwner .capFill { background: linear-gradient(90deg, var(--owner-gold), var(--owner-gold-bright)); }
 .capRow span { font-size: 11px; color: var(--muted); }
 
 .cardAdd {
@@ -154,23 +190,79 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 10px;
   min-height: 168px;
-  border: 3px dashed green;
+  border: 1.5px dashed #c9d6cd;
   color: var(--muted);
   font-size: 13px;
   font-weight: 700;
 }
 
-.cardAdd:hover { color: var(--grass); border-color: var(--grass); }
-
-.empty {
-  text-align: center;
-  padding: 60px 20px;
-  color: var(--muted);
+.cardAddIcon {
+  width: 34px; height: 34px;
+  display: grid; place-items: center;
+  border-radius: 10px;
+  background: var(--grass-soft);
+  color: var(--green-700);
 }
 
+.cardAdd:hover { color: var(--green-800); border-color: var(--grass); }
+.cardAdd:hover .cardAddIcon { background: var(--grass); color: #fff; }
 
+/* --- Skeleton / shimmer loading state --- */
+
+.skeletonCard {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 18px;
+  background: #fff;
+  min-height: 168px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.skeletonTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.skeletonLogo { width: 46px; height: 46px; border-radius: 13px; }
+.skeletonPill { width: 52px; height: 20px; border-radius: 999px; }
+.skeletonLine { height: 13px; border-radius: 6px; }
+.skeletonCapRow { margin-top: auto; padding-top: 6px; }
+.skeletonBar { height: 5px; border-radius: 999px; width: 100%; }
+
+.shimmer {
+  position: relative;
+  overflow: hidden;
+  background: var(--line);
+}
+
+.shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.7) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  animation: shimmerSweep 1.4s ease-in-out infinite;
+}
+
+@keyframes shimmerSweep {
+  100% { transform: translateX(100%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shimmer::after { animation: none; }
+  .gridIn { animation: none; }
+}
 
 .empty {
   text-align: center;
@@ -187,6 +279,11 @@
   border-radius: 18px;
   background: var(--grass-soft);
   color: var(--green-700);
+}
+
+.emptyIcon[data-tone="danger"] {
+  background: var(--danger-soft);
+  color: var(--danger);
 }
 
 .emptyTitle {
@@ -223,10 +320,7 @@
   border-radius: 14px;
   text-decoration: none;
   text-align: left;
-  transition:
-    transform 0.18s ease,
-    box-shadow 0.18s ease,
-    border-color 0.18s ease;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
 }
 
 .createTeamBtn {
@@ -243,18 +337,9 @@
 }
 
 .createTeamBtn:hover,
-.joinTeamBtn:hover {
-  transform: translateY(-2px);
-}
-
-.createTeamBtn:hover {
-  box-shadow: 0 13px 28px rgba(63, 174, 127, 0.28);
-}
-
-.joinTeamBtn:hover {
-  border-color: var(--grass);
-  box-shadow: 0 10px 24px rgba(14, 47, 36, 0.09);
-}
+.joinTeamBtn:hover { transform: translateY(-2px); }
+.createTeamBtn:hover { box-shadow: 0 13px 28px rgba(63, 174, 127, 0.28); }
+.joinTeamBtn:hover { border-color: var(--grass); box-shadow: 0 10px 24px rgba(14, 47, 36, 0.09); }
 
 .btnIcon {
   width: 34px;
@@ -266,38 +351,15 @@
   background: rgba(255, 255, 255, 0.16);
 }
 
-.joinTeamBtn .btnIcon {
-  background: var(--grass-soft);
-  color: var(--green-700);
-}
+.joinTeamBtn .btnIcon { background: var(--grass-soft); color: var(--green-700); }
 
 .createTeamBtn strong,
-.joinTeamBtn strong {
-  display: block;
-  font-size: 13px;
-  font-weight: 800;
-  line-height: 1.2;
-}
+.joinTeamBtn strong { display: block; font-size: 13px; font-weight: 800; line-height: 1.2; }
 
 .createTeamBtn small,
-.joinTeamBtn small {
-  display: block;
-  margin-top: 3px;
-  font-size: 10.5px;
-  font-weight: 500;
-  opacity: 0.78;
-}
+.joinTeamBtn small { display: block; margin-top: 3px; font-size: 10.5px; font-weight: 500; opacity: 0.78; }
 
 @media (max-width: 500px) {
-  .emptyActions {
-    flex-direction: column;
-    align-items: stretch;
-    max-width: 300px;
-    margin: 0 auto;
-  }
-
-  .createTeamBtn,
-  .joinTeamBtn {
-    width: 100%;
-  }
+  .emptyActions { flex-direction: column; align-items: stretch; max-width: 300px; margin: 0 auto; }
+  .createTeamBtn, .joinTeamBtn { width: 100%; }
 }

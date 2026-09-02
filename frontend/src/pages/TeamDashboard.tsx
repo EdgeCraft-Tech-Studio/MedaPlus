@@ -10,6 +10,7 @@ import {
   getTeamDashboard, getRoster, getInvitations, getJoinRequests,
   type TeamDashboardData, type RosterMember, type TeamInvitationItem, type JoinRequestItem,
 } from "../lib/team";
+import MatchesTab from "./MatchesTab";
 
 type TabKey = "overview" | "roster" | "matches" | "bookings" | "tournaments" | "settings";
 
@@ -183,7 +184,7 @@ export default function TeamDashboard() {
           <OverviewTab team={team} rosterCount={roster.length} onGoToRoster={() => setTab("roster")} />
         )}
 
-        {tab === "roster" && (
+                {tab === "roster" && (
           <ManageRoster
             team={team}
             roster={roster}
@@ -195,7 +196,8 @@ export default function TeamDashboard() {
           />
         )}
 
-       
+        {tab === "matches" && <MatchesTab team={team} canManage={isManager} />}
+
         {tab === "bookings" && (
           <Placeholder icon={MapPinIcon} text="This team's pitch bookings will show up here." ctaLabel="Find a pitch" ctaTo="/discover/pitches" />
         )}

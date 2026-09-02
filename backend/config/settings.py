@@ -50,7 +50,8 @@ INSTALLED_APPS = [
     "pitches",
     "bookings",
     "team",
-    "chat"
+    "chat",
+    "match"
 
 ]
 

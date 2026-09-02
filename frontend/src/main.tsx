@@ -45,6 +45,7 @@ import CreateTournament from "./pages/CreateTournament";
 import ProfilePage from "./pages/ProfilePage";
 import ChatPage from "./pages/chatPage";
 import OwnerPitchDetail from "./pages/OwnerPitchDetail";
+import MatchDetailPage from "./pages/MatchDetailPage";
 ReactDOM.createRoot(document.getElementById("root")!).render(
   
   <React.StrictMode>
@@ -110,6 +111,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
 
             {/* Discover */}
             <Route path="/discover" element={<DiscoverPage />} />
+            <Route path="/discover/matches/:id" element={<MatchDetailPage />} />
             <Route
               path="/discover/tournaments/:tournamentId"
               element={<TournamentDetail />}

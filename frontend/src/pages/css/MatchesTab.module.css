@@ -1,0 +1,395 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@500&display=swap');
+
+.tabWrap {
+  --green-900: #0e2f24; --green-800: #123c2d; --green-700: #16513f;
+  --grass: #3fae7f; --grass-bright: #4fd897; --grass-soft: #e6f5ee;
+  --c-team: #2f5d8a; --c-team-soft: #eaf1f8;
+  --c-tournament: #c9942a; --c-tournament-soft: #fbf1dd;
+  --c-match: #b3352f; --c-match-soft: #fbeceb;
+  --danger: #c0392b; --danger-soft: #fdeeec;
+  --ink: #0e1712; --muted: #6b7a72; --faint: #b7c2bb; --line: #ece9df; --paper: #fbfbf8;
+  --font-mono: 'IBM Plex Mono', monospace;
+  --font-display: 'Inter', -apple-system, sans-serif;
+  --radius-sm: 8px; --radius-md: 12px; --radius-lg: 18px;
+
+  font-family: var(--font-display);
+  color: var(--ink);
+}
+
+.tabHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+.tabTitle {
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+.tabSub {
+  font-size: 13px;
+  color: var(--muted);
+  margin-top: 3px;
+  max-width: 48ch;
+}
+
+.createBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 11px 18px;
+  border-radius: 999px;
+  border: none;
+  background: var(--green-800);
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: filter 0.15s ease, transform 0.15s ease;
+}
+
+.createBtn:hover { filter: brightness(1.2); transform: translateY(-1px); }
+
+.msg {
+  padding: 11px 15px;
+  border-radius: var(--radius-sm);
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: 16px;
+}
+
+.emptyText { color: var(--faint); font-size: 13.5px; padding: 20px 0; }
+
+.emptyState {
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  text-align: center;
+  padding: 54px 20px;
+  border: 1.5px dashed var(--line);
+  border-radius: var(--radius-lg);
+  color: var(--faint);
+  background: var(--paper);
+}
+
+.emptyStateTitle { font-weight: 700; color: var(--ink); font-size: 14.5px; }
+.emptyStateText { font-size: 13px; max-width: 40ch; color: var(--muted); }
+
+/* ---------- match grid + card ---------- */
+
+.matchGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
+  gap: 16px;
+}
+
+.matchCard {
+  display: grid;
+  gap: 11px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--c-team);
+  border-radius: var(--radius-lg);
+  background: #ffffff;
+  box-shadow: 0 3px 12px rgba(14, 23, 18, 0.05);
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.matchCard:hover { box-shadow: 0 10px 26px rgba(14, 23, 18, 0.1); transform: translateY(-2px); }
+
+.matchCardOpen { border-left-color: var(--c-tournament); }
+
+.matchCardTop { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+
+.typePill {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 999px;
+}
+
+.typePillTeam { background: var(--c-team-soft); color: var(--c-team); }
+.typePillOpen { background: var(--c-tournament-soft); color: var(--c-tournament); }
+
+.statusPill { font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 999px; }
+.status_grass { background: var(--grass-soft); color: var(--green-800); }
+.status_team { background: var(--c-team-soft); color: var(--c-team); }
+.status_danger { background: var(--danger-soft); color: var(--danger); }
+.status_faint { background: #f1f1ec; color: var(--muted); }
+
+.matchWhen {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 13.5px; font-weight: 600; color: var(--ink);
+}
+.matchWhen svg { color: var(--c-tournament); flex-shrink: 0; }
+
+.matchPitchRow {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12.5px; color: var(--muted);
+}
+
+.matchPitchIcon {
+  display: grid; place-items: center;
+  width: 22px; height: 22px; border-radius: 7px; flex-shrink: 0;
+}
+.matchPitchIconFball { background: var(--grass-soft); color: var(--green-800); }
+.matchPitchIconBball { background: var(--c-tournament-soft); color: var(--c-tournament); }
+
+.matchDetailRow {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 10px 12px; background: var(--paper); border: 1px solid var(--line);
+  border-radius: var(--radius-md); font-size: 12.5px; flex-wrap: wrap;
+}
+
+.matchOpponent { font-weight: 700; color: var(--ink); }
+.slotsProgress { font-family: var(--font-mono); font-weight: 600; color: var(--ink); }
+.matchMoney { font-family: var(--font-mono); color: var(--muted); font-weight: 600; }
+
+.matchNotes {
+  font-size: 12.5px; color: var(--muted);
+  padding-top: 8px; border-top: 1px dashed var(--line);
+}
+
+.matchActions { display: flex; gap: 8px; margin-top: 2px; }
+
+.matchEditBtn, .matchCancelBtn {
+  flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 9px 10px; border-radius: var(--radius-sm);
+  font-size: 12.5px; font-weight: 700; cursor: pointer;
+  transition: filter 0.15s ease, opacity 0.15s ease;
+}
+
+.matchEditBtn { border: 1px solid var(--line); background: #ffffff; color: var(--ink); }
+.matchEditBtn:hover:not(:disabled) { background: var(--paper); }
+
+.matchCancelBtn { border: 1px solid rgba(192, 57, 43, 0.25); background: var(--danger-soft); color: var(--danger); }
+.matchCancelBtn:hover:not(:disabled) { filter: brightness(0.97); }
+
+.matchEditBtn:disabled, .matchCancelBtn:disabled { opacity: 0.4; cursor: default; }
+
+/* ---------- modal ---------- */
+
+.modalOverlay {
+  position: fixed; inset: 0; background: rgba(14, 23, 18, 0.55);
+  display: grid; place-items: center; padding: 20px; z-index: 60;
+}
+
+.modal {
+  width: 100%; max-width: 600px; max-height: 92vh; overflow-y: auto;
+  background: #ffffff; border-radius: var(--radius-lg);
+  box-shadow: 0 30px 70px rgba(0, 0, 0, 0.3);
+}
+
+.modalHead {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 18px 22px; border-bottom: 1px solid var(--line);
+  position: sticky; top: 0; background: #ffffff; z-index: 1;
+}
+
+.modalTitle { font-size: 17px; font-weight: 800; margin: 0; color: var(--ink); }
+
+.modalCloseBtn {
+  display: grid; place-items: center; width: 32px; height: 32px; border-radius: 9px;
+  border: none; background: var(--paper); color: var(--muted); cursor: pointer;
+}
+.modalCloseBtn:hover { background: var(--line); }
+
+.form { padding: 20px 22px 22px; display: grid; gap: 18px; }
+
+.field { display: grid; gap: 7px; }
+.fieldRow { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+@media (max-width: 480px) { .fieldRow { grid-template-columns: 1fr; } }
+
+.fieldLabel { font-size: 12.5px; font-weight: 700; color: var(--ink); }
+.fieldHint { font-size: 11.5px; color: var(--faint); }
+
+/* ---------- match-type cards (visually distinct, not a toggle) ---------- */
+
+.typeCards { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+@media (max-width: 480px) { .typeCards { grid-template-columns: 1fr; } }
+
+.typeCard {
+  display: grid; gap: 6px; text-align: left; padding: 14px;
+  border-radius: var(--radius-md); border: 1.5px solid var(--line);
+  background: #ffffff; cursor: pointer; transition: all 0.15s ease;
+}
+.typeCard:disabled { cursor: default; opacity: 0.75; }
+
+.typeCardIcon {
+  display: grid; place-items: center; width: 32px; height: 32px;
+  border-radius: 9px; background: var(--paper); color: var(--muted);
+}
+
+.typeCardTitle { font-weight: 700; font-size: 14px; color: var(--ink); }
+.typeCardDesc { font-size: 11.5px; color: var(--muted); line-height: 1.4; }
+
+.typeCardTeam.typeCardOn {
+  border-color: var(--c-team); background: var(--c-team-soft);
+}
+.typeCardTeam.typeCardOn .typeCardIcon { background: #ffffff; color: var(--c-team); }
+.typeCardTeam.typeCardOn .typeCardTitle { color: var(--c-team); }
+
+.typeCardOpen.typeCardOn {
+  border-color: var(--c-tournament); background: var(--c-tournament-soft);
+}
+.typeCardOpen.typeCardOn .typeCardIcon { background: #ffffff; color: var(--c-tournament); }
+.typeCardOpen.typeCardOn .typeCardTitle { color: var(--c-tournament); }
+
+/* ---------- inputs ---------- */
+
+.input, .select, .textarea {
+  width: 100%; padding: 10px 12px; border-radius: var(--radius-sm);
+  border: 1px solid var(--line); background: #ffffff; color: var(--ink);
+  font-size: 13.5px; font-family: var(--font-display); outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.input:focus, .select:focus, .textarea:focus {
+  border-color: var(--grass); box-shadow: 0 0 0 3px var(--grass-soft);
+}
+.textarea { resize: vertical; min-height: 64px; }
+
+.inputWithIcon {
+  display: flex; align-items: center; gap: 8px; padding: 0 12px;
+  border: 1px solid var(--line); border-radius: var(--radius-sm); background: #ffffff;
+}
+.inputWithIcon svg { color: var(--faint); flex-shrink: 0; }
+.inputWithIcon .input { border: none; padding: 10px 0; }
+.inputWithIcon .input:focus { box-shadow: none; }
+
+/* ---------- price panels (distinct per match type) ---------- */
+
+.pricePanel { border-radius: var(--radius-md); padding: 14px; display: grid; gap: 12px; }
+
+.pricePanelTeam { background: var(--c-team-soft); border: 1px solid rgba(47, 93, 138, 0.2); }
+.pricePanelOpen { background: var(--c-tournament-soft); border: 1px solid rgba(201, 148, 42, 0.25); }
+
+.pricePanelHead {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13px; font-weight: 700;
+}
+.pricePanelTeam .pricePanelHead { color: var(--c-team); }
+.pricePanelOpen .pricePanelHead { color: var(--c-tournament); }
+
+.pricePanelGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+@media (max-width: 420px) { .pricePanelGrid { grid-template-columns: 1fr; } }
+
+.priceInputWrap {
+  display: flex; align-items: center; border: 1px solid var(--line);
+  border-radius: var(--radius-sm); overflow: hidden; background: #ffffff;
+}
+.priceInput { flex: 1; border: none; padding: 10px 12px; font-family: var(--font-mono); font-size: 14px; font-weight: 600; outline: none; }
+.priceInputSuffix { padding: 0 12px; background: var(--paper); color: var(--muted); font-size: 12px; font-weight: 600; align-self: stretch; display: flex; align-items: center; }
+
+.pricePanelSplit {
+  display: flex; align-items: center; justify-content: space-between;
+  padding-top: 10px; border-top: 1px dashed rgba(14, 23, 18, 0.12);
+  font-size: 12.5px; color: var(--muted);
+}
+.pricePanelSplit b { font-family: var(--font-mono); font-size: 14px; color: var(--ink); }
+
+.formError {
+  padding: 11px 13px; border-radius: var(--radius-sm);
+  background: var(--danger-soft); color: var(--danger); font-size: 12.5px; font-weight: 600;
+}
+
+.formActions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 2px; }
+
+.cancelBtn {
+  padding: 10px 18px; border-radius: 999px; border: 1px solid var(--line);
+  background: #ffffff; color: var(--muted); font-weight: 600; font-size: 13px; cursor: pointer;
+}
+.cancelBtn:hover { background: var(--paper); }
+
+.submitBtn {
+  padding: 10px 20px; border-radius: 999px; border: none;
+  background: var(--green-800); color: #ffffff; font-weight: 700; font-size: 13px;
+  cursor: pointer; transition: filter 0.15s ease;
+}
+.submitBtn:hover:not(:disabled) { filter: brightness(1.2); }
+.submitBtn:disabled { opacity: 0.6; cursor: default; }
+
+/* ---------- pitch map field ---------- */
+
+.pitchField { display: grid; gap: 10px; }
+
+.mapBox {
+  width: 100%; height: 240px; border-radius: var(--radius-md);
+  overflow: hidden; border: 1px solid var(--line);
+}
+
+.pitchConfirm {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 14px; border-radius: var(--radius-md);
+  background: var(--grass-soft); border: 1px solid rgba(63, 174, 127, 0.3);
+}
+
+.pitchConfirmIcon {
+  display: grid; place-items: center; width: 34px; height: 34px;
+  border-radius: 10px; flex-shrink: 0;
+}
+.pitchConfirmIconFball { background: #ffffff; color: var(--green-800); }
+.pitchConfirmIconBball { background: #ffffff; color: var(--c-tournament); }
+
+.pitchConfirmInfo { flex: 1; min-width: 0; }
+.pitchConfirmName {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  font-weight: 700; font-size: 13.5px; color: var(--ink);
+}
+.pitchConfirmCheck {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 10.5px; font-weight: 700; color: var(--green-800);
+  background: #ffffff; padding: 2px 8px; border-radius: 999px;
+}
+.pitchConfirmAddress {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 11.5px; color: var(--muted); margin-top: 2px;
+}
+.pitchConfirmPrice {
+  font-family: var(--font-mono); font-weight: 700; font-size: 13px;
+  color: var(--green-800); flex-shrink: 0;
+}
+
+.pitchConfirmEmpty {
+  display: flex; align-items: center; gap: 8px;
+  padding: 12px 14px; border-radius: var(--radius-md);
+  border: 1.5px dashed var(--line); color: var(--faint); font-size: 12.5px;
+}
+
+/* ---------- leaflet marker global tweak (unscoped, needs :global) ---------- */
+
+:global(.match-pitch-marker) { background: transparent; border: none; }
+:global(.ball-marker) { transition: transform 0.15s ease; filter: drop-shadow(0 3px 5px rgba(0,0,0,0.25)); }
+:global(.ball-marker-selected) { transform: translateY(-2px) scale(1.05); filter: drop-shadow(0 5px 10px rgba(0,0,0,0.35)); }
+
+
+.matchCardConfirmed {
+  background: var(--mm-success-soft);
+  border-color: var(--mm-success);
+}
+
+.matchCardConfirmed .matchDetailRow {
+  background: #ffffff;
+}
+
+.matchVsLine {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-weight: 700;
+  color: var(--mm-text);
+}
+
+.matchVsWord {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--mm-success);
+}
