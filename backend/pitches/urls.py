@@ -23,4 +23,4 @@ urlpatterns = [
     path("admin/pitches/<str:pitch_id>/approve/", admin_approve_pitch),
     path("admin/pitches/<str:pitch_id>/delete/", admin_delete_pitch),
     path("admin/owners/<str:owner_id>/delete/", admin_delete_owner),
-]
+] 

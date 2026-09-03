@@ -13,7 +13,32 @@ import { getUnreadSummary, type ChatUnreadSummary } from "../lib/chat";
 import { me } from "../lib/auth";
 import type { SessionUser } from "../lib/session";
 
-const NAV_ITEMS = [
+// A simple inline dashboard icon so we don't need to touch Icons.tsx.
+// Swap this out for a real icon from your Icons file if you have one.
+function DashboardIcon({ width = 20, height = 20 }: { width?: number; height?: number }) {
+  return (
+    <svg width={width} height={height} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="3.5" y="3.5" width="7" height="7" rx="1.3" stroke="currentColor" strokeWidth="1.7" />
+      <rect x="13.5" y="3.5" width="7" height="4.5" rx="1.3" stroke="currentColor" strokeWidth="1.7" />
+      <rect x="13.5" y="10.5" width="7" height="10" rx="1.3" stroke="currentColor" strokeWidth="1.7" />
+      <rect x="3.5" y="13" width="7" height="7.5" rx="1.3" stroke="currentColor" strokeWidth="1.7" />
+    </svg>
+  );
+}
+
+// ---- Role → dashboard path helper -----------------------------------
+// Centralized here so AppShell and any redirect logic elsewhere agree
+// on exactly one mapping from role to dashboard route.
+export type UserRole = "ADMIN" | "OWNER" | "PLAYER";
+
+export function getDashboardPath(role?: UserRole | null): string | null {
+  if (role === "ADMIN") return "/admin/";
+  if (role === "OWNER") return "/owner/";
+  return null;
+}
+
+// Base nav items every user sees.
+const BASE_NAV_ITEMS = [
   { to: "/home", label: "Home", icon: HomeIcon, end: true },
   { to: "/teams", label: "My Teams", icon: UsersIcon },
   { to: "/app", label: "pitchs", icon: FootballPitchIcon },
@@ -91,6 +116,14 @@ export default function AppShell() {
 
   const unreadCount = notifications.filter((n) => !n.read).length;
   const unreadChatCount = chatSummary?.total_unread ?? 0;
+
+  // Role-based dashboard link. Only ADMIN and OWNER get this item, and
+  // only once we actually know the user's role (avoids a flash before
+  // `me()` resolves).
+  const dashboardPath = getDashboardPath(user?.role as UserRole | undefined);
+  const NAV_ITEMS = dashboardPath
+    ? [{ to: dashboardPath, label: "Dashboard", icon: DashboardIcon, end: false }, ...BASE_NAV_ITEMS]
+    : BASE_NAV_ITEMS;
 
   // Notification drawer: close on Escape.
   useEffect(() => {
@@ -266,4 +299,3 @@ export default function AppShell() {
     </div>
   );
 }
- 

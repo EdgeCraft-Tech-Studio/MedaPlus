@@ -144,7 +144,7 @@
   text-decoration: none;
   color: var(--ink);
   background: var(--card);
-  border: 1px solid transparent;
+  border: 1px solid rgb(202, 202, 202);
   border-radius: 14px;
   padding: 14px 16px;
   transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
@@ -178,7 +178,7 @@
 }
 
 .quickChevron {
-  color: var(--faint);
+  color: var(--green);
   transition: transform 0.15s ease, color 0.15s ease;
 }
 

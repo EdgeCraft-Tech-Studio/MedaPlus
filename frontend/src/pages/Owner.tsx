@@ -330,6 +330,77 @@ function PitchRevenueBar({ value, max }: { value: number; max: number }) {
   );
 }
 
+/* ---------------------------------------------------------------------- */
+/* Shimmer skeleton pieces                                                 */
+/* ---------------------------------------------------------------------- */
+
+function SkeletonBlock({ className }: { className: string }) {
+  return <div className={`${styles.shimmer} ${className}`} />;
+}
+
+function InsightSkeletonRows({ count = 3 }: { count?: number }) {
+  return (
+    <div className={styles.insightScrollList}>
+      {Array.from({ length: count }).map((_, i) => (
+        <div className={styles.insightRowItem} key={i}>
+          <SkeletonBlock className={styles.skelInsightName} />
+          <SkeletonBlock className={styles.skelInsightWhen} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function FreePitchesSkeleton({ count = 3 }: { count?: number }) {
+  return (
+    <div className={styles.freeList}>
+      {Array.from({ length: count }).map((_, i) => (
+        <div className={styles.freeRow} key={i}>
+          <SkeletonBlock className={styles.skelFreeName} />
+          <SkeletonBlock className={styles.skelFreeTime} />
+          <SkeletonBlock className={styles.skelFreeBtn} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function PitchCardSkeleton() {
+  return (
+    <div className={styles.pitchCard}>
+      <SkeletonBlock className={styles.skelCardImage} />
+      <div className={styles.cardBody}>
+        <div>
+          <SkeletonBlock className={styles.skelPitchName} />
+          <SkeletonBlock className={styles.skelPitchAddress} />
+        </div>
+        <div className={styles.cardStatsRow}>
+          <div className={styles.cardStat}>
+            <SkeletonBlock className={styles.skelStatIcon} />
+            <div style={{ flex: 1 }}>
+              <SkeletonBlock className={styles.skelStatValue} />
+              <SkeletonBlock className={styles.skelStatLabel} />
+            </div>
+          </div>
+          <div className={styles.cardStat}>
+            <SkeletonBlock className={styles.skelStatIcon} />
+            <div style={{ flex: 1 }}>
+              <SkeletonBlock className={styles.skelStatValue} />
+              <SkeletonBlock className={styles.skelStatLabel} />
+            </div>
+          </div>
+        </div>
+        <SkeletonBlock className={styles.skelMetaGrid} />
+        <div className={styles.tagRow}>
+          {Array.from({ length: 3 }).map((_, i) => (
+            <SkeletonBlock key={i} className={styles.skelTag} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Owner() {
   const navigate = useNavigate();
 
@@ -403,7 +474,8 @@ export default function Owner() {
     return (stats?.pitch_stats || []).filter((s) => !s.is_approved);
   }, [stats]);
 
-  const todaySchedule = stats?.today_schedule || [];
+  const todayBookings = stats?.today_bookings || [];
+  const todayFree = stats?.today_free || [];
 
   const filteredPitches = useMemo(() => {
     return pitches.filter(
@@ -472,9 +544,13 @@ export default function Owner() {
                   <Icon name="cash" size={20} />
                 </div>
                 <div>
-                  <div className={styles.scoreboardPrimaryValue}>
-                    {loading ? "—" : formatBirr(stats?.total_revenue)}
-                  </div>
+                  {loading ? (
+                    <SkeletonBlock className={styles.skelHeroValue} />
+                  ) : (
+                    <div className={styles.scoreboardPrimaryValue}>
+                      {formatBirr(stats?.total_revenue)}
+                    </div>
+                  )}
                   <div className={styles.scoreboardPrimaryLabel}>
                     Total earnings
                   </div>
@@ -487,18 +563,26 @@ export default function Owner() {
                 <div className={styles.scoreboardStat}>
                   <Icon name="calendarCheck" size={15} />
                   <div>
-                    <div className={styles.scoreboardStatValue}>
-                      {loading ? "—" : stats?.total_bookings ?? 0}
-                    </div>
+                    {loading ? (
+                      <SkeletonBlock className={styles.skelHeroStatValue} />
+                    ) : (
+                      <div className={styles.scoreboardStatValue}>
+                        {stats?.total_bookings ?? 0}
+                      </div>
+                    )}
                     <div className={styles.scoreboardStatLabel}>Bookings</div>
                   </div>
                 </div>
                 <div className={styles.scoreboardStat}>
                   <Icon name="checkCircle" size={15} />
                   <div>
-                    <div className={styles.scoreboardStatValue}>
-                      {loading ? "—" : stats?.active_pitches ?? 0}
-                    </div>
+                    {loading ? (
+                      <SkeletonBlock className={styles.skelHeroStatValue} />
+                    ) : (
+                      <div className={styles.scoreboardStatValue}>
+                        {stats?.active_pitches ?? 0}
+                      </div>
+                    )}
                     <div className={styles.scoreboardStatLabel}>
                       Active pitches
                     </div>
@@ -507,9 +591,13 @@ export default function Owner() {
                 <div className={styles.scoreboardStat}>
                   <Icon name="hourglass" size={15} />
                   <div>
-                    <div className={styles.scoreboardStatValueWarn}>
-                      {loading ? "—" : stats?.pending_pitches ?? 0}
-                    </div>
+                    {loading ? (
+                      <SkeletonBlock className={styles.skelHeroStatValue} />
+                    ) : (
+                      <div className={styles.scoreboardStatValueWarn}>
+                        {stats?.pending_pitches ?? 0}
+                      </div>
+                    )}
                     <div className={styles.scoreboardStatLabel}>
                       Pending approval
                     </div>
@@ -519,6 +607,43 @@ export default function Owner() {
             </div>
           </div>
 
+          {/* ---------- Today's free pitches — full width, own row ---------- */}
+          <div className={styles.freeCard}>
+            <div className={styles.insightHead}>
+              <div className={`${styles.insightIconWrap} ${styles.insightIconGreen}`}>
+                <Icon name="checkCircle" size={16} />
+              </div>
+              <div className={styles.insightTitle}>Today's free pitches</div>
+            </div>
+            {loading ? (
+              <FreePitchesSkeleton count={3} />
+            ) : todayFree.length === 0 ? (
+              <div className={styles.insightEmpty}>
+                No open time left today across your pitches.
+              </div>
+            ) : (
+              <div className={styles.freeList}>
+                {todayFree.map((f, i) => (
+                  <div key={`${f.pitch_id}-${i}`} className={styles.freeRow}>
+                    <span className={styles.freeRowName}>{f.pitch_name}</span>
+                    <span className={styles.freeRowTime}>
+                      <Icon name="clock" size={12} />
+                      {f.time_label}
+                    </span>
+                    <button
+                      type="button"
+                      className={styles.freeBookBtn}
+                      onClick={() => navigate(`/app/pitches/${f.pitch_id}`)}
+                    >
+                      <Icon name="calendarCheck" size={13} />
+                      Book
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           {/* ---------- Insight cards — sit below the hero, never overlapping it ---------- */}
           <div className={styles.insightRow}>
             <div className={styles.insightCard}>
@@ -526,17 +651,20 @@ export default function Owner() {
                 <div className={`${styles.insightIconWrap} ${styles.insightIconBlue}`}>
                   <Icon name="calendarCheck" size={16} />
                 </div>
-                <div className={styles.insightTitle}>Today's schedule</div>
+                <div className={styles.insightTitle}>Today's bookings</div>
               </div>
               {loading ? (
-                <div className={styles.insightEmpty}>Loading...</div>
-              ) : todaySchedule.length === 0 ? (
+                <InsightSkeletonRows count={3} />
+              ) : todayBookings.length === 0 ? (
                 <div className={styles.insightEmpty}>No bookings today</div>
               ) : (
                 <ul className={styles.insightScrollList}>
-                  {todaySchedule.map((s, i) => (
+                  {todayBookings.map((s, i) => (
                     <li key={`${s.pitch_id}-${i}`} className={styles.insightRowItem}>
-                      <span className={styles.insightItemName}>{s.pitch_name}</span>
+                      <span className={styles.insightItemName}>
+                        {s.pitch_name}
+                        {s.booked_by ? ` · ${s.booked_by}` : ""}
+                      </span>
                       <span className={styles.insightItemWhen}>{s.time_label}</span>
                     </li>
                   ))}
@@ -552,7 +680,7 @@ export default function Owner() {
                 <div className={styles.insightTitle}>Needs attention</div>
               </div>
               {loading ? (
-                <div className={styles.insightEmpty}>Loading...</div>
+                <InsightSkeletonRows count={2} />
               ) : pendingPitches.length === 0 ? (
                 <div className={styles.insightEmpty}>
                   All your pitches are approved
@@ -577,7 +705,7 @@ export default function Owner() {
                 <div className={styles.insightTitle}>Top earners</div>
               </div>
               {loading ? (
-                <div className={styles.insightEmpty}>Loading...</div>
+                <InsightSkeletonRows count={3} />
               ) : earners.length === 0 ? (
                 <div className={styles.insightEmpty}>No earnings yet</div>
               ) : (
@@ -764,8 +892,10 @@ export default function Owner() {
             </div>
 
             {loading ? (
-              <div className={styles.loadingSlot}>
-                <p className={styles.emptyText}>Loading pitches...</p>
+              <div className={styles.cardGrid} aria-busy="true" aria-live="polite">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <PitchCardSkeleton key={i} />
+                ))}
               </div>
             ) : filteredPitches.length === 0 ? (
               <p className={styles.emptyText}>No pitches yet.</p>
@@ -857,7 +987,7 @@ export default function Owner() {
                 })}
               </div>
             )}
-          </div>
+          </div> 
         </div>
       </div>
     </div>

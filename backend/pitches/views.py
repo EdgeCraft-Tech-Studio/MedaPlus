@@ -1,5 +1,5 @@
 from datetime import datetime, time, timedelta
-
+import json
 from django.contrib.auth import get_user_model
 from django.db.models.aggregates import Sum
 from django.utils import timezone
@@ -89,7 +89,7 @@ def _build_day_slots(pitch: Pitch, day_date):
         start_dt__gte=day_start,
         start_dt__lt=day_end,
     ).order_by("start_dt")
-
+  
     slot_map = {}
     for s in existing_slots:
         slot_map[s.start_dt] = s
@@ -143,6 +143,111 @@ def _build_monthly_weeks(pitch: Pitch):
             "days": week_days,
         })
     return weeks
+
+
+def _merge_contiguous_bookings(bookings):
+    """
+    Merge bookings for the same pitch that run back-to-back into a single
+    displayed range (e.g. 8:00-10:00 + 10:00-12:00 -> 8:00-12:00), while
+    keeping bookings that have a gap between them separate
+    (e.g. 8:00-10:00 and 11:00-12:00 stay as two entries).
+
+    `bookings` must already be sorted by start_dt and belong to one pitch.
+    Each merged group also collects the distinct "booked_by" names involved.
+    """
+    merged = []
+    for b in bookings:
+        booked_by = getattr(b.player, "username", "") if b.player_id else ""
+        if merged and b.start_dt <= merged[-1]["end_dt"]:
+            # Contiguous (or overlapping) with the previous booking on this pitch.
+            last = merged[-1]
+            if b.end_dt > last["end_dt"]:
+                last["end_dt"] = b.end_dt
+            if booked_by and booked_by not in last["booked_by_list"]:
+                last["booked_by_list"].append(booked_by)
+        else:
+            merged.append({
+                "start_dt": b.start_dt,
+                "end_dt": b.end_dt,
+                "booked_by_list": [booked_by] if booked_by else [],
+            })
+    return merged
+
+
+
+
+
+
+def _create_initial_slots(pitch: Pitch, raw_payload: str, user):
+    """
+    Consumes the frontend's "initial_slots" JSON:
+      [{"date": "2026-09-05", "ranges": [{"start": "08:00", "end": "10:00"}, ...]}, ...]
+
+    Each range becomes one Slot per hour it spans, marked as already booked
+    (this represents bookings the pitch already had before the owner
+    registered it on the platform — not open availability).
+
+    NOTE: this assumes bookings.models.SlotStatus has a "BOOKED" member.
+    Double check the exact name in your SlotStatus choices and adjust the
+    line below if it's spelled differently (e.g. RESERVED / UNAVAILABLE).
+    """
+    if not raw_payload:
+        return []
+
+    try:
+        entries = json.loads(raw_payload)
+    except (TypeError, ValueError):
+        raise ValueError("initial_slots must be valid JSON.")
+
+    if not isinstance(entries, list):
+        raise ValueError("initial_slots must be a JSON array.")
+
+    tz = timezone.get_current_timezone()
+    created = []
+
+    for entry in entries:
+        date_str = (entry or {}).get("date")
+        ranges = (entry or {}).get("ranges") or []
+        if not date_str or not ranges:
+            continue
+
+        try:
+            day = datetime.strptime(date_str, "%Y-%m-%d").date()
+        except ValueError:
+            raise ValueError(f"Invalid date '{date_str}' in initial_slots.")
+
+        for r in ranges:
+            start_str = (r or {}).get("start")
+            end_str = (r or {}).get("end")
+            if not start_str or not end_str:
+                continue
+
+            try:
+                start_hour = int(start_str.split(":")[0])
+                end_hour = int(end_str.split(":")[0])
+            except (ValueError, IndexError):
+                raise ValueError(f"Invalid time range '{start_str}'-'{end_str}' on {date_str}.")
+
+            if end_hour <= start_hour:
+                raise ValueError(f"End time must be after start time on {date_str}.")
+
+            for hour in range(start_hour, end_hour):
+                start_naive = datetime.combine(day, time(hour=hour))
+                end_naive = start_naive + timedelta(hours=1)
+                start_dt = timezone.make_aware(start_naive, tz)
+                end_dt = timezone.make_aware(end_naive, tz)
+
+                slot = Slot.objects.create(
+                    pitch=pitch,
+                    start_dt=start_dt,
+                    end_dt=end_dt,
+                    status=SlotStatus.BOOKED,  # <-- confirm this matches your enum
+                    updated_by=user,
+                )
+                created.append(slot)
+
+    return created
+
 
 @api_view(["GET"])
 @permission_classes([AllowAny])
@@ -284,25 +389,12 @@ def pitches_list_create(request):
     for uploaded_file in images:
         PitchImage.objects.create(pitch=pitch, image=uploaded_file)
 
-    slot_date = data.get("slot_date") or timezone.localdate()
-    slot_hours = data.get("slot_hours") or []
-    tz = timezone.get_current_timezone()
-
-    for raw_h in slot_hours:
-        h = int(raw_h)
-        start_naive = datetime.combine(slot_date, time(hour=h, minute=0))
-        end_naive = start_naive + timedelta(hours=1)
-
-        start_dt = timezone.make_aware(start_naive, tz)
-        end_dt = timezone.make_aware(end_naive, tz)
-
-        Slot.objects.create(
-            pitch=pitch,
-            start_dt=start_dt,
-            end_dt=end_dt,
-            status=SlotStatus.AVAILABLE,
-            updated_by=u,
-        )
+        raw_initial_slots = request.data.get("initial_slots")
+    if raw_initial_slots:
+        try:
+            _create_initial_slots(pitch, raw_initial_slots, u)
+        except ValueError as exc:
+            return Response({"initial_slots": [str(exc)]}, status=status.HTTP_400_BAD_REQUEST)
 
     return Response(
         {"pitch": PitchSerializer(pitch, context={"request": request}).data},
@@ -442,6 +534,15 @@ def owner_dashboard_stats(request):
     pending_count = 0
     pitch_stats = []
 
+    tz = timezone.get_current_timezone()
+    today = timezone.localdate()
+    day_start = timezone.make_aware(datetime.combine(today, time.min), tz)
+    day_end = day_start + timedelta(days=1)
+    now = timezone.localtime()
+
+    today_bookings = []
+    today_free = []
+
     for p in pitches:
         bookings_qs = Booking.objects.filter(pitch=p, status=BookingStatus.CONFIRMED)
         p_revenue = bookings_qs.aggregate(total=Sum("total_price"))["total"] or Decimal("0")
@@ -464,6 +565,65 @@ def owner_dashboard_stats(request):
             "is_active": p.is_active,
         })
 
+        # Only bookable pitches make sense for "today's bookings" / "free" —
+        # an unapproved or inactive pitch was never actually open for booking.
+        if not (p.is_approved and p.is_active):
+            continue
+
+        # ---- Today's bookings for this pitch, merged when back-to-back ----
+        todays_bookings_qs = Booking.objects.filter(
+            pitch=p,
+            status=BookingStatus.CONFIRMED,
+            start_dt__lt=day_end,
+            end_dt__gt=day_start,
+        ).order_by("start_dt")
+
+        merged = _merge_contiguous_bookings(list(todays_bookings_qs))
+
+        for m in merged:
+            start_local = timezone.localtime(m["start_dt"])
+            end_local = timezone.localtime(m["end_dt"])
+            today_bookings.append({
+                "pitch_id": str(p.id),
+                "pitch_name": p.name,
+                "time_label": f"{start_local.strftime('%I:%M %p')} - {end_local.strftime('%I:%M %p')}",
+                "start_iso": m["start_dt"].isoformat(),
+                "end_iso": m["end_dt"].isoformat(),
+                "booked_by": ", ".join(m["booked_by_list"]) if m["booked_by_list"] else "",
+            })
+
+        # ---- Free windows for this pitch today, inside opening hours ----
+        # Skip pitches whose closing time has already passed today.
+        open_dt = timezone.make_aware(datetime.combine(today, p.opening_time), tz)
+        close_dt = timezone.make_aware(datetime.combine(today, p.closing_time), tz)
+
+        if open_dt < close_dt and close_dt > now:
+            cursor = max(open_dt, now)
+            for m in merged:
+                b_start = max(m["start_dt"], open_dt)
+                b_end = min(m["end_dt"], close_dt)
+                if b_start > cursor:
+                    today_free.append({
+                        "pitch_id": str(p.id),
+                        "pitch_name": p.name,
+                        "time_label": f"{timezone.localtime(cursor).strftime('%I:%M %p')} - {timezone.localtime(b_start).strftime('%I:%M %p')}",
+                        "start_iso": cursor.isoformat(),
+                        "end_iso": b_start.isoformat(),
+                    })
+                if b_end > cursor:
+                    cursor = b_end
+            if cursor < close_dt:
+                today_free.append({
+                    "pitch_id": str(p.id),
+                    "pitch_name": p.name,
+                    "time_label": f"{timezone.localtime(cursor).strftime('%I:%M %p')} - {timezone.localtime(close_dt).strftime('%I:%M %p')}",
+                    "start_iso": cursor.isoformat(),
+                    "end_iso": close_dt.isoformat(),
+                })
+
+    today_bookings.sort(key=lambda x: x["start_iso"])
+    today_free.sort(key=lambda x: x["start_iso"])
+
     return Response({
         "total_pitches": pitches.count(),
         "active_pitches": active_count,
@@ -471,6 +631,8 @@ def owner_dashboard_stats(request):
         "total_revenue": str(total_revenue),
         "total_bookings": total_bookings,
         "pitch_stats": pitch_stats,
+        "today_bookings": today_bookings,
+        "today_free": today_free,
     })
 
 

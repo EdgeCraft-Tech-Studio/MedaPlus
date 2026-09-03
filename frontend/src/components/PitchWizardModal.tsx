@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import Modal from "./Modal";
 import { MapContainer, TileLayer, Marker, useMapEvents } from "react-leaflet";
 import styles from "../pages/css/PitchWizardModal.module.css";
-import { showToast } from "../pages/Toast";
 import type { SportType } from "../lib/pitches";
 
 type OwnerOption = {
@@ -33,8 +31,6 @@ type InitialPitchData = {
   has_parking?: boolean;
   has_lighting?: boolean;
   other_services?: string;
-  // The pitch's already-uploaded photos, each tagged with its PitchImage id
-  // so we can tell the backend exactly which one to delete on edit.
   images?: { id: string; url: string }[];
 };
 
@@ -50,10 +46,6 @@ type Props = {
 
 type StepNum = 1 | 2 | 3 | 4;
 
-// "new" = a File the user just picked, not uploaded yet (gets sent on submit).
-// "existing" = a photo that's already saved on the pitch (edit mode only).
-// imageId is the PitchImage.id on the server - if the user removes one of
-// these, we record its imageId so the backend can delete just that row.
 type ImageItem =
   | { id: string; kind: "new"; file: File; url: string }
   | { id: string; kind: "existing"; imageId: string; url: string };
@@ -64,13 +56,40 @@ type PersistedImage = {
   dataUrl: string;
 };
 
+type TimeRange = { id: string; start: string; end: string };
+type SlotDateEntry = { id: string; date: string; ranges: TimeRange[] };
+
+function newRange(start = "08:00", end = "10:00"): TimeRange {
+  return { id: Math.random().toString(36).slice(2), start, end };
+}
+function newDateEntry(): SlotDateEntry {
+  return { id: Math.random().toString(36).slice(2), date: "", ranges: [newRange()] };
+}
+
+function meaningfulSlotEntries(entries: SlotDateEntry[]): SlotDateEntry[] {
+  return entries
+    .map((e) => ({
+      ...e,
+      ranges: e.ranges.filter((r) => r.start && r.end),
+    }))
+    .filter((e) => e.date && e.ranges.length > 0);
+}
+
+function serializeSlots(entries: SlotDateEntry[]): string {
+  const trimmed = meaningfulSlotEntries(entries).map((e) => ({
+    date: e.date,
+    ranges: e.ranges.map((r) => ({ start: r.start, end: r.end })),
+  }));
+  return JSON.stringify(trimmed);
+}
+
 type DraftShape = {
   savedAt: number;
   step: StepNum;
   maxStepReached: StepNum;
   ownerId: string;
   name: string;
-  sportType: SportType; 
+  sportType: SportType;
   address: string;
   openingTime: string;
   closingTime: string;
@@ -86,19 +105,16 @@ type DraftShape = {
   parking: boolean;
   lighting: boolean;
   services: string;
-  slotDate: string;
-  slotHours: string;
+  slotEntries: SlotDateEntry[];
   lat: number;
   lng: number;
   images: PersistedImage[];
-  // ids of existing (already-saved) photos the user removed while editing
   removedImageIds: string[];
 };
 
-// Plain-value snapshot of every field a draft could hold, used to detect
-// whether the current form actually differs from a blank/untouched one.
-type FieldSnapshot = Omit<DraftShape, "savedAt" | "step" | "maxStepReached" | "images"> & {
+type FieldSnapshot = Omit<DraftShape, "savedAt" | "step" | "maxStepReached" | "images" | "slotEntries"> & {
   newImageCount: number;
+  slotsSignature: string;
 };
 
 const ADDIS_ABABA = { lat: 8.9806, lng: 38.7578 };
@@ -119,17 +135,21 @@ function draftKey(mode: "create" | "edit", initialData?: InitialPitchData | null
   return `pitchWizardDraft:${mode}:${initialData?.id ?? "new"}`;
 }
 
-// The "nothing has actually changed yet" baseline for the current mode -
-// used to decide whether a draft is worth saving/restoring at all.
 function buildBaseline(
   mode: "create" | "edit",
   data?: InitialPitchData | null
 ): FieldSnapshot {
+  const shared = {
+    slotsSignature: "[]",
+    newImageCount: 0,
+    removedImageIds: [] as string[],
+  };
+
   if (mode === "edit") {
     return {
       ownerId: data?.owner_id || "",
       name: data?.name || "",
-      sportType: data?.sport_type ?? "FOOTBALL", 
+      sportType: data?.sport_type ?? "FOOTBALL",
       address: data?.address || "",
       openingTime: normalizeTime(data?.opening_time) || "08:00",
       closingTime: normalizeTime(data?.closing_time) || "22:00",
@@ -145,19 +165,16 @@ function buildBaseline(
       parking: data?.has_parking ?? false,
       lighting: data?.has_lighting ?? false,
       services: data?.other_services || "",
-      slotDate: "",
-      slotHours: "8,9,10,11",
       lat: data?.latitude ?? ADDIS_ABABA.lat,
       lng: data?.longitude ?? ADDIS_ABABA.lng,
-      removedImageIds: [],
-      newImageCount: 0,
+      ...shared,
     };
   }
 
   return {
     ownerId: "",
     name: "",
-    sportType: "FOOTBALL", 
+    sportType: "FOOTBALL",
     address: "",
     openingTime: "08:00",
     closingTime: "22:00",
@@ -173,17 +190,12 @@ function buildBaseline(
     parking: false,
     lighting: false,
     services: "",
-    slotDate: "",
-    slotHours: "8,9,10,11",
     lat: ADDIS_ABABA.lat,
     lng: ADDIS_ABABA.lng,
-    removedImageIds: [],
-    newImageCount: 0,
+    ...shared,
   };
 }
 
-// True if `snapshot` differs from the untouched baseline in any way that
-// matters - i.e. there's actually something worth restoring or clearing.
 function isMeaningfulSnapshot(snapshot: FieldSnapshot, baseline: FieldSnapshot) {
   return (
     snapshot.ownerId !== baseline.ownerId ||
@@ -204,18 +216,14 @@ function isMeaningfulSnapshot(snapshot: FieldSnapshot, baseline: FieldSnapshot) 
     snapshot.parking !== baseline.parking ||
     snapshot.lighting !== baseline.lighting ||
     snapshot.services !== baseline.services ||
-    snapshot.slotDate !== baseline.slotDate ||
-    snapshot.slotHours !== baseline.slotHours ||
     snapshot.lat !== baseline.lat ||
     snapshot.lng !== baseline.lng ||
     snapshot.removedImageIds.length > 0 ||
-    snapshot.newImageCount > 0
+    snapshot.newImageCount > 0 ||
+    snapshot.slotsSignature !== baseline.slotsSignature
   );
 }
 
-// Turns the pitch's already-saved photos into displayable ImageItems,
-// optionally excluding ones the user already marked for removal (used when
-// restoring a draft so a previously-removed photo doesn't reappear).
 function buildExistingImages(
   data?: InitialPitchData | null,
   excludeIds: string[] = []
@@ -252,6 +260,44 @@ async function dataUrlToFile(persisted: PersistedImage): Promise<ImageItem> {
   };
 }
 
+/**
+ * Returns ONE short place name (e.g. "Bole"), not a full comma-separated
+ * address string. Nominatim's `display_name` is the full formatted
+ * address on purpose — reading it directly is what produced the
+ * "Bole, Addis Ababa, Addis Ababa, Ethiopia" style output. Instead this
+ * reads the structured `address` breakdown (addressdetails=1) and picks
+ * the single most locally-meaningful component, falling back down the
+ * chain toward broader area names only if nothing granular exists.
+ */
+async function reverseGeocode(lat: number, lng: number): Promise<string | null> {
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=17&addressdetails=1`,
+      { headers: { Accept: "application/json" } }
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    const a = data?.address;
+    if (!a) {
+      const first = data?.display_name?.split(",")[0]?.trim();
+      return first || null;
+    }
+    return (
+      a.neighbourhood ||
+      a.suburb ||
+      a.quarter ||
+      a.road ||
+      a.city_district ||
+      a.town ||
+      a.village ||
+      a.city ||
+      null
+    );
+  } catch {
+    return null;
+  }
+}
+
 function LocationPicker({
   lat,
   lng,
@@ -282,7 +328,7 @@ function LocationPicker({
   );
 }
 
-/* ---------- step-rail icons ---------- */
+/* ---------- icons ---------- */
 
 function InfoIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
@@ -292,7 +338,6 @@ function InfoIcon(props: React.SVGProps<SVGSVGElement>) {
     </svg>
   );
 }
-
 function TagIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" {...props}>
@@ -301,7 +346,6 @@ function TagIcon(props: React.SVGProps<SVGSVGElement>) {
     </svg>
   );
 }
-
 function SparkleIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" {...props}>
@@ -309,7 +353,6 @@ function SparkleIcon(props: React.SVGProps<SVGSVGElement>) {
     </svg>
   );
 }
-
 function PinIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" {...props}>
@@ -318,7 +361,6 @@ function PinIcon(props: React.SVGProps<SVGSVGElement>) {
     </svg>
   );
 }
-
 function CheckIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" {...props}>
@@ -326,12 +368,40 @@ function CheckIcon(props: React.SVGProps<SVGSVGElement>) {
     </svg>
   );
 }
+function PlusIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" {...props}>
+      <path d="M12 5v14M5 12h14" strokeLinecap="round" />
+    </svg>
+  );
+}
+function TrashIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" {...props}>
+      <path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function PhotoIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" {...props}>
+      <path d="M4 16.5V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10.5" strokeLinecap="round" />
+      <path d="M4 17l4.5-4.5a2 2 0 0 1 2.8 0L15 16l1.7-1.7a2 2 0 0 1 2.8 0L21 16.5" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="8.5" cy="8.5" r="1.5" />
+      <path d="M3 19h18" strokeLinecap="round" />
+    </svg>
+  );
+}
 
-const STEP_META: Array<{ num: StepNum; label: string; hint: string; Icon: (p: React.SVGProps<SVGSVGElement>) => React.ReactElement }> = [
-  { num: 1, label: "Basics", hint: "Name, hours & photos", Icon: InfoIcon },
-  { num: 2, label: "Pricing", hint: "Rates & availability", Icon: TagIcon },
-  { num: 3, label: "Amenities", hint: "Facilities & extras", Icon: SparkleIcon },
-  { num: 4, label: "Location", hint: "Pin it on the map", Icon: PinIcon },
+const STEP_META: Array<{
+  num: StepNum;
+  label: string;
+  Icon: (p: React.SVGProps<SVGSVGElement>) => React.ReactElement;
+}> = [
+  { num: 1, label: "Basics", Icon: InfoIcon },
+  { num: 2, label: "Pricing", Icon: TagIcon },
+  { num: 3, label: "Amenities", Icon: SparkleIcon },
+  { num: 4, label: "Location", Icon: PinIcon },
 ];
 
 export default function PitchWizardModal({
@@ -372,12 +442,11 @@ export default function PitchWizardModal({
   const [lighting, setLighting] = useState(false);
   const [services, setServices] = useState("");
 
-  const [slotDate, setSlotDate] = useState("");
-  const [slotHours, setSlotHours] = useState("8,9,10,11");
+  const [slotEntries, setSlotEntries] = useState<SlotDateEntry[]>([newDateEntry()]);
+  const [geocoding, setGeocoding] = useState(false);
+  const [addressTouchedManually, setAddressTouchedManually] = useState(false);
 
   const [images, setImages] = useState<ImageItem[]>([]);
-  // ids of existing (already-saved) photos the user removed - sent to the
-  // backend on save so it deletes exactly those rows and nothing else.
   const [removedImageIds, setRemovedImageIds] = useState<string[]>([]);
   const [lightboxId, setLightboxId] = useState<string | null>(null);
 
@@ -387,6 +456,8 @@ export default function PitchWizardModal({
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const skipNextSave = useRef(false);
   const objectUrlsRef = useRef<string[]>([]);
+  const geocodeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const geocodePromiseRef = useRef<Promise<void> | null>(null);
 
   const approvedOwners = useMemo(() => {
     return owners.filter((o) => o.is_approved !== false);
@@ -405,8 +476,9 @@ export default function PitchWizardModal({
     setDraftRestored(false);
     setOwnerId("");
     setName("");
-    setSportType("FOOTBALL"); 
+    setSportType("FOOTBALL");
     setAddress("");
+    setAddressTouchedManually(false);
     setOpeningTime("08:00");
     setClosingTime("22:00");
     setHourly("0");
@@ -421,8 +493,7 @@ export default function PitchWizardModal({
     setParking(false);
     setLighting(false);
     setServices("");
-    setSlotDate("");
-    setSlotHours("8,9,10,11");
+    setSlotEntries([newDateEntry()]);
     revokeAllPreviews();
     setImages([]);
     setRemovedImageIds([]);
@@ -440,6 +511,7 @@ export default function PitchWizardModal({
     setName(data?.name || "");
     setSportType(data?.sport_type ?? "FOOTBALL");
     setAddress(data?.address || "");
+    setAddressTouchedManually(Boolean(data?.address));
     setOpeningTime(normalizeTime(data?.opening_time) || "08:00");
     setClosingTime(normalizeTime(data?.closing_time) || "22:00");
     setHourly(data?.hourly_price ?? "0");
@@ -454,10 +526,8 @@ export default function PitchWizardModal({
     setParking(data?.has_parking ?? false);
     setLighting(data?.has_lighting ?? false);
     setServices(data?.other_services || "");
-    setSlotDate("");
-    setSlotHours("8,9,10,11");
+    setSlotEntries([newDateEntry()]);
     revokeAllPreviews();
-    // Show the pitch's already-saved photos so edit mode isn't blank.
     setImages(buildExistingImages(data));
     setRemovedImageIds([]);
     setLat(data?.latitude ?? ADDIS_ABABA.lat);
@@ -470,8 +540,9 @@ export default function PitchWizardModal({
     setMaxStepReached(draft.maxStepReached ?? draft.step ?? 1);
     setOwnerId(draft.ownerId ?? "");
     setName(draft.name ?? "");
-    setSportType(draft.sportType ?? "FOOTBALL"); 
+    setSportType(draft.sportType ?? "FOOTBALL");
     setAddress(draft.address ?? "");
+    setAddressTouchedManually(Boolean(draft.address));
     setOpeningTime(draft.openingTime ?? "08:00");
     setClosingTime(draft.closingTime ?? "22:00");
     setHourly(draft.hourly ?? "0");
@@ -486,8 +557,9 @@ export default function PitchWizardModal({
     setParking(draft.parking ?? false);
     setLighting(draft.lighting ?? false);
     setServices(draft.services ?? "");
-    setSlotDate(draft.slotDate ?? "");
-    setSlotHours(draft.slotHours ?? "8,9,10,11");
+    setSlotEntries(
+      draft.slotEntries && draft.slotEntries.length > 0 ? draft.slotEntries : [newDateEntry()]
+    );
     setLat(draft.lat ?? ADDIS_ABABA.lat);
     setLng(draft.lng ?? ADDIS_ABABA.lng);
     setRemovedImageIds(draft.removedImageIds ?? []);
@@ -498,10 +570,8 @@ export default function PitchWizardModal({
     setImages(restoredImages);
   }
 
-  // Load either a saved draft or the base data whenever the modal opens.
   useEffect(() => {
     if (!open) return;
-
     let cancelled = false;
 
     async function load() {
@@ -520,7 +590,7 @@ export default function PitchWizardModal({
           const snapshot: FieldSnapshot = {
             ownerId: draft.ownerId ?? "",
             name: draft.name ?? "",
-            sportType: draft.sportType ?? "FOOTBALL", 
+            sportType: draft.sportType ?? "FOOTBALL",
             address: draft.address ?? "",
             openingTime: draft.openingTime ?? "08:00",
             closingTime: draft.closingTime ?? "22:00",
@@ -536,41 +606,28 @@ export default function PitchWizardModal({
             parking: draft.parking ?? false,
             lighting: draft.lighting ?? false,
             services: draft.services ?? "",
-            slotDate: draft.slotDate ?? "",
-            slotHours: draft.slotHours ?? "8,9,10,11",
             lat: draft.lat ?? ADDIS_ABABA.lat,
             lng: draft.lng ?? ADDIS_ABABA.lng,
             removedImageIds: draft.removedImageIds ?? [],
             newImageCount: (draft.images || []).length,
+            slotsSignature: serializeSlots(draft.slotEntries ?? []),
           };
 
-          // A stale/blank draft (e.g. saved from a modal that was opened
-          // and closed without any real input) should never trigger a
-          // restore - that's what caused the "restored" text with an
-          // empty form. Only restore when something actually changed.
           if (!isMeaningfulSnapshot(snapshot, baseline)) {
             try {
               localStorage.removeItem(key);
             } catch {
               // ignore
             }
-            if (mode === "edit") {
-              applyInitialData(initialData);
-            } else {
-              applyCreateDefaults();
-            }
+            if (mode === "edit") applyInitialData(initialData);
+            else applyCreateDefaults();
             return;
           }
 
           const restoredNewImages = await Promise.all(
             (draft.images || []).map((img) => dataUrlToFile(img))
           );
-          // The pitch's existing photos always come from the live pitch data,
-          // not from the draft, minus anything the draft says was removed.
-          const existingImages = buildExistingImages(
-            initialData,
-            draft.removedImageIds || []
-          );
+          const existingImages = buildExistingImages(initialData, draft.removedImageIds || []);
           if (!cancelled) {
             applyDraft(draft, [...existingImages, ...restoredNewImages]);
             setDraftRestored(true);
@@ -581,32 +638,23 @@ export default function PitchWizardModal({
         }
       }
 
-      if (mode === "edit") {
-        applyInitialData(initialData);
-      } else {
-        applyCreateDefaults();
-      }
+      if (mode === "edit") applyInitialData(initialData);
+      else applyCreateDefaults();
     }
 
     load();
-
     return () => {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, mode, initialData]);
 
-  // Autosave the in-progress draft (debounced) so a refresh never loses input.
-  // Only ever writes when the form actually differs from a blank one, and
-  // cleans up any now-pointless draft the moment the user reverts to blank.
   useEffect(() => {
     if (!open) return;
-
     if (skipNextSave.current) {
       skipNextSave.current = false;
       return;
     }
-
     if (saveTimer.current) clearTimeout(saveTimer.current);
 
     saveTimer.current = setTimeout(async () => {
@@ -635,12 +683,11 @@ export default function PitchWizardModal({
         parking,
         lighting,
         services,
-        slotDate,
-        slotHours,
         lat,
         lng,
         removedImageIds,
         newImageCount: newImages.length,
+        slotsSignature: serializeSlots(slotEntries),
       };
 
       if (!isMeaningfulSnapshot(snapshot, baseline)) {
@@ -683,8 +730,7 @@ export default function PitchWizardModal({
           parking,
           lighting,
           services,
-          slotDate,
-          slotHours,
+          slotEntries,
           lat,
           lng,
           images: persistedImages,
@@ -694,12 +740,10 @@ export default function PitchWizardModal({
         try {
           localStorage.setItem(key, JSON.stringify(draft));
         } catch {
-          // Likely quota exceeded because of large images - retry without images
-          // so text fields are still protected against refresh.
           try {
             localStorage.setItem(key, JSON.stringify({ ...draft, images: [] }));
           } catch {
-            // give up silently, nothing more we can do
+            // give up silently
           }
         }
       } catch {
@@ -717,7 +761,7 @@ export default function PitchWizardModal({
     maxStepReached,
     ownerId,
     name,
-    sportType, 
+    sportType,
     address,
     openingTime,
     closingTime,
@@ -733,8 +777,7 @@ export default function PitchWizardModal({
     parking,
     lighting,
     services,
-    slotDate,
-    slotHours,
+    slotEntries,
     lat,
     lng,
     images,
@@ -746,6 +789,21 @@ export default function PitchWizardModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    if (!open) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") handleClose();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener("keydown", onKey);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
   function clearDraft() {
     try {
       localStorage.removeItem(draftKey(mode, initialData));
@@ -756,21 +814,15 @@ export default function PitchWizardModal({
 
   function handleClose() {
     onClose();
-    if (mode === "edit") {
-      applyInitialData(initialData);
-    } else {
-      applyCreateDefaults();
-    }
+    if (mode === "edit") applyInitialData(initialData);
+    else applyCreateDefaults();
   }
 
   function discardDraft() {
     clearDraft();
     setDraftRestored(false);
-    if (mode === "edit") {
-      applyInitialData(initialData);
-    } else {
-      applyCreateDefaults();
-    }
+    if (mode === "edit") applyInitialData(initialData);
+    else applyCreateDefaults();
   }
 
   function handleFilesSelected(fileList: FileList | null) {
@@ -791,22 +843,15 @@ export default function PitchWizardModal({
   function removeImage(id: string) {
     setImages((prev) => {
       const target = prev.find((i) => i.id === id);
-
       if (target && target.kind === "new") {
         URL.revokeObjectURL(target.url);
         objectUrlsRef.current = objectUrlsRef.current.filter((u) => u !== target.url);
       }
-
-      // Removing an already-saved photo doesn't delete it from the server
-      // right away - it just marks it so the backend removes that exact
-      // row when the form is saved. Everything else on the pitch is
-      // untouched.
       if (target && target.kind === "existing") {
         setRemovedImageIds((prevIds) =>
           prevIds.includes(target.imageId) ? prevIds : [...prevIds, target.imageId]
         );
       }
-
       return prev.filter((i) => i.id !== id);
     });
     setLightboxId((cur) => (cur === id ? null : cur));
@@ -824,6 +869,71 @@ export default function PitchWizardModal({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [lightboxId]);
+
+  function handleAddressInput(value: string) {
+    setAddress(value);
+    setAddressTouchedManually(true);
+  }
+
+  function handleLocationSelected(newLat: number, newLng: number) {
+    setLat(newLat);
+    setLng(newLng);
+
+    if (geocodeTimer.current) clearTimeout(geocodeTimer.current);
+
+    const promise = new Promise<void>((resolve) => {
+      geocodeTimer.current = setTimeout(async () => {
+        setGeocoding(true);
+        const result = await reverseGeocode(newLat, newLng);
+        setGeocoding(false);
+
+        if (result) {
+          setAddress((prev) => (addressTouchedManually && prev ? prev : result));
+        } else if (!addressTouchedManually) {
+          setAddress((prev) => prev || `${newLat.toFixed(6)}, ${newLng.toFixed(6)}`);
+        }
+        resolve();
+      }, 400);
+    });
+
+    geocodePromiseRef.current = promise;
+  }
+
+  function addDateEntry() {
+    setSlotEntries((prev) => [...prev, newDateEntry()]);
+  }
+  function removeDateEntry(id: string) {
+    setSlotEntries((prev) => (prev.length <= 1 ? prev : prev.filter((e) => e.id !== id)));
+  }
+  function updateDateEntry(id: string, date: string) {
+    setSlotEntries((prev) => prev.map((e) => (e.id === id ? { ...e, date } : e)));
+  }
+  function addRange(dateId: string) {
+    setSlotEntries((prev) =>
+      prev.map((e) => (e.id === dateId ? { ...e, ranges: [...e.ranges, newRange()] } : e))
+    );
+  }
+  function removeRange(dateId: string, rangeId: string) {
+    setSlotEntries((prev) =>
+      prev.map((e) =>
+        e.id === dateId
+          ? { ...e, ranges: e.ranges.length <= 1 ? e.ranges : e.ranges.filter((r) => r.id !== rangeId) }
+          : e
+      )
+    );
+  }
+  function updateRange(dateId: string, rangeId: string, field: "start" | "end", value: string) {
+    setSlotEntries((prev) =>
+      prev.map((e) =>
+        e.id === dateId
+          ? {
+              ...e,
+              ranges: e.ranges.map((r) => (r.id === rangeId ? { ...r, [field]: value } : r)),
+            }
+          : e
+      )
+    );
+  }
 
   function validateStep(target: StepNum): boolean {
     setError("");
@@ -861,10 +971,30 @@ export default function PitchWizardModal({
         setError("Minimum hours must be at least 1.");
         return false;
       }
+      for (const entry of slotEntries) {
+        if (!entry.date) continue;
+        for (const r of entry.ranges) {
+          if (r.start && r.end && r.start >= r.end) {
+            setError(`On ${entry.date}, each time range's end must be after its start.`);
+            return false;
+          }
+        }
+      }
       return true;
     }
 
-    // Step 3 (amenities) has no required fields.
+    if (target === 4) {
+      if (lat == null || lng == null || Number.isNaN(lat) || Number.isNaN(lng)) {
+        setError("Please set the pitch location on the map.");
+        return false;
+      }
+      if (!address.trim()) {
+        setError("Address is required — pick a spot on the map or type one in.");
+        return false;
+      }
+      return true;
+    }
+
     return true;
   }
 
@@ -891,16 +1021,14 @@ export default function PitchWizardModal({
   }
 
   async function finish() {
+    if (geocodePromiseRef.current) {
+      await geocodePromiseRef.current;
+    }
+
+    if (!validateStep(4)) return;
+
     setError("");
     setSubmitting(true);
-
-    const parsedHours =
-      mode === "create"
-        ? slotHours
-            .split(",")
-            .map((x) => parseInt(x.trim(), 10))
-            .filter((n) => !Number.isNaN(n) && n >= 0 && n <= 23)
-        : [];
 
     const formData = new FormData();
 
@@ -909,8 +1037,8 @@ export default function PitchWizardModal({
     }
 
     formData.append("name", name);
-    formData.append("sport_type", sportType); 
-    formData.append("address", address);
+    formData.append("sport_type", sportType);
+    formData.append("address", address.trim());
     formData.append("latitude", String(lat));
     formData.append("longitude", String(lng));
     formData.append("opening_time", openingTime);
@@ -931,25 +1059,22 @@ export default function PitchWizardModal({
     formData.append("has_lighting", String(lighting));
     formData.append("other_services", services);
 
-    if (mode === "create" && slotDate) {
-      formData.append("slot_date", slotDate);
-    }
-
     if (mode === "create") {
-      for (const hour of parsedHours) {
-        formData.append("slot_hours", String(hour));
+      const payload = meaningfulSlotEntries(slotEntries).map((e) => ({
+        date: e.date,
+        ranges: e.ranges.map((r) => ({ start: r.start, end: r.end })),
+      }));
+      if (payload.length > 0) {
+        formData.append("initial_slots", JSON.stringify(payload));
       }
     }
 
-    // Only newly picked files get uploaded under "images".
     for (const image of images) {
       if (image.kind === "new") {
         formData.append("images", image.file);
       }
     }
 
-    // Tell the backend exactly which existing photos to delete. Anything
-    // not in this list, and not re-sent as a new file, is left alone.
     if (mode === "edit") {
       for (const removedId of removedImageIds) {
         formData.append("removed_image_ids", removedId);
@@ -960,16 +1085,15 @@ export default function PitchWizardModal({
       await onSubmit(formData);
       clearDraft();
       onClose();
-      if (mode === "edit") {
-        applyInitialData(initialData);
-      } else {
-        applyCreateDefaults();
-      }
+      if (mode === "edit") applyInitialData(initialData);
+      else applyCreateDefaults();
     } catch (e: any) {
       const detail =
         e?.response?.data?.detail ||
         e?.response?.data?.images?.[0] ||
         e?.response?.data?.closing_time?.[0] ||
+        e?.response?.data?.initial_slots?.[0] ||
+        e?.response?.data?.address?.[0] ||
         "Failed to save pitch. Your entries are still here — please try again.";
       setError(detail);
     } finally {
@@ -979,7 +1103,7 @@ export default function PitchWizardModal({
 
   const lightboxImage = images.find((i) => i.id === lightboxId);
 
-  const topBarCopy: Record<StepNum, { title: string; subtitle: string }> = {
+  const heroCopy: Record<StepNum, { title: string; subtitle: string }> = {
     1: {
       title: mode === "edit" ? "Edit pitch details" : "Add a new pitch",
       subtitle: "Name, hours, and photos people will see first.",
@@ -994,411 +1118,345 @@ export default function PitchWizardModal({
     },
     4: {
       title: mode === "edit" ? "Update pitch location" : "Pin the location",
-      subtitle: "Click the map or drag the marker to place it precisely.",
+      subtitle: "Click the map to set it precisely.",
     },
   };
 
+  if (!open) return null;
+
   return (
-    <Modal open={open} onClose={handleClose} title={topBarCopy[step].title}>
-      <div className={styles.wizard}>
-        {/* ---------- left rail: 4-step navigator ---------- */}
-        <div className={styles.rail}>
-          <div className={styles.railHead}>
-            <div className={styles.railTitle}>{mode === "edit" ? "Edit pitch" : "New pitch"}</div>
-            <div className={styles.railSubtitle}>Step {step} of 4</div>
+    <div className={styles.drawerOverlay} onMouseDown={(e) => { if (e.target === e.currentTarget) handleClose(); }}>
+      <div className={styles.drawerPanel} role="dialog" aria-modal="true" aria-label={heroCopy[step].title}>
+        {/* ---------- gradient hero ---------- */}
+        <div className={styles.hero}>
+          <span className={styles.heroIcon}>
+            <PinIcon width={20} height={20} />
+          </span>
+          <div className={styles.heroText}>
+            <div className={styles.heroTitle}>{heroCopy[step].title}</div>
+            <div className={styles.heroSubtitle}>{heroCopy[step].subtitle}</div>
           </div>
+          <button type="button" className={styles.heroCloseBtn} aria-label="Close" onClick={handleClose}>
+            ×
+          </button>
+        </div>
 
-          {draftRestored && (
-            <button type="button" className={styles.railClearBtn} onClick={discardDraft}>
-              Clear form
-            </button>
-          )}
-
-          {STEP_META.map((meta, index) => {
+        {/* ---------- horizontal step progress ---------- */}
+        <div className={styles.stepTabs}>
+          {STEP_META.map((meta) => {
             const isActive = meta.num === step;
             const isDone = meta.num < step || (meta.num < maxStepReached && meta.num !== step);
             const isClickable = meta.num <= maxStepReached && meta.num !== step;
-
             return (
               <button
                 key={meta.num}
                 type="button"
                 onClick={() => goToStep(meta.num)}
-                className={`${styles.railStep} ${isActive ? styles.active : ""} ${
-                  isDone ? styles.done : ""
-                } ${isClickable ? styles.railStepClickable : ""}`}
                 disabled={!isClickable}
-                style={index > 0 ? ({ position: "relative" } as React.CSSProperties) : undefined}
+                className={`${styles.stepTab} ${isActive ? styles.stepTabActive : ""} ${isDone ? styles.stepTabDone : ""}`}
               >
-                {index > 0 && (
-                  <span
-                    className={styles.railConnector}
-                    style={{ ["--fill" as any]: meta.num <= maxStepReached ? 1 : 0 }}
-                  />
-                )}
-                <span className={styles.railDot}>
-                  {isDone ? <CheckIcon /> : <meta.Icon />}
-                </span>
-                <span className={styles.railStepBody}>
-                  <span className={styles.railStepLabel}>{meta.label}</span>
-                  <span className={styles.railStepHint}>{meta.hint}</span>
-                </span>
+                <span className={styles.stepTabDot}>{isDone ? <CheckIcon width={11} height={11} /> : <meta.Icon width={13} height={13} />}</span>
+                <span className={styles.stepTabLabel}>{meta.label}</span>
               </button>
             );
           })}
         </div>
 
-        {/* ---------- main column ---------- */}
-        <div className={styles.mainCol}>
-          <div className={styles.topBar}>
-            <div className={styles.topBarTitle}>{topBarCopy[step].title}</div>
-            <div className={styles.topBarSubtitle}>{topBarCopy[step].subtitle}</div>
+        {draftRestored && (
+          <div className={styles.draftBar}>
+            <span>Draft restored from your last visit</span>
+            <button type="button" className={styles.draftClearBtn} onClick={discardDraft}>Start over</button>
           </div>
+        )}
 
-          {error && <div className={styles.errorBanner}>{error}</div>}
+        {error && <div className={styles.errorBanner}>{error}</div>}
 
-          <div className={styles.body}>
-            {step === 1 && (
-              <div className={`${styles.form} ${styles.stepContent}`}>
-                <div className={styles.section}>
-                  <div className={styles.sectionTitle}>Basics</div>
-
-                  {isAdmin && mode === "create" && (
-                    <div className={styles.field}>
-                      <label className={styles.label}>Owner</label>
-                      <select
-                        className={styles.select}
-                        value={ownerId}
-                        onChange={(e) => setOwnerId(e.target.value)}
-                      >
-                        <option value="">Select owner</option>
-                        {approvedOwners.map((o) => (
-                          <option key={o.id} value={o.id}>
-                            {o.username}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-
-                  <div className={styles.field}>
-                    <label className={styles.label}>Pitch name</label>
-                    <input
-                      className={styles.input}
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      placeholder="e.g. Bole, Semit, Megenagna"
-                    />
-                  </div>
-
-                  <div className={styles.field}>
-                    <label className={styles.label}>Sport</label>
-                    <select
-                      className={styles.select}
-                      value={sportType}
-                      onChange={(e) => setSportType(e.target.value as SportType)}
-                    >
-                      <option value="FOOTBALL">Football</option>
-                      <option value="BASKETBALL">Basketball</option>
-                    </select>
-                  </div>
-
-                  <div className={styles.field}>
-                    <label className={styles.label}>Address</label>
-                    <input
-                      className={styles.input}
-                      value={address}
-                      onChange={(e) => setAddress(e.target.value)}
-                      placeholder="Street, area, landmark"
-                    />
-                  </div>
-
-                  <div className={styles.row2}>
-                    <div className={styles.field}>
-                      <label className={styles.label}>Opening at (GMT+3)</label>
-                      <select
-                        className={styles.select}
-                        value={openingTime}
-                        onChange={(e) => setOpeningTime(e.target.value)}
-                      >
-                        {TIME_OPTIONS.map((opt) => (
-                          <option key={opt.value} value={opt.value}>
-                            {opt.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div className={styles.field}>
-                      <label className={styles.label}>Closes at (GMT+3)</label>
-                      <select
-                        className={styles.select}
-                        value={closingTime}
-                        onChange={(e) => setClosingTime(e.target.value)}
-                      >
-                        {TIME_OPTIONS.map((opt) => (
-                          <option key={opt.value} value={opt.value}>
-                            {opt.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
+        {/* ---------- scrollable body ---------- */}
+        <div className={styles.body}>
+          {step === 1 && (
+            <div className={styles.stepContent}>
+              <div className={styles.card}>
+                <div className={styles.cardHead}>
+                  <span className={styles.cardHeadIcon}><InfoIcon width={15} height={15} /></span>
+                  Basics
                 </div>
 
-                <div className={styles.section}>
-                  <div className={styles.sectionTitle}>Photos</div>
-
+                {isAdmin && mode === "create" && (
                   <div className={styles.field}>
-                    <label className={styles.label}>Pitch images</label>
+                    <label className={styles.label}>Owner</label>
+                    <select className={styles.select} value={ownerId} onChange={(e) => setOwnerId(e.target.value)}>
+                      <option value="">Select owner</option>
+                      {approvedOwners.map((o) => (
+                        <option key={o.id} value={o.id}>{o.username}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
 
-                    <label className={styles.dropZone}>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        multiple
-                        onChange={(e) => handleFilesSelected(e.target.files)}
-                      />
-                      <svg className={styles.dropZoneIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
-                        <path d="M4 16.5V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10.5" strokeLinecap="round" />
-                        <path d="M4 17l4.5-4.5a2 2 0 0 1 2.8 0L15 16l1.7-1.7a2 2 0 0 1 2.8 0L21 16.5" strokeLinecap="round" strokeLinejoin="round" />
-                        <circle cx="8.5" cy="8.5" r="1.5" />
-                        <path d="M3 19h18" strokeLinecap="round" />
-                      </svg>
-                      <div className={styles.dropZoneText}>Click to choose photos</div>
-                      <div className={styles.dropZoneSub}>
-                        {mode === "create"
-                          ? "At least one image is required. You can select several at once."
-                          : "Remove the ones you don't want and add new ones — everything else stays untouched."}
-                      </div>
-                    </label>
+                <div className={styles.field}>
+                  <label className={styles.label}>Pitch name</label>
+                  <input className={styles.input} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Bole, Semit, Megenagna" />
+                </div>
 
-                    {images.length > 0 && (
-                      <div className={styles.thumbGrid}>
-                        {images.map((img) => (
-                          <div key={img.id} className={styles.thumb} onClick={() => toggleLightbox(img.id)}>
-                            <img
-                              src={img.url}
-                              alt={img.kind === "new" ? img.file.name : "Pitch photo"}
-                            />
-                            <button
-                              type="button"
-                              className={styles.thumbRemove}
-                              aria-label="Remove image"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                removeImage(img.id);
-                              }}
-                            >
-                              ×
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                <div className={styles.field}>
+                  <label className={styles.label}>Sport</label>
+                  <select className={styles.select} value={sportType} onChange={(e) => setSportType(e.target.value as SportType)}>
+                    <option value="FOOTBALL">Football</option>
+                    <option value="BASKETBALL">Basketball</option>
+                  </select>
+                </div>
+
+                <div className={styles.row2}>
+                  <div className={styles.field}>
+                    <label className={styles.label}>Opening at (GMT+3)</label>
+                    <select className={styles.select} value={openingTime} onChange={(e) => setOpeningTime(e.target.value)}>
+                      {TIME_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                    </select>
+                  </div>
+                  <div className={styles.field}>
+                    <label className={styles.label}>Closes at (GMT+3)</label>
+                    <select className={styles.select} value={closingTime} onChange={(e) => setClosingTime(e.target.value)}>
+                      {TIME_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                    </select>
                   </div>
                 </div>
               </div>
-            )}
 
-            {step === 2 && (
-              <div className={`${styles.form} ${styles.stepContent}`}>
-                <div className={styles.section}>
-                  <div className={styles.sectionTitle}>Pricing</div>
-
-                  <div className={styles.row3}>
-                    <div className={styles.field}>
-                      <label className={styles.label}>Hourly price</label>
-                      <input className={styles.input} value={hourly} onChange={(e) => setHourly(e.target.value)} />
-                    </div>
-                    <div className={styles.field}>
-                      <label className={styles.label}>Weekly (1x/week)</label>
-                      <input className={styles.input} value={weekly} onChange={(e) => setWeekly(e.target.value)} />
-                    </div>
-                    <div className={styles.field}>
-                      <label className={styles.label}>Monthly (4x/month)</label>
-                      <input className={styles.input} value={monthly} onChange={(e) => setMonthly(e.target.value)} />
-                    </div>
-                  </div>
-
-                  <div className={styles.field}>
-                    <label className={styles.label}>Minimum hours per booking</label>
-                    <input
-                      className={styles.input}
-                      value={minHours}
-                      onChange={(e) => setMinHours(e.target.value)}
-                      style={{ maxWidth: 160 }}
-                    />
-                  </div>
-
-                  <div className={styles.field}>
-                    <label className={styles.label}>Available booking types</label>
-                    <div className={styles.chipRow}>
-                      <label className={`${styles.chip} ${allowHourly ? styles.chipOn : ""}`}>
-                        <input type="checkbox" checked={allowHourly} onChange={(e) => setAllowHourly(e.target.checked)} />
-                        <span className={styles.chipDot} />
-                        Hourly
-                      </label>
-                      <label className={`${styles.chip} ${allowWeekly ? styles.chipOn : ""}`}>
-                        <input type="checkbox" checked={allowWeekly} onChange={(e) => setAllowWeekly(e.target.checked)} />
-                        <span className={styles.chipDot} />
-                        Weekly
-                      </label>
-                      <label className={`${styles.chip} ${allowMonthly ? styles.chipOn : ""}`}>
-                        <input type="checkbox" checked={allowMonthly} onChange={(e) => setAllowMonthly(e.target.checked)} />
-                        <span className={styles.chipDot} />
-                        Monthly
-                      </label>
-                    </div>
-                  </div>
+              <div className={styles.card}>
+                <div className={styles.cardHead}>
+                  <span className={styles.cardHeadIcon}><PhotoIcon width={15} height={15} /></span>
+                  Photos
                 </div>
 
-                {mode === "create" && (
-                  <div className={styles.section}>
-                    <div className={styles.sectionTitle}>Initial slots (optional)</div>
-                    <div className={styles.row2}>
-                      <div className={styles.field}>
-                        <label className={styles.label}>Date</label>
-                        <input
-                          type="date"
-                          className={styles.input}
-                          value={slotDate}
-                          onChange={(e) => setSlotDate(e.target.value)}
-                        />
+                <label className={styles.dropZone}>
+                  <input type="file" accept="image/*" multiple onChange={(e) => handleFilesSelected(e.target.files)} />
+                  <PhotoIcon className={styles.dropZoneIcon} width={32} height={32} />
+                  <div className={styles.dropZoneText}>Click to choose photos</div>
+                  <div className={styles.dropZoneSub}>
+                    {mode === "create"
+                      ? "At least one image is required. You can select several at once."
+                      : "Remove the ones you don't want and add new ones — everything else stays untouched."}
+                  </div>
+                </label>
+
+                {images.length > 0 && (
+                  <div className={styles.thumbGrid}>
+                    {images.map((img) => (
+                      <div key={img.id} className={styles.thumb} onClick={() => toggleLightbox(img.id)}>
+                        <img src={img.url} alt={img.kind === "new" ? img.file.name : "Pitch photo"} />
+                        <button
+                          type="button"
+                          className={styles.thumbRemove}
+                          aria-label="Remove image"
+                          onClick={(e) => { e.stopPropagation(); removeImage(img.id); }}
+                        >×</button>
                       </div>
-                      <div className={styles.field}>
-                        <label className={styles.label}>Hours</label>
-                        <input
-                          className={styles.input}
-                          value={slotHours}
-                          onChange={(e) => setSlotHours(e.target.value)}
-                          placeholder="8,9,10,11"
-                        />
-                        <div className={styles.hint}>Comma separated, 0 to 23</div>
-                      </div>
-                    </div>
+                    ))}
                   </div>
                 )}
               </div>
-            )}
+            </div>
+          )}
 
-            {step === 3 && (
-              <div className={`${styles.form} ${styles.stepContent}`}>
-                <div className={styles.section}>
-                  <div className={styles.sectionTitle}>Amenities</div>
-                  <div className={styles.chipRow}>
-                    <label className={`${styles.chip} ${dressing ? styles.chipOn : ""}`}>
-                      <input type="checkbox" checked={dressing} onChange={(e) => setDressing(e.target.checked)} />
-                      <span className={styles.chipDot} />
-                      Dressing room
-                    </label>
-                    <label className={`${styles.chip} ${showers ? styles.chipOn : ""}`}>
-                      <input type="checkbox" checked={showers} onChange={(e) => setShowers(e.target.checked)} />
-                      <span className={styles.chipDot} />
-                      Showers
-                    </label>
-                    <label className={`${styles.chip} ${parking ? styles.chipOn : ""}`}>
-                      <input type="checkbox" checked={parking} onChange={(e) => setParking(e.target.checked)} />
-                      <span className={styles.chipDot} />
-                      Parking
-                    </label>
-                    <label className={`${styles.chip} ${lighting ? styles.chipOn : ""}`}>
-                      <input type="checkbox" checked={lighting} onChange={(e) => setLighting(e.target.checked)} />
-                      <span className={styles.chipDot} />
-                      Lighting
-                    </label>
-                  </div>
+          {step === 2 && (
+            <div className={styles.stepContent}>
+              <div className={styles.card}>
+                <div className={styles.cardHead}>
+                  <span className={styles.cardHeadIcon}><TagIcon width={15} height={15} /></span>
+                  Pricing
+                </div>
 
+                <div className={styles.row3}>
                   <div className={styles.field}>
-                    <label className={styles.label}>Other services</label>
-                    <input
-                      className={styles.input}
-                      value={services}
-                      onChange={(e) => setServices(e.target.value)}
-                      placeholder="Referee, water, ball rental"
-                    />
+                    <label className={styles.label}>Hourly price</label>
+                    <input className={styles.input} value={hourly} onChange={(e) => setHourly(e.target.value)} />
+                  </div>
+                  <div className={styles.field}>
+                    <label className={styles.label}>Weekly (1x/week)</label>
+                    <input className={styles.input} value={weekly} onChange={(e) => setWeekly(e.target.value)} />
+                  </div>
+                  <div className={styles.field}>
+                    <label className={styles.label}>Monthly (4x/month)</label>
+                    <input className={styles.input} value={monthly} onChange={(e) => setMonthly(e.target.value)} />
+                  </div>
+                </div>
+
+                <div className={styles.field}>
+                  <label className={styles.label}>Minimum hours per booking</label>
+                  <input className={styles.input} value={minHours} onChange={(e) => setMinHours(e.target.value)} style={{ maxWidth: 160 }} />
+                </div>
+
+                <div className={styles.field}>
+                  <label className={styles.label}>Available booking types</label>
+                  <div className={styles.chipRow}>
+                    <label className={`${styles.chip} ${allowHourly ? styles.chipOn : ""}`}>
+                      <input type="checkbox" checked={allowHourly} onChange={(e) => setAllowHourly(e.target.checked)} />
+                      <span className={styles.chipDot} />Hourly
+                    </label>
+                    <label className={`${styles.chip} ${allowWeekly ? styles.chipOn : ""}`}>
+                      <input type="checkbox" checked={allowWeekly} onChange={(e) => setAllowWeekly(e.target.checked)} />
+                      <span className={styles.chipDot} />Weekly
+                    </label>
+                    <label className={`${styles.chip} ${allowMonthly ? styles.chipOn : ""}`}>
+                      <input type="checkbox" checked={allowMonthly} onChange={(e) => setAllowMonthly(e.target.checked)} />
+                      <span className={styles.chipDot} />Monthly
+                    </label>
                   </div>
                 </div>
               </div>
-            )}
 
-            {step === 4 && (
-              <div className={`${styles.form} ${styles.stepContent}`}>
-                <div className={styles.mapHint}>Click on the map or drag the marker to set the exact pitch location.</div>
+              {mode === "create" && (
+                <div className={styles.card}>
+                  <div className={styles.cardHead}>Already-booked slots (optional)</div>
+                  <div className={styles.hint} style={{ marginBottom: 4 }}>
+                    If this pitch already has bookings from before you registered it, add them here
+                    so they show as taken from day one.
+                  </div>
 
+                  {slotEntries.map((entry) => (
+                    <div key={entry.id} className={styles.slotDateCard}>
+                      <div className={styles.slotDateHeader}>
+                        <div className={styles.field} style={{ marginBottom: 0, flex: 1 }}>
+                          <label className={styles.label}>Date</label>
+                          <input type="date" className={styles.input} value={entry.date} onChange={(e) => updateDateEntry(entry.id, e.target.value)} />
+                        </div>
+                        {slotEntries.length > 1 && (
+                          <button type="button" className={styles.slotRemoveBtn} aria-label="Remove this date" onClick={() => removeDateEntry(entry.id)}>
+                            <TrashIcon width={16} height={16} />
+                          </button>
+                        )}
+                      </div>
+
+                      {entry.ranges.map((r) => (
+                        <div key={r.id} className={styles.slotRangeRow}>
+                          <div className={styles.field} style={{ marginBottom: 0 }}>
+                            <label className={styles.label}>From</label>
+                            <select className={styles.select} value={r.start} onChange={(e) => updateRange(entry.id, r.id, "start", e.target.value)}>
+                              {TIME_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                            </select>
+                          </div>
+                          <div className={styles.field} style={{ marginBottom: 0 }}>
+                            <label className={styles.label}>To</label>
+                            <select className={styles.select} value={r.end} onChange={(e) => updateRange(entry.id, r.id, "end", e.target.value)}>
+                              {TIME_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                            </select>
+                          </div>
+                          {entry.ranges.length > 1 && (
+                            <button type="button" className={styles.slotRemoveBtn} aria-label="Remove this time range" onClick={() => removeRange(entry.id, r.id)}>
+                              <TrashIcon width={14} height={14} />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+
+                      <button type="button" className={styles.slotAddBtn} onClick={() => addRange(entry.id)}>
+                        <PlusIcon width={14} height={14} /> Add time on this date
+                      </button>
+                    </div>
+                  ))}
+
+                  <button type="button" className={styles.slotAddBtn} onClick={addDateEntry}>
+                    <PlusIcon width={14} height={14} /> Add another date
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {step === 3 && (
+            <div className={styles.stepContent}>
+              <div className={styles.card}>
+                <div className={styles.cardHead}>
+                  <span className={styles.cardHeadIcon}><SparkleIcon width={15} height={15} /></span>
+                  Amenities
+                </div>
+                <div className={styles.chipRow}>
+                  <label className={`${styles.chip} ${dressing ? styles.chipOn : ""}`}>
+                    <input type="checkbox" checked={dressing} onChange={(e) => setDressing(e.target.checked)} />
+                    <span className={styles.chipDot} />Dressing room
+                  </label>
+                  <label className={`${styles.chip} ${showers ? styles.chipOn : ""}`}>
+                    <input type="checkbox" checked={showers} onChange={(e) => setShowers(e.target.checked)} />
+                    <span className={styles.chipDot} />Showers
+                  </label>
+                  <label className={`${styles.chip} ${parking ? styles.chipOn : ""}`}>
+                    <input type="checkbox" checked={parking} onChange={(e) => setParking(e.target.checked)} />
+                    <span className={styles.chipDot} />Parking
+                  </label>
+                  <label className={`${styles.chip} ${lighting ? styles.chipOn : ""}`}>
+                    <input type="checkbox" checked={lighting} onChange={(e) => setLighting(e.target.checked)} />
+                    <span className={styles.chipDot} />Lighting
+                  </label>
+                </div>
+
+                <div className={styles.field}>
+                  <label className={styles.label}>Other services</label>
+                  <input className={styles.input} value={services} onChange={(e) => setServices(e.target.value)} placeholder="Referee, water, ball rental" />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {step === 4 && (
+            <div className={styles.stepContent}>
+              <div className={styles.hint} style={{ marginBottom: 12 }}>
+                Click on the map or drag the marker to set the exact pitch location.
+              </div>
+
+              {/* Map + address attached as ONE unit — map on top, address
+                  band directly underneath, no gap between them. */}
+              <div className={styles.locationUnit}>
                 <div className={styles.mapFrame}>
                   <MapContainer center={[lat, lng]} zoom={13} style={{ height: "100%", width: "100%" }}>
-                    <TileLayer
-                      attribution="&copy; OpenStreetMap contributors"
-                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                    />
-                    <LocationPicker
-                      lat={lat}
-                      lng={lng}
-                      onChange={(newLat, newLng) => {
-                        setLat(newLat);
-                        setLng(newLng);
-                      }}
-                    />
+                    <TileLayer attribution="&copy; OpenStreetMap contributors" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                    <LocationPicker lat={lat} lng={lng} onChange={handleLocationSelected} />
                   </MapContainer>
                 </div>
 
-                <div className={styles.coordsPill}>
-                  📍 {lat.toFixed(6)}, {lng.toFixed(6)}
+                <div className={styles.addressBand}>
+                  <span className={styles.addressBandIcon}><PinIcon width={15} height={15} /></span>
+                  <input
+                    className={styles.addressBandInput}
+                    value={address}
+                    onChange={(e) => handleAddressInput(e.target.value)}
+                    placeholder={geocoding ? "Looking up address…" : "Click the map to auto-fill"}
+                  />
+                  {geocoding && <span className={styles.addressBandSpinner} />}
                 </div>
               </div>
-            )}
-          </div>
 
-          <div className={styles.footer}>
-            <button type="button" className={`${styles.btn} ${styles.btnGhost}`} onClick={goBack}>
-              {step === 1 ? "Cancel" : "Back"}
+              <div className={styles.coordsPill}>📍 {lat.toFixed(6)}, {lng.toFixed(6)}</div>
+            </div>
+          )}
+        </div>
+
+        {/* ---------- sticky footer ---------- */}
+        <div className={styles.footer}>
+          <button type="button" className={`${styles.btn} ${styles.btnGhost}`} onClick={goBack}>
+            {step === 1 ? "Cancel" : "Back"}
+          </button>
+          <span className={styles.footerProgress}>Step {step} of 4</span>
+          {step < 4 ? (
+            <button type="button" className={`${styles.btn} ${styles.btnPrimary}`} onClick={goNext}>Next</button>
+          ) : (
+            <button type="button" className={`${styles.btn} ${styles.btnPrimary}`} onClick={finish} disabled={submitting}>
+              {submitting ? "Saving..." : mode === "edit" ? "Save Changes" : "Create Pitch"}
             </button>
-
-            <span className={styles.footerProgress}>Step {step} of 4</span>
-
-            {step < 4 ? (
-              <button type="button" className={`${styles.btn} ${styles.btnPrimary}`} onClick={goNext}>
-                Next
-              </button>
-            ) : (
-              <button
-                type="button"
-                className={`${styles.btn} ${styles.btnPrimary}`}
-                onClick={finish}
-                disabled={submitting}
-              >
-                {submitting ? "Saving..." : mode === "edit" ? "Save Changes" : "Create Pitch"}
-              </button>
-            )}
-          </div>
+          )}
         </div>
       </div>
 
       {lightboxImage && (
         <div className={styles.lightboxOverlay} onClick={() => setLightboxId(null)}>
-          <button
-            type="button"
-            className={styles.lightboxClose}
-            aria-label="Close preview"
-            onClick={(e) => {
-              e.stopPropagation();
-              setLightboxId(null);
-            }}
-          >
-            ×
-          </button>
+          <button type="button" className={styles.lightboxClose} aria-label="Close preview" onClick={(e) => { e.stopPropagation(); setLightboxId(null); }}>×</button>
           <img
             src={lightboxImage.url}
             alt={lightboxImage.kind === "new" ? lightboxImage.file.name : "Pitch photo"}
             className={styles.lightboxImg}
-            onClick={(e) => {
-              e.stopPropagation();
-              setLightboxId(null);
-            }}
+            onClick={(e) => { e.stopPropagation(); setLightboxId(null); }}
           />
         </div>
       )}
-    </Modal>
+    </div>
   );
 }
