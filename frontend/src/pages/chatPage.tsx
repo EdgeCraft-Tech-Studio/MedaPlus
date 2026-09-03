@@ -1,7 +1,7 @@
 // ChatPage.tsx
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import styles from "./css/ChatPage.module.css";
+import styles from "./css/chatPage.module.css";
 import {
   fetchMessages,
   sendTextMessage,

@@ -55,6 +55,8 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile
       - caddy_data:/data
       - caddy_config:/config
+      - media_data:/app/media:ro
+      - static_data:/app/static:ro
     depends_on:
       - backend
       - frontend

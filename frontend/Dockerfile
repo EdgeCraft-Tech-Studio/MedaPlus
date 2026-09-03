@@ -1,27 +1,22 @@
-# backend/Dockerfile
-FROM python:3.12-slim
-
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+FROM node:20-alpine AS build
 
 WORKDIR /app
 
-# System packages needed to build psycopg / other C extensions
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    libpq-dev \
-    && rm -rf /var/lib/apt/lists/*
+COPY package*.json ./
+RUN npm ci
 
-# Install python deps first (better layer caching)
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy the rest of the Django project
 COPY . .
 
-RUN mkdir -p /app/static /app/media
+ARG VITE_API_URL
+ENV VITE_API_URL=$VITE_API_URL
 
-EXPOSE 8000
+RUN npm run build
 
-# Runs migrations, collects static files, then starts gunicorn
-CMD ["sh", "-c", "python manage.py migrate --noinput && python manage.py collectstatic --noinput && gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3"]
+FROM nginx:alpine
+
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=build /app/dist /usr/share/nginx/html
+
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]

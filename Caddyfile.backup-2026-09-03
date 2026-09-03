@@ -1,4 +1,4 @@
-# StoreLedger mobile API — HTTPS domain
+
 api.ethiomeda.com {
     encode zstd gzip
 
@@ -11,8 +11,15 @@ api.ethiomeda.com {
     }
 }
 
-# MedaPlus web application — public IP over HTTP
 :80 {
+    handle /api/* {
+        reverse_proxy backend:8000
+    }
+
+    handle /admin* {
+        reverse_proxy backend:8000
+    }
+
     handle /media/* {
         root * /app
         file_server
@@ -21,14 +28,6 @@ api.ethiomeda.com {
     handle /static/* {
         root * /app
         file_server
-    }
-
-    handle /api/* {
-        reverse_proxy backend:8000
-    }
-
-    handle /admin* {
-        reverse_proxy backend:8000
     }
 
     handle {
