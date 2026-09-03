@@ -17,7 +17,6 @@ export default function MatchDetail() {
     setLoading(true);
     // TODO: replace with the real API call, e.g. await payMyShare(match.id);
     await new Promise((r) => setTimeout(r, 800));
-    console.log("TODO: pay my share for match", match.id);
     setLoading(false);
   }
 

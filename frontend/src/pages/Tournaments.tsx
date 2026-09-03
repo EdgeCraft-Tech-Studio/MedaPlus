@@ -119,10 +119,7 @@ const FEATURES = [
 // payments together per §12's "Included in the MVP" list) and a later
 // phase for competition features. It does not break the MVP itself into
 // sub-phases, so this page doesn't invent one either.
-const PHASES = [
-  { label: "MVP", title: "Teams, matchmaking, chat & shared booking payments", status: "live" as const },
-  { label: "Later phase", title: "Leagues & tournaments", status: "upcoming" as const },
-];
+
 
 function isValidEmail(v: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
