@@ -69,10 +69,14 @@ class TeamDetailSerializer(serializers.ModelSerializer):
 
 
 class TeamCreateSerializer(serializers.ModelSerializer):
+    latitude = serializers.FloatField(required=True)
+    longitude = serializers.FloatField(required=True)
+    area = serializers.CharField(required=True, allow_blank=False)
+
     class Meta:
         model = Team
         fields = [
-            "id", "name", "logo", "description", "sport", "area",
+            "id", "name", "logo", "description", "sport", "area", "latitude", "longitude",
             "skill_level", "preferred_days", "play_time", "age_category",
             "max_roster_size", "visibility",
         ]
@@ -84,14 +88,22 @@ class TeamCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Invalid day code.")
         return value
 
+    def validate(self, attrs):
+        lat = attrs.get("latitude")
+        lng = attrs.get("longitude")
+        if lat is not None and not (-90 <= lat <= 90):
+            raise serializers.ValidationError({"latitude": "Latitude must be between -90 and 90."})
+        if lng is not None and not (-180 <= lng <= 180):
+            raise serializers.ValidationError({"longitude": "Longitude must be between -180 and 180."})
+        return attrs
+
     def create(self, validated_data):
         request = self.context.get("request")
         if request is None:
             raise serializers.ValidationError("Request context is required.")
         from ..services import create_team
         return create_team(created_by=request.user, **validated_data)
-
-
+ 
 class TeamUpdateSerializer(serializers.ModelSerializer):
     version = serializers.IntegerField()
 

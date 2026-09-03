@@ -1,0 +1,498 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@500&display=swap');
+
+.tabWrap {
+  --green-900: #0e2f24; --green-800: #123c2d; --green-700: #16513f;
+  --grass: #3fae7f; --grass-bright: #4fd897; --grass-soft: #e6f5ee;
+  --c-team: #2f5d8a; --c-team-soft: #eaf1f8;
+  --c-tournament: #c9942a; --c-tournament-soft: #fbf1dd;
+  --danger: #c0392b; --danger-soft: #fdeeec;
+  --ink: #0e1712; --muted: #6b7a72; --faint: #b7c2bb; --line: #ece9df; --paper: #fbfbf8;
+  --font-mono: 'IBM Plex Mono', monospace;
+  --font-display: 'Inter', -apple-system, sans-serif;
+  --radius-sm: 8px; --radius-md: 12px; --radius-lg: 16px;
+
+  font-family: var(--font-display);
+  color: var(--ink);
+}
+
+.tabHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+.tabTitle { font-size: 19px; font-weight: 800; letter-spacing: -0.01em; color: var(--ink); }
+.tabSub { font-size: 13px; color: var(--muted); margin-top: 3px; max-width: 48ch; }
+
+.createBtn {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 11px 18px; border-radius: 999px; border: none;
+  background: var(--green-800); color: #ffffff;
+  font-weight: 700; font-size: 13px; cursor: pointer; flex-shrink: 0;
+  transition: filter 0.15s ease, transform 0.15s ease;
+}
+.createBtn:hover { filter: brightness(1.2); transform: translateY(-1px); }
+
+.msg {
+  padding: 11px 15px; border-radius: var(--radius-sm);
+  background: var(--danger-soft); color: var(--danger);
+  font-size: 13px; font-weight: 500; margin-bottom: 16px;
+}
+
+.emptyText { color: var(--faint); font-size: 13.5px; padding: 20px 0; }
+
+.emptyState {
+  display: grid; place-items: center; gap: 8px; text-align: center;
+  padding: 54px 20px; border: 1.5px dashed var(--line);
+  border-radius: var(--radius-lg); color: var(--faint); background: var(--paper);
+}
+.emptyStateTitle { font-weight: 700; color: var(--ink); font-size: 14.5px; }
+.emptyStateText { font-size: 13px; max-width: 40ch; color: var(--muted); }
+
+/* ============================================================
+   MATCH LIST — ticket stub cards
+   ============================================================ */
+
+.ticketList {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 14px;
+}
+
+.ticket {
+  position: relative;
+  display: flex;
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: 0 2px 10px rgba(14, 23, 18, 0.04);
+  transition: box-shadow 0.2s ease, transform 0.2s ease, background 0.2s ease, border-color 0.2s ease;
+}
+.ticket:hover { box-shadow: 0 8px 22px rgba(14, 23, 18, 0.09); transform: translateY(-1px); }
+
+/* Confirmed = locked in and happening. Full light-grass background and a
+   solid grass border so it visually reads as "active" at a glance, not
+   just another card with a status pill buried in the corner. */
+.ticketConfirmed {
+  background: var(--grass-soft);
+  border: 1.5px solid var(--grass);
+  box-shadow: 0 4px 16px rgba(63, 174, 127, 0.18);
+}
+.ticketConfirmed:hover { box-shadow: 0 10px 26px rgba(63, 174, 127, 0.24); }
+.ticketConfirmed .ticketStub { background: rgba(255, 255, 255, 0.55); border-left-color: rgba(63, 174, 127, 0.4); }
+.ticketConfirmed .matchNotes { border-top-color: rgba(63, 174, 127, 0.3); }
+
+.confirmedFlag {
+  position: absolute; top: 0; right: 0;
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 10px; font-weight: 800; letter-spacing: 0.02em;
+  color: #ffffff; background: var(--grass);
+  padding: 4px 10px 4px 9px;
+  border-radius: 0 0 0 10px;
+}
+
+.ticketMain {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+  padding: 16px 14px 16px 18px;
+}
+
+.ticketTopRow { display: flex; align-items: center; justify-content: space-between; }
+
+.typeTag {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
+  color: var(--muted);
+}
+.ticketTeamType .typeTag { color: var(--c-team); }
+.ticketOpenType .typeTag { color: var(--c-tournament); }
+.ticketConfirmed .typeTag { color: var(--green-800); }
+
+.matchPitchBall { display: grid; place-items: center; flex-shrink: 0; opacity: 0.9; }
+
+.matchup { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.matchupTeam { font-weight: 800; font-size: 15px; color: var(--ink); }
+.matchupVs { font-size: 11px; font-weight: 700; color: var(--faint); text-transform: uppercase; }
+.slotsCount { font-family: var(--font-mono); font-weight: 700; font-size: 16px; color: var(--ink); }
+
+.metaLine {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 12.5px; color: var(--muted);
+}
+.metaLine svg { flex-shrink: 0; color: var(--faint); }
+
+.matchNotes {
+  font-size: 12px; color: var(--muted);
+  padding-top: 6px; margin-top: 2px; border-top: 1px dashed var(--line);
+}
+
+/* stub — dashed divider, price + status + actions */
+.ticketStub {
+  width: 128px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-align: center;
+  padding: 16px 10px;
+  border-left: 1.5px dashed var(--line);
+  background: var(--paper);
+}
+
+.statusDot {
+  width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
+}
+.dot_grass, .dot_team { background: var(--grass); }
+.dot_danger { background: var(--danger); }
+.dot_faint { background: var(--faint); }
+
+.statusText { font-size: 10.5px; font-weight: 700; color: var(--muted); }
+
+.stubPrice {
+  font-family: var(--font-mono); font-weight: 700; font-size: 16px; color: var(--ink);
+  display: flex; flex-direction: column; align-items: center; line-height: 1.25;
+}
+.stubPriceUnit { font-size: 9.5px; font-weight: 600; color: var(--faint); text-transform: uppercase; }
+
+.stubActions { display: flex; gap: 6px; margin-top: 2px; }
+
+.stubIconBtn {
+  display: grid; place-items: center;
+  width: 28px; height: 28px; border-radius: 8px;
+  border: 1px solid var(--line); background: #ffffff; color: var(--ink);
+  cursor: pointer; transition: background 0.15s ease, opacity 0.15s ease;
+}
+.stubIconBtn:hover:not(:disabled) { background: var(--grass-soft); }
+.stubIconBtnDanger { color: var(--danger); }
+.stubIconBtnDanger:hover:not(:disabled) { background: var(--danger-soft); }
+.stubIconBtn:disabled { opacity: 0.35; cursor: default; }
+
+@media (max-width: 520px) {
+  .ticket { flex-direction: column; }
+  .ticketStub {
+    width: auto; flex-direction: row; justify-content: space-between;
+    border-left: none; border-top: 1.5px dashed var(--line);
+    padding: 12px 16px;
+  }
+  .stubPrice { flex-direction: row; gap: 5px; align-items: baseline; }
+}
+
+/* ============================================================
+   SHIMMER / SKELETON — loading state for the ticket list
+   ============================================================ */
+
+.shimmer {
+  border-radius: 6px;
+  background: linear-gradient(90deg, var(--grass-soft) 25%, #f2fbf7 37%, var(--grass-soft) 63%);
+  background-size: 400% 100%;
+  animation: shimmerMove 1.4s ease infinite;
+}
+
+@keyframes shimmerMove {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
+}
+
+.skelTag { width: 90px; height: 11px; }
+.skelBall { width: 18px; height: 18px; border-radius: 50%; }
+.skelMatchup { width: 70%; height: 16px; margin-top: 2px; }
+.skelMeta { width: 85%; height: 12px; }
+.skelMetaShort { width: 55%; height: 12px; }
+
+.skelDot { width: 7px; height: 7px; border-radius: 50%; }
+.skelStatusText { width: 50px; height: 10px; }
+.skelPrice { width: 60px; height: 18px; margin-top: 2px; }
+
+@media (max-width: 520px) {
+  .skelPrice { margin-top: 0; }
+}
+
+/* ============================================================
+   FORM DRAWER — replaces the old centered modal
+   ============================================================ */
+
+.drawerOverlay {
+  position: fixed; inset: 0; background: rgba(9, 16, 12, 0.55);
+  display: flex; justify-content: flex-end; z-index: 60;
+}
+
+.drawer {
+  width: 100%; max-width: 480px; height: 100%;
+  background: #ffffff;
+  display: flex; flex-direction: column;
+  box-shadow: -20px 0 50px rgba(0, 0, 0, 0.25);
+  animation: drawerIn 0.22s ease;
+}
+
+@keyframes drawerIn {
+  from { transform: translateX(24px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+.drawerHeader {
+  display: flex; align-items: center; gap: 12px;
+  padding: 18px 20px;
+  background: var(--green-900);
+  color: #ffffff;
+  flex-shrink: 0;
+}
+.drawerOpen .drawerHeader { background: #4a3306; }
+
+.drawerHeaderIcon {
+  display: grid; place-items: center; flex-shrink: 0;
+  width: 36px; height: 36px; border-radius: 10px;
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.drawerHeaderText { flex: 1; min-width: 0; }
+.drawerTitle { font-size: 16px; font-weight: 800; margin: 0; color: #ffffff; }
+.drawerSubtitle { font-size: 12px; margin: 2px 0 0; color: rgba(255, 255, 255, 0.72); }
+
+.drawerCloseBtn {
+  display: grid; place-items: center; width: 30px; height: 30px; border-radius: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.2); background: rgba(255, 255, 255, 0.1);
+  color: #ffffff; cursor: pointer; flex-shrink: 0;
+}
+.drawerCloseBtn:hover { background: rgba(255, 255, 255, 0.2); }
+
+.drawerForm { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+
+.drawerBody { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 18px; }
+
+.divider { border-top: 1px solid var(--line); }
+
+.block { display: grid; gap: 10px; }
+
+.blockLabel {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12px; font-weight: 700; color: var(--muted);
+}
+
+.fieldHint { font-size: 11.5px; color: var(--faint); }
+
+.field { display: grid; gap: 6px; }
+.fieldSubLabel {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 11.5px; font-weight: 600; color: var(--muted);
+}
+.fieldGrid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+.fieldGridTwo { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+@media (max-width: 420px) {
+  .fieldGrid { grid-template-columns: 1fr 1fr; }
+  .fieldGridTwo { grid-template-columns: 1fr; }
+}
+
+/* ---------- match-type toggle (segmented, sliding thumb) ---------- */
+
+.typeToggle {
+  position: relative;
+  display: grid; grid-template-columns: 1fr 1fr;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+}
+.typeToggle[data-disabled] { opacity: 0.7; }
+
+.typeToggleThumb {
+  position: absolute; top: 3px; left: 3px;
+  width: calc(50% - 3px); height: calc(100% - 6px);
+  border-radius: 999px;
+  background: var(--green-800);
+  transition: transform 0.2s ease;
+  z-index: 0;
+}
+
+.typeToggleBtn {
+  position: relative; z-index: 1;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 9px 10px; border: none; background: transparent;
+  font-family: inherit; font-weight: 700; font-size: 12.5px;
+  color: var(--muted); cursor: pointer; border-radius: 999px;
+}
+.typeToggleBtn:disabled { cursor: default; }
+.typeToggleBtnActive { color: #ffffff; }
+
+/* ---------- inputs ---------- */
+
+.input, .select, .textarea {
+  width: 100%; padding: 10px 12px; border-radius: var(--radius-sm);
+  border: 1.5px solid var(--line); background: #ffffff; color: var(--ink);
+  font-size: 13.5px; font-family: var(--font-display); outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.input:focus, .select:focus, .textarea:focus {
+  border-color: var(--grass); box-shadow: 0 0 0 3px var(--grass-soft);
+}
+.textarea { resize: vertical; min-height: 60px; }
+
+/* ---------- price card ---------- */
+
+.priceCard {
+  display: grid; gap: 12px;
+  padding: 14px; border-radius: var(--radius-md);
+  background: var(--paper); border: 1px solid var(--line);
+}
+
+.priceInputWrap {
+  display: flex; align-items: center; border: 1.5px solid var(--line);
+  border-radius: var(--radius-sm); overflow: hidden; background: #ffffff;
+}
+.priceInputWrap:focus-within { border-color: var(--grass); box-shadow: 0 0 0 3px var(--grass-soft); }
+.priceInput { flex: 1; border: none; padding: 10px 12px; font-family: var(--font-mono); font-size: 15px; font-weight: 700; outline: none; }
+.priceInputSuffix { padding: 0 12px; background: var(--paper); color: var(--muted); font-size: 12px; font-weight: 600; align-self: stretch; display: flex; align-items: center; }
+
+.priceSplitRow {
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 12.5px; color: var(--muted);
+  padding-top: 10px; border-top: 1px dashed var(--line);
+}
+.priceSplitRow b { font-family: var(--font-mono); font-size: 16px; color: var(--ink); }
+
+.formError {
+  padding: 11px 13px; border-radius: var(--radius-sm);
+  background: var(--danger-soft); color: var(--danger); font-size: 12.5px; font-weight: 600;
+}
+
+.drawerFooter {
+  display: flex; justify-content: flex-end; gap: 10px;
+  padding: 16px 20px; border-top: 1px solid var(--line);
+  background: #ffffff; flex-shrink: 0;
+}
+
+.cancelBtn {
+  padding: 11px 18px; border-radius: 999px; border: 1.5px solid var(--line);
+  background: #ffffff; color: var(--muted); font-weight: 700; font-size: 13px; cursor: pointer;
+}
+.cancelBtn:hover { background: var(--paper); }
+
+.submitBtn {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 11px 20px; border-radius: 999px; border: none;
+  color: #ffffff; font-weight: 800; font-size: 13px;
+  cursor: pointer; transition: filter 0.15s ease, transform 0.15s ease;
+}
+.submitBtn:hover:not(:disabled) { filter: brightness(1.08); transform: translateY(-1px); }
+.submitBtn:disabled { opacity: 0.6; cursor: default; }
+
+.submitBtnTeam { background: var(--green-800); }
+.submitBtnOpen { background: #8a5a10; }
+
+/* ---------- pitch map field ---------- */
+
+.pitchField { display: grid; gap: 10px; }
+
+.mapBox {
+  width: 100%; height: 190px; border-radius: var(--radius-md);
+  overflow: hidden; border: 1.5px solid var(--line);
+  isolation: isolate; /* contains Leaflet's internal z-index panes */
+  position: relative;
+}
+
+.pitchConfirm {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; border-radius: var(--radius-md);
+  background: var(--grass-soft); border: 1px solid rgba(63, 174, 127, 0.3);
+}
+
+.pitchConfirmBall {
+  display: grid; place-items: center; flex-shrink: 0;
+  width: 34px; height: 34px; border-radius: 10px; background: #ffffff;
+}
+
+.pitchConfirmInfo { flex: 1; min-width: 0; }
+.pitchConfirmName { font-weight: 700; font-size: 13px; color: var(--ink); }
+.pitchConfirmAddress {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 11px; color: var(--muted); margin-top: 2px;
+}
+.pitchConfirmPrice {
+  font-family: var(--font-mono); font-weight: 700; font-size: 12.5px;
+  color: var(--green-800); flex-shrink: 0;
+}
+
+.pitchConfirmEmpty {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 12px; border-radius: var(--radius-md);
+  border: 1.5px dashed var(--line); color: var(--faint); font-size: 12px;
+}
+
+/* ---------- leaflet marker global tweak ---------- */
+
+:global(.match-pitch-marker) { background: transparent; border: none; position: relative; }
+:global(.ball-marker) { position: relative; transition: transform 0.15s ease; filter: drop-shadow(0 3px 5px rgba(0,0,0,0.25)); }
+:global(.ball-marker-selected) { transform: translateY(-2px) scale(1.05); filter: drop-shadow(0 5px 10px rgba(0,0,0,0.35)); }
+
+@media (max-width: 640px) {
+  .drawerOverlay { align-items: flex-end; }
+  .drawer { max-width: 100%; height: 92vh; border-radius: 20px 20px 0 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drawer, .typeToggleThumb, .submitBtn, .createBtn, .ticket { animation: none !important; transition: none !important; }
+}
+
+/* ============================================================
+   CANCEL-MATCH CONFIRM POPUP
+   ============================================================ */
+
+.confirmOverlay {
+  position: fixed; inset: 0;
+  background: rgba(9, 16, 12, 0.55);
+  display: grid; place-items: center;
+  padding: 20px;
+  z-index: 80; /* above the drawer's 60, in case someone cancels from an open drawer later */
+}
+
+.confirmCard {
+  width: 100%; max-width: 360px;
+  background: #ffffff;
+  border-radius: var(--radius-lg);
+  padding: 24px 22px 20px;
+  text-align: center;
+  box-shadow: 0 30px 70px rgba(0, 0, 0, 0.3);
+  animation: confirmRise 0.18s ease;
+}
+
+@keyframes confirmRise {
+  from { opacity: 0; transform: translateY(10px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.confirmIcon {
+  display: grid; place-items: center;
+  width: 44px; height: 44px; margin: 0 auto 12px;
+  border-radius: 50%;
+  background: var(--danger-soft); color: var(--danger);
+}
+
+.confirmTitle { font-size: 15.5px; font-weight: 800; color: var(--ink); margin: 0 0 6px; }
+.confirmText { font-size: 12.5px; color: var(--muted); line-height: 1.5; margin: 0 0 18px; }
+
+.confirmActions { display: flex; gap: 8px; }
+
+.confirmNoBtn {
+  flex: 1; padding: 11px 14px; border-radius: 999px;
+  border: 1.5px solid var(--line); background: #ffffff; color: var(--ink);
+  font-weight: 700; font-size: 13px; cursor: pointer;
+}
+.confirmNoBtn:hover:not(:disabled) { background: var(--paper); }
+.confirmNoBtn:disabled { opacity: 0.5; cursor: default; }
+
+.confirmYesBtn {
+  flex: 1; padding: 11px 14px; border-radius: 999px;
+  border: none; background: var(--danger); color: #ffffff;
+  font-weight: 800; font-size: 13px; cursor: pointer;
+  transition: filter 0.15s ease;
+}
+.confirmYesBtn:hover:not(:disabled) { filter: brightness(1.1); }
+.confirmYesBtn:disabled { opacity: 0.7; cursor: default; }

@@ -36,8 +36,6 @@ export type Pitch = {
 
   cover_image_url?: string | null;
   image_urls?: string[];
-  // Same photos as image_urls, but each tagged with its PitchImage id so the
-  // edit form can tell the backend exactly which one to delete.
   images?: PitchImageItem[];
 
   is_approved: boolean;
@@ -104,7 +102,7 @@ export async function createPitch(payload: FormData) {
     },
   });
   return res.data.pitch as Pitch;
-}
+} 
 
 export async function updatePitch(pitchId: string, payload: FormData) {
   const res = await api.patch(`/pitches/${pitchId}/`, payload, {
@@ -184,11 +182,24 @@ export type OwnerPitchStat = {
   is_active: boolean;
 };
 
-export type TodayScheduleItem = {
+// A merged, contiguous booking block for a pitch today — e.g. two
+// back-to-back hourly bookings show as one 8:00 AM - 12:00 PM entry.
+export type TodayBookingItem = {
   pitch_id: string;
   pitch_name: string;
   time_label: string;
+  start_iso: string;
+  end_iso: string;
   booked_by: string;
+};
+
+// A free (unbooked, not-yet-past) window today within a pitch's open hours.
+export type TodayFreePitchItem = {
+  pitch_id: string;
+  pitch_name: string;
+  time_label: string;
+  start_iso: string;
+  end_iso: string;
 };
 
 export type OwnerStats = {
@@ -198,7 +209,8 @@ export type OwnerStats = {
   total_revenue: string;
   total_bookings: number;
   pitch_stats: OwnerPitchStat[];
-  today_schedule: TodayScheduleItem[];
+  today_bookings: TodayBookingItem[];
+  today_free: TodayFreePitchItem[];
 };
 
 export type OwnerPitchDetailStats = {

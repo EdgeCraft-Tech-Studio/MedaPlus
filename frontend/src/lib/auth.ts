@@ -1,3 +1,4 @@
+import { getDashboardPath, type UserRole } from "../pages/AppShell";
 import { api } from "./api";
 import { saveSession, clearSession } from "./session";
 import type { AuthSession, SessionUser } from "./session";
@@ -113,4 +114,8 @@ export async function resendOtp(payload: {
 }): Promise<{ message?: string }> {
   const res = await api.post("/otp/resend/", payload);
   return res.data;
+}
+
+export function getLandingRoute(user: SessionUser): string {
+  return getDashboardPath(user.role as UserRole) ?? "/home";
 }
