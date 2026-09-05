@@ -13,6 +13,9 @@ import styles from "./css/PitchDetail.module.css";
 import LoadingBall from "./LoadingBall";
 import { showToast } from "./Toast";
 import ToastContainer from "./Toast";
+import { getMyTeams, requestTeamBooking, type MyTeam } from "../lib/team";
+import type { BookingStep } from "./BookingTeamModal";
+import BookingTeamModal from "./BookingTeamModal";
 
 type BookingMode = "daily" | "weekly" | "monthly";
 type SelectedMap = Record<string, AvailabilitySlot>;
@@ -171,6 +174,10 @@ export default function PitchDetail() {
   const [bookedForName, setBookedForName] = useState("");
   const [notes, setNotes] = useState("");
   const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [ownedTeams, setOwnedTeams] = useState<MyTeam[]>([]);
+const [bookingStep, setBookingStep] = useState<BookingStep>("closed");
+const [selectedTeam, setSelectedTeam] = useState<MyTeam | null>(null);
+const [teamBookingLoading, setTeamBookingLoading] = useState(false);
 
   // ---------- days scroller: overflow + scroll-affordance state ----------
   const daysScrollRef = useRef<HTMLDivElement>(null);
@@ -181,6 +188,18 @@ export default function PitchDetail() {
 
   const role = user?.role;
   const isManager = role === "OWNER" || role === "ADMIN";
+
+  useEffect(() => {
+  async function loadOwnedTeams() {
+    try {
+      const teams = await getMyTeams();
+      setOwnedTeams(teams.filter((t) => t.role === "owner"));
+    } catch {
+      setOwnedTeams([]);
+    }
+  }
+  loadOwnedTeams();
+}, []);
 
   useEffect(() => {
     async function load() {
@@ -429,6 +448,99 @@ export default function PitchDetail() {
       showToast(errMsg, "delete");
     }
   }
+
+
+
+  function handleBookClick() {
+  if (selectedList.length === 0) return;
+
+  // Pitch owner/admin doing a manual cash booking — unchanged, instant.
+  if (isManager) {
+    handleBook();
+    return;
+  }
+
+  // Regular player who owns at least one team — offer the choice.
+  if (ownedTeams.length > 0) {
+    setBookingStep("choice");
+    return;
+  }
+
+  // No teams owned — book individually, as before.
+  handleBook();
+}
+
+function closeBookingModal() {
+  setBookingStep("closed");
+  setSelectedTeam(null);
+}
+
+function chooseIndividualBooking() {
+  setBookingStep("closed");
+  handleBook();
+}
+
+function chooseTeamBooking() {
+  setBookingStep("team-select");
+}
+
+function selectTeamForBooking(team: MyTeam) {
+  setSelectedTeam(team);
+}
+
+function proceedToTeamConfirm() {
+  if (selectedTeam) setBookingStep("team-confirm");
+}
+
+function backToChoiceStep() {
+  setBookingStep("choice");
+  setSelectedTeam(null);
+}
+
+function backToTeamSelectStep() {
+  setBookingStep("team-select");
+}
+
+async function handleConfirmTeamBooking() {
+  if (!pitch || !pitchId || !selectedTeam || selectedList.length === 0) return;
+
+  const bookingType =
+    mode === "daily" ? "HOURLY" : mode === "weekly" ? "WEEKLY" : "MONTHLY";
+  const memberCount = selectedTeam.active_member_count || 1;
+  const perMember = total / memberCount;
+
+  setTeamBookingLoading(true);
+  try {
+        await requestTeamBooking({
+      pitch_id: pitchId,
+      pitch_name: pitch.name,
+      team_id: selectedTeam.id,
+      booking_type: bookingType,
+      selections: selectedList.map((s) => ({
+        start_iso: s.start_iso,
+        end_iso: s.end_iso,
+      })),
+      notes,
+      price_per_member: perMember.toFixed(2),
+      total_price: total.toFixed(2),
+    });
+
+    showToast(
+      `Booking request sent to ${selectedTeam.name}. Members will be notified.`,
+      "create"
+    );
+    setBookingStep("closed");
+    setSelectedTeam(null);
+    setSelected({});
+    setNotes("");
+  } catch (e: any) {
+    const errMsg = e?.response?.data?.detail || "Failed to send the team booking request.";
+    showToast(errMsg, "delete");
+  } finally {
+    setTeamBookingLoading(false);
+  }
+}
+
 
   if (loading) {
     return <LoadingBall fullscreen label="Loading pitch..." size="sm" />;
@@ -760,7 +872,7 @@ export default function PitchDetail() {
                   </button>
                   <button
                     className={styles.bookBtn}
-                    onClick={handleBook}
+                    onClick={handleBookClick}
                     disabled={selectedList.length === 0}
                   >
                     {isManager ? "Occupy / Cash Booking" : "Create Booking"}
@@ -805,10 +917,30 @@ export default function PitchDetail() {
                   </div>
                 )}
               </div>
-            )}
+                        )}
           </div>
         </div>
       </div>
+
+      <BookingTeamModal
+        step={bookingStep}
+        teams={ownedTeams}
+        selectedTeam={selectedTeam}
+        pitchName={pitch.name}
+        mode={mode}
+        pricePerSlot={priceForMode(pitch, mode)}
+        selectedCount={selectedList.length}
+        totalPrice={total}
+        loading={teamBookingLoading}
+        onClose={closeBookingModal}
+        onChooseIndividual={chooseIndividualBooking}
+        onChooseTeam={chooseTeamBooking}
+        onSelectTeam={selectTeamForBooking}
+        onProceedToConfirm={proceedToTeamConfirm}
+        onConfirmTeamBooking={handleConfirmTeamBooking}
+        onBack={backToChoiceStep}
+        onBackToTeams={backToTeamSelectStep}
+      />
     </div>
     </div>
   );

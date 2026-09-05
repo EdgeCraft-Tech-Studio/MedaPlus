@@ -41,12 +41,14 @@ export interface AppNotification {
   category: NotificationCategory;
   title: string;
   message: string;
-  time: string; // relative, e.g. "2h ago"
+  time: string;
   read: boolean;
+  rawType?: string;
+  data?: Record<string, any>;
   action?: {
-    label: string;
-    kind: "accept_decline" | "open";
+    kind: "open" | "accept_decline";
     to?: string;
+    label?: string;
   };
 }
 

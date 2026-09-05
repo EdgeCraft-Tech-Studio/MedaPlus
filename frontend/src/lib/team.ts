@@ -347,3 +347,39 @@ export async function createDirectInvitation(slug: string, invitedUserId: string
   });
   return res.data;
 }
+
+
+// ---------- Team booking requests (notify members instead of instant booking) ----------
+
+export interface TeamBookingRequestPayload {
+  pitch_id: string;
+  pitch_name: string;
+  team_id: string;
+  booking_type: "HOURLY" | "WEEKLY" | "MONTHLY";
+  selections: { start_iso: string; end_iso: string }[];
+  notes?: string;
+  price_per_member: string;
+  total_price: string;
+}
+
+export interface TeamBookingRequestResult {
+  message: string;
+  request_id: string;
+}
+
+/**
+ * Sends a booking *request* to a team the caller owns. This does NOT
+ * create a confirmed booking — it notifies the team's members so they
+ * can chip in / confirm. Requires a backend endpoint at
+ * POST /bookings/team-request/ that:
+ *   1. validates the caller owns `team_id`,
+ *   2. re-checks slot availability for `pitch_id` + `selections`,
+ *   3. creates a pending team-booking-request record,
+ *   4. fires notifications to all active team members.
+ */
+export async function requestTeamBooking(
+  payload: TeamBookingRequestPayload
+): Promise<TeamBookingRequestResult> {
+  const res = await api.post("/bookings/team-request/", payload);
+  return res.data;
+}

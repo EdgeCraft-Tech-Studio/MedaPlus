@@ -288,3 +288,51 @@ export async function deleteAdminOwner(ownerId: string) {
   const res = await api.delete(`/admin/owners/${ownerId}/delete/`);
   return res.data;
 }
+
+
+
+export type BookedByInfo = {
+  type: "individual" | "manual";
+  name: string;
+  first_name: string;
+  last_name: string;
+  username: string;
+  email: string | null;
+  phone: string | null;
+};
+
+export type BookingHistoryEntry = {
+  id: string;
+  kind: "booking" | "manual";
+  start_iso: string;
+  end_iso: string;
+  time_label: string;
+  booking_type: string | null;
+  total_price: string | null;
+  status: string;
+  notes: string;
+  booked_by: BookedByInfo;
+};
+
+export type BookingHistoryResponse = {
+  results: BookingHistoryEntry[];
+  page: number;
+  total_pages: number;
+  total_count: number;
+};
+
+export async function getPitchBookingHistory(pitchId: string, page: number = 1) {
+  const res = await api.get(`/pitches/${pitchId}/booking-history/`, { params: { page } });
+  return res.data as BookingHistoryResponse;
+}
+
+/** One historical/manual booking entered at pitch setup or edit time.
+ *  Append `JSON.stringify(list of these)` to the FormData under the key
+ *  "already_booked_slots" before calling createPitch/updatePitch. */
+export type AlreadyBookedSlotInput = {
+  date: string; // YYYY-MM-DD
+  start_hour: number;
+  end_hour: number;
+  name: string;
+  phone: string;
+};

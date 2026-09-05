@@ -1,0 +1,84 @@
+.wrap {
+  display: grid;
+  gap: 10px;
+}
+
+.hint {
+  font-size: 12px;
+  font-weight: 600;
+  color: #6b7280;
+}
+
+.hourGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 6px;
+}
+
+.hourBtn {
+  padding: 8px 6px;
+  border-radius: 8px;
+  border: 1px solid #d6dade;
+  background: #ffffff;
+  color: #14181d;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.hourBtn:hover:not(:disabled) {
+  border-color: #e2a63b;
+  background: #fbf1de;
+}
+
+.hourBtn:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.hourBtnTaken {
+  background: #fbeae7;
+  border-color: #c0392b;
+  color: #c0392b;
+  opacity: 0.7;
+}
+
+.hourBtnPending {
+  background: #123522;
+  border-color: #123522;
+  color: #ffffff;
+  opacity: 1;
+}
+
+.chipRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 6px 6px 12px;
+  border-radius: 999px;
+  background: #eaf2ed;
+  color: #123522;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.chip button {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  border: none;
+  background: #ffffff;
+  color: #123522;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+}

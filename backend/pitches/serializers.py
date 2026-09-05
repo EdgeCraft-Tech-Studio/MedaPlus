@@ -112,6 +112,31 @@ class PitchSerializer(serializers.ModelSerializer):
         return PitchImageSerializer(qs, many=True, context=self.context).data
 
 
+class AlreadyBookedSlotSerializer(serializers.Serializer):
+    """One historical/manual booking entered by the owner — a slot that
+    was already taken before the pitch went on the platform, so it needs
+    to show up as unavailable and be attributed to someone.
+    """
+
+    date = serializers.DateField()
+    start_hour = serializers.IntegerField(min_value=0, max_value=23)
+    end_hour = serializers.IntegerField(min_value=1, max_value=24)
+    name = serializers.CharField(max_length=120)
+    phone = serializers.CharField(max_length=30, required=False, allow_blank=True, default="")
+
+    def validate_name(self, value):
+        if not value.strip():
+            raise serializers.ValidationError("Name is required for an already-booked slot.")
+        return value.strip()
+
+    def validate(self, attrs):
+        if attrs["end_hour"] <= attrs["start_hour"]:
+            raise serializers.ValidationError("End time must be after start time.")
+        return attrs
+
+
+
+
 class PitchCreateSerializer(serializers.Serializer):
     tenant_id = serializers.CharField(required=False)
     owner_id = serializers.CharField(required=False)

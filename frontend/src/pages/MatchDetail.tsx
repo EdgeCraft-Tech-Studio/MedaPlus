@@ -2,8 +2,6 @@ import { useState } from "react";
 import { Link, useParams, Navigate } from "react-router-dom";
 import styles from "./css/Matches.module.css";
 import { BackArrowIcon } from "./Icons";
-import { mockAllMatches } from "./mockData";
-
 export default function MatchDetail() {
   const { matchId } = useParams<{ matchId: string }>();
   const match = mockAllMatches.find((m) => m.id === matchId);

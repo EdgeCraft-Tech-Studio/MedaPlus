@@ -27,6 +27,9 @@ class Slot(models.Model):
         blank=True,
         related_name="updated_slots",
     )
+    manual_booked_name = models.CharField(max_length=120, blank=True, default="")
+    manual_booked_phone = models.CharField(max_length=30, blank=True, default="")
+    held_until = models.DateTimeField(null=True, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

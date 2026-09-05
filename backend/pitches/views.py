@@ -12,7 +12,7 @@ from rest_framework.response import Response
 from accounts.models.user import UserRole
 from bookings.models import BookingStatus, Slot, SlotStatus
 from .models import Tenant, Pitch, PitchImage
-from .serializers import PitchSerializer, PitchCreateSerializer, PitchUpdateSerializer
+from .serializers import AlreadyBookedSlotSerializer, PitchSerializer, PitchCreateSerializer, PitchUpdateSerializer
 
 from collections import defaultdict
 from django.shortcuts import get_object_or_404
@@ -28,6 +28,7 @@ def is_admin(u) -> bool:
 
 def is_owner(u) -> bool:
     return u.is_authenticated and u.role == UserRole.OWNER
+
 
 def _serialize_existing_bookings(pitch: Pitch, user):
     if not (is_admin(user) or (is_owner(user) and hasattr(user, "tenant") and pitch.tenant_id == user.tenant.id)):
@@ -60,6 +61,7 @@ def _serialize_existing_bookings(pitch: Pitch, user):
         )
     return items
 
+
 def _can_view_pitch(user, pitch: Pitch) -> bool:
     if is_admin(user):
         return True
@@ -67,12 +69,14 @@ def _can_view_pitch(user, pitch: Pitch) -> bool:
         return True
     return pitch.is_active and pitch.is_approved and pitch.tenant.is_active and pitch.tenant.is_approved
 
+
 def _can_edit_pitch(user, pitch: Pitch) -> bool:
     if is_admin(user):
         return True
     if is_owner(user) and hasattr(user, "tenant") and pitch.tenant_id == user.tenant.id:
         return True
     return False
+
 
 def _build_day_slots(pitch: Pitch, day_date):
     tz = timezone.get_current_timezone()
@@ -89,13 +93,13 @@ def _build_day_slots(pitch: Pitch, day_date):
         start_dt__gte=day_start,
         start_dt__lt=day_end,
     ).order_by("start_dt")
-  
+
     slot_map = {}
     for s in existing_slots:
         slot_map[s.start_dt] = s
 
     slots = []
-    for hour in  range(start_hour, end_hour):
+    for hour in range(start_hour, end_hour):
         start_dt = timezone.make_aware(datetime.combine(day_date, time(hour=hour)), tz)
         end_dt = start_dt + timedelta(hours=1)
 
@@ -130,6 +134,57 @@ def _build_day_slots(pitch: Pitch, day_date):
 def _build_next_7_days(pitch: Pitch):
     today = timezone.localdate()
     return [_build_day_slots(pitch, today + timedelta(days=i)) for i in range(7)]
+
+
+def _apply_already_booked_slots(request, pitch, actor):
+    """Parses the 'already_booked_slots' form field (a JSON string, since
+    this rides along with multipart form data) and marks each described
+    hour range as BOOKED with the given name/phone attached. Returns an
+    error Response if the payload is malformed or invalid, else None.
+
+    Expected shape:
+      [{"date": "2026-09-05", "start_hour": 8, "end_hour": 10,
+        "name": "Abebe Kebede", "phone": "0911..."}, ...]
+    """
+    raw = request.data.get("already_booked_slots", "")
+    if not raw:
+        return None
+
+    try:
+        items = json.loads(raw)
+    except (TypeError, ValueError):
+        return Response({"already_booked_slots": ["Invalid format."]}, status=400)
+
+    if not isinstance(items, list):
+        return Response({"already_booked_slots": ["Expected a list."]}, status=400)
+
+    serializer = AlreadyBookedSlotSerializer(data=items, many=True)
+    if not serializer.is_valid():
+        return Response({"already_booked_slots": serializer.errors}, status=400)
+
+    tz = timezone.get_current_timezone()
+    for item in serializer.validated_data:
+        start_naive = datetime.combine(item["date"], time(hour=item["start_hour"]))
+        if item["end_hour"] == 24:
+            end_naive = datetime.combine(item["date"] + timedelta(days=1), time(hour=0))
+        else:
+            end_naive = datetime.combine(item["date"], time(hour=item["end_hour"]))
+
+        start_dt = timezone.make_aware(start_naive, tz)
+        end_dt = timezone.make_aware(end_naive, tz)
+
+        Slot.objects.update_or_create(
+            pitch=pitch,
+            start_dt=start_dt,
+            defaults={
+                "end_dt": end_dt,
+                "status": SlotStatus.BOOKED,
+                "updated_by": actor,
+                "manual_booked_name": item["name"],
+                "manual_booked_phone": item.get("phone", ""),
+            },
+        )
+    return None
 
 
 def _build_monthly_weeks(pitch: Pitch):
@@ -172,81 +227,6 @@ def _merge_contiguous_bookings(bookings):
                 "booked_by_list": [booked_by] if booked_by else [],
             })
     return merged
-
-
-
-
-
-
-def _create_initial_slots(pitch: Pitch, raw_payload: str, user):
-    """
-    Consumes the frontend's "initial_slots" JSON:
-      [{"date": "2026-09-05", "ranges": [{"start": "08:00", "end": "10:00"}, ...]}, ...]
-
-    Each range becomes one Slot per hour it spans, marked as already booked
-    (this represents bookings the pitch already had before the owner
-    registered it on the platform — not open availability).
-
-    NOTE: this assumes bookings.models.SlotStatus has a "BOOKED" member.
-    Double check the exact name in your SlotStatus choices and adjust the
-    line below if it's spelled differently (e.g. RESERVED / UNAVAILABLE).
-    """
-    if not raw_payload:
-        return []
-
-    try:
-        entries = json.loads(raw_payload)
-    except (TypeError, ValueError):
-        raise ValueError("initial_slots must be valid JSON.")
-
-    if not isinstance(entries, list):
-        raise ValueError("initial_slots must be a JSON array.")
-
-    tz = timezone.get_current_timezone()
-    created = []
-
-    for entry in entries:
-        date_str = (entry or {}).get("date")
-        ranges = (entry or {}).get("ranges") or []
-        if not date_str or not ranges:
-            continue
-
-        try:
-            day = datetime.strptime(date_str, "%Y-%m-%d").date()
-        except ValueError:
-            raise ValueError(f"Invalid date '{date_str}' in initial_slots.")
-
-        for r in ranges:
-            start_str = (r or {}).get("start")
-            end_str = (r or {}).get("end")
-            if not start_str or not end_str:
-                continue
-
-            try:
-                start_hour = int(start_str.split(":")[0])
-                end_hour = int(end_str.split(":")[0])
-            except (ValueError, IndexError):
-                raise ValueError(f"Invalid time range '{start_str}'-'{end_str}' on {date_str}.")
-
-            if end_hour <= start_hour:
-                raise ValueError(f"End time must be after start time on {date_str}.")
-
-            for hour in range(start_hour, end_hour):
-                start_naive = datetime.combine(day, time(hour=hour))
-                end_naive = start_naive + timedelta(hours=1)
-                start_dt = timezone.make_aware(start_naive, tz)
-                end_dt = timezone.make_aware(end_naive, tz)
-
-                slot = Slot.objects.create(
-                    pitch=pitch,
-                    start_dt=start_dt,
-                    end_dt=end_dt,
-                    status=SlotStatus.BOOKED,  # <-- confirm this matches your enum
-                    updated_by=user,
-                )
-                created.append(slot)
-
-    return created
 
 
 @api_view(["GET"])
@@ -389,17 +369,35 @@ def pitches_list_create(request):
     for uploaded_file in images:
         PitchImage.objects.create(pitch=pitch, image=uploaded_file)
 
-        raw_initial_slots = request.data.get("initial_slots")
-    if raw_initial_slots:
-        try:
-            _create_initial_slots(pitch, raw_initial_slots, u)
-        except ValueError as exc:
-            return Response({"initial_slots": [str(exc)]}, status=status.HTTP_400_BAD_REQUEST)
+    slot_date = data.get("slot_date") or timezone.localdate()
+    slot_hours = data.get("slot_hours") or []
+    tz = timezone.get_current_timezone()
+
+    for raw_h in slot_hours:
+        h = int(raw_h)
+        start_naive = datetime.combine(slot_date, time(hour=h, minute=0))
+        end_naive = start_naive + timedelta(hours=1)
+
+        start_dt = timezone.make_aware(start_naive, tz)
+        end_dt = timezone.make_aware(end_naive, tz)
+
+        Slot.objects.create(
+            pitch=pitch,
+            start_dt=start_dt,
+            end_dt=end_dt,
+            status=SlotStatus.AVAILABLE,
+            updated_by=u,
+        )
+
+    already_booked_error = _apply_already_booked_slots(request, pitch, u)
+    if already_booked_error is not None:
+        return already_booked_error
 
     return Response(
         {"pitch": PitchSerializer(pitch, context={"request": request}).data},
         status=status.HTTP_201_CREATED,
     )
+
 
 @api_view(["GET", "PATCH"])
 @permission_classes([IsAuthenticated])
@@ -470,6 +468,10 @@ def pitch_detail(request, pitch_id: str):
     for uploaded_file in new_images:
         PitchImage.objects.create(pitch=pitch, image=uploaded_file)
 
+    already_booked_error = _apply_already_booked_slots(request, pitch, request.user)
+    if already_booked_error is not None:
+        return already_booked_error
+
     return Response(
         {
             "pitch": PitchSerializer(pitch, context={"request": request}).data,
@@ -501,13 +503,12 @@ def admin_approve_pitch(request, pitch_id: str):
     except Pitch.DoesNotExist:
         return Response({"detail": "Pitch not found"}, status=404)
 
-    if not pitch.tenant.is_approved: 
+    if not pitch.tenant.is_approved:
         return Response({"detail": "Tenant is not approved yet"}, status=400)
 
     pitch.is_approved = True
     pitch.save()
     return Response({"ok": True, "pitch_id": str(pitch.id), "is_approved": pitch.is_approved})
-
 
 
 @api_view(["GET"])
@@ -636,8 +637,6 @@ def owner_dashboard_stats(request):
     })
 
 
-
-
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def owner_pitch_detail_stats(request, pitch_id: str):
@@ -681,6 +680,104 @@ def owner_pitch_detail_stats(request, pitch_id: str):
     })
 
 
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def owner_pitch_booking_history(request, pitch_id: str):
+    """Paginated, newest-first booking history for one pitch — real
+    in-app Booking rows plus manually-entered pre-platform bookings
+    (Slots marked BOOKED with a manual_booked_name), unioned into one
+    timeline so the owner can see both in one place, 10 per page.
+    """
+    pitch = get_object_or_404(Pitch, id=pitch_id)
+    if not _can_edit_pitch(request.user, pitch):
+        return Response({"detail": "Forbidden"}, status=403)
+
+    try:
+        page = max(int(request.query_params.get("page", 1)), 1)
+    except ValueError:
+        page = 1
+    page_size = 10
+
+    entries = []
+
+    bookings_qs = Booking.objects.filter(pitch=pitch).select_related("player").order_by("-start_dt")
+    for b in bookings_qs:
+        player = b.player
+        full_name = ""
+        if player is not None:
+            full_name = f"{getattr(player, 'first_name', '')} {getattr(player, 'last_name', '')}".strip()
+        entries.append({
+            "id": f"booking:{b.id}",
+            "kind": "booking",
+            "start_iso": b.start_dt.isoformat(),
+            "end_iso": b.end_dt.isoformat(),
+            "time_label": (
+                f"{timezone.localtime(b.start_dt).strftime('%d %b %Y, %I:%M %p')} - "
+                f"{timezone.localtime(b.end_dt).strftime('%I:%M %p')}"
+            ),
+            "booking_type": b.booking_type,
+            "total_price": str(b.total_price),
+            "status": b.status,
+            "notes": b.notes or "",
+            "booked_by": {
+                "type": "individual",
+                "name": full_name or (getattr(player, "username", "") if player else "Unknown"),
+                "first_name": getattr(player, "first_name", "") if player else "",
+                "last_name": getattr(player, "last_name", "") if player else "",
+                "username": getattr(player, "username", "") if player else "",
+                "email": (getattr(player, "email", "") or None) if player else None,
+                "phone": (getattr(player, "phone", "") or None) if player else None,
+            },
+            "_sort": b.start_dt,
+        })
+
+    manual_qs = (
+        Slot.objects.filter(pitch=pitch, status=SlotStatus.BOOKED)
+        .exclude(manual_booked_name="")
+        .order_by("-start_dt")
+    )
+    for s in manual_qs:
+        entries.append({
+            "id": f"slot:{s.id}",
+            "kind": "manual",
+            "start_iso": s.start_dt.isoformat(),
+            "end_iso": s.end_dt.isoformat(),
+            "time_label": (
+                f"{timezone.localtime(s.start_dt).strftime('%d %b %Y, %I:%M %p')} - "
+                f"{timezone.localtime(s.end_dt).strftime('%I:%M %p')}"
+            ),
+            "booking_type": None,
+            "total_price": None,
+            "status": "MANUAL",
+            "notes": "",
+            "booked_by": {
+                "type": "manual",
+                "name": s.manual_booked_name,
+                "first_name": "",
+                "last_name": "",
+                "username": "",
+                "email": None,
+                "phone": s.manual_booked_phone or None,
+            },
+            "_sort": s.start_dt,
+        })
+
+    entries.sort(key=lambda e: e["_sort"], reverse=True)
+    for e in entries:
+        e.pop("_sort")
+
+    total = len(entries)
+    total_pages = max((total + page_size - 1) // page_size, 1)
+    page = min(page, total_pages)
+    start = (page - 1) * page_size
+    page_items = entries[start:start + page_size]
+
+    return Response({
+        "results": page_items,
+        "page": page,
+        "total_pages": total_pages,
+        "total_count": total,
+    })
 
 
 @api_view(["GET"])

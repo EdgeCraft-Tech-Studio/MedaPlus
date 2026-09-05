@@ -1,0 +1,75 @@
+.overlay {
+  position: fixed; inset: 0;
+  background: rgba(10, 12, 16, 0.6);
+  backdrop-filter: blur(5px);
+  display: grid; place-items: center;
+  z-index: 2100; padding: 20px;
+}
+.card {
+  position: relative;
+  width: 100%; max-width: 400px; max-height: 85vh; overflow-y: auto;
+  background: var(--surface, #fff); border-radius: 22px;
+  padding: 30px 24px 24px;
+  box-shadow: 0 26px 60px rgba(10, 12, 16, 0.3);
+  font-family: var(--font, 'Inter', sans-serif); color: var(--text, #111318);
+  text-align: center;
+}
+.closeBtn {
+  position: absolute; top: 16px; right: 16px;
+  width: 30px; height: 30px; border-radius: 50%;
+  border: none; background: var(--surface-alt, #f4f5f6);
+  color: var(--text-muted, #686d76); display: grid; place-items: center; cursor: pointer;
+}
+.closeBtn:hover { background: #fdecec; color: #dc2626; }
+.closeBtn svg { width: 14px; height: 14px; }
+
+.iconWrap {
+  width: 60px; height: 60px; border-radius: 50%;
+  background: linear-gradient(135deg, #d9f2e6, #b8e8cf);
+  color: #0f7a52; display: grid; place-items: center; margin: 0 auto 16px;
+}
+.icon { width: 28px; height: 28px; }
+
+.title { font-size: 19px; font-weight: 800; margin-bottom: 4px; }
+.subtitle { font-size: 13px; color: var(--text-muted, #686d76); margin-bottom: 20px; }
+
+.detailCard {
+  background: var(--surface-alt, #f4f5f6); border: 1px solid var(--border, #e6e7ea);
+  border-radius: 14px; padding: 14px 16px; text-align: left; margin-bottom: 20px;
+  display: grid; gap: 10px;
+}
+.detailRow { display: flex; align-items: center; justify-content: space-between; font-size: 13px; }
+.detailLabel { color: var(--text-muted, #686d76); }
+.detailValue { font-weight: 700; }
+.detailValueMono { font-weight: 700; font-family: var(--font-mono, monospace); color: var(--accent-hover, #0c6544); }
+
+.sectionLabel {
+  font-size: 11.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.03em;
+  color: var(--text-faint, #9a9ea5); margin-bottom: 10px; text-align: left;
+}
+.chipList { display: flex; flex-wrap: wrap; gap: 7px; }
+.chip {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 10px 5px 5px; border-radius: 999px;
+  background: #e7f4ee; border: 1px solid #cdeadd; font-size: 11.5px; font-weight: 700;
+}
+.chipAvatar {
+  width: 22px; height: 22px; border-radius: 50%; overflow: hidden;
+  background: var(--surface, #fff); display: grid; place-items: center; flex-shrink: 0;
+}
+.chipAvatarFallback {
+  width: 100%; height: 100%; display: grid; place-items: center;
+  background: var(--accent-soft, #e7f4ee); color: var(--accent-hover, #0c6544);
+  font-size: 10px; font-weight: 800;
+}
+
+.playerCountCard {
+  display: flex; align-items: center; justify-content: space-between;
+  background: linear-gradient(135deg, #0f7a52, #0c6544); color: #fff;
+  border-radius: 14px; padding: 14px 18px; font-size: 13px;
+}
+.playerCountCard b { font-family: var(--font-mono, monospace); font-size: 18px; }
+
+@media (max-width: 420px) {
+  .card { padding: 26px 18px 20px; }
+}

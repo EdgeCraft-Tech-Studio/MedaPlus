@@ -1,0 +1,2 @@
+class NotificationServiceError(Exception):
+    pass

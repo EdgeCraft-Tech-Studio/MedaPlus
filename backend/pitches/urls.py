@@ -1,6 +1,7 @@
 from django.urls import path
 from .views import (
     health,
+    owner_pitch_booking_history,
     pitches_list_create,
     admin_pending_pitches,
     admin_approve_pitch,
@@ -14,9 +15,10 @@ from .views import (
 
 urlpatterns = [
     path("pitches/health/", health),
-    path("pitches/owner/stats/", owner_dashboard_stats),
+    path("pitches/owner/stats/", owner_dashboard_stats), 
     path("pitches/", pitches_list_create),
     path("pitches/<str:pitch_id>/owner-stats/", owner_pitch_detail_stats),
+    path("pitches/<str:pitch_id>/booking-history/", owner_pitch_booking_history), 
     path("pitches/<str:pitch_id>/", pitch_detail),
     path("admin/stats/", admin_platform_stats),
     path("admin/pitches/pending/", admin_pending_pitches),
