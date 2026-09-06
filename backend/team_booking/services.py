@@ -24,8 +24,8 @@ from .models import (
 
 REQUEST_LIFETIME_MINUTES = 1
 
-PAYMENT_LIFETIME_MINUTES = 10
-PAYMENT_REMINDER_MINUTES = 5
+PAYMENT_LIFETIME_MINUTES = 2
+PAYMENT_REMINDER_MINUTES = 3
 
 
 def _format_selection_summary(selections: list) -> str:
@@ -591,7 +591,7 @@ def resolve_confirm_summary(*, request_id, owner, action: str) -> dict:
             return {"unavailable": True, "pitch_id": booking_request.pitch_id}
 
     now = timezone.now()
-    payment_deadline = now + timedelta(minutes=10)
+    payment_deadline = now + timedelta(minutes=PAYMENT_LIFETIME_MINUTES)
     hold_slots(pitch, booking_request.selections, held_until=payment_deadline, updated_by=owner)
 
     confirmations = booking_request.confirmations.select_related("member")
