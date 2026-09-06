@@ -14,7 +14,7 @@ import {
 import { type AppNotification, type NotificationCategory } from "./types";
 import { getUnreadSummary, type ChatUnreadSummary } from "../lib/chat";
 import { me } from "../lib/auth";
-import type { SessionUser } from "../lib/session";
+import { getAccessToken, type SessionUser } from "../lib/session";
 import {
   confirmTeamBooking, declineTeamBooking, getBookedPitchSummary, getMyActiveTeamBookings,
   getMyConfirmationDetail, getMyPaymentDetail, getPendingOwnerAction, getPendingPayment,
@@ -34,6 +34,7 @@ import OwnerBookingSummaryPopup from "./OwnerBookingSummaryPopup";
 import TeamBookingListPopup from "./TeamBookingListPopup";
 import TeamBookingLiveDetailPopup from "./TeamBookingLiveDetailPopup";
 import BookedPitchSummaryPopup from "./BookedPitchSummaryPopup";
+import { connectNotificationSocket } from "../lib/notificationSocket";
 
 function DashboardIcon({ width = 20, height = 20 }: { width?: number; height?: number }) {
   return (
@@ -246,6 +247,27 @@ export default function AppShell() {
     refreshPendingOwnerAction();
     const interval = setInterval(refreshPendingOwnerAction, OWNER_ACTION_POLL_INTERVAL_MS);
     return () => clearInterval(interval);
+  }, []);
+
+      useEffect(() => {
+    const token = getAccessToken() || "";
+    if (!token) return;
+
+    const ws = connectNotificationSocket(token, (payload) => {
+      console.log("Realtime notification received:", payload);
+      // Trigger the exact same refresh functions your polling already
+      // uses — this makes the update feel instant instead of waiting
+      // for the next interval tick.
+      refreshNotifications();
+      refreshPendingOwnerAction();
+      refreshPendingPayment();
+      refreshPendingBookingConfirmation();
+      refreshTeamUpdateBadge();
+    });
+
+    return () => {
+      ws.close();
+    };
   }, []);
 
   // ---------------- "Team Update" needs-decision badge ----------------

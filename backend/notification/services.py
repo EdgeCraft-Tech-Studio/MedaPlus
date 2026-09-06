@@ -81,6 +81,46 @@ def _send_push_for_notification(notification: Notification) -> None:
         )
 
 
+def _broadcast_over_websocket(notification: Notification) -> None:
+    """Best-effort real-time push over the WebSocket group for this
+    recipient. Wrapped defensively — if Redis is down, or Channels
+    isn't running for some reason, this must NEVER take down the
+    actual notification creation. Polling remains the fallback.
+    """
+    print(">>> BROADCAST CALLED for recipient:", notification.recipient_id)  # TEMP DEBUG
+    try:
+        from asgiref.sync import async_to_sync
+        from channels.layers import get_channel_layer
+
+        channel_layer = get_channel_layer()
+        print(">>> CHANNEL LAYER:", channel_layer)  # TEMP DEBUG
+        if channel_layer is None:
+            print(">>> CHANNEL LAYER IS NONE — cannot broadcast")  # TEMP DEBUG
+            return
+
+        async_to_sync(channel_layer.group_send)(
+            f"user_{notification.recipient_id}",
+            {
+                "type": "notify_event",
+                "payload": {
+                    "MARKER": "THIS_IS_OUR_REAL_BROADCAST",
+                    "notification_type": notification.notification_type,
+                    "title": notification.title,
+                    "body": notification.body,
+                    "data": notification.data,
+                },
+            },
+        )
+        print(">>> GROUP SEND COMPLETED to group:", f"user_{notification.recipient_id}")  # TEMP DEBUG
+    except Exception:
+        print(">>> BROADCAST EXCEPTION — see traceback below")  # TEMP DEBUG
+        logger.exception("WebSocket broadcast failed for notification %s", notification.id)
+
+from accounts.models import User
+u = User.objects.get(username="Teamowner")
+print(u.id)
+
+
 def notify(
     *,
     recipient,
@@ -125,6 +165,8 @@ def notify(
             _send_push_for_notification(notification)
         except Exception:
             logger.exception("Push send failed for notification %s", notification.id)
+
+    _broadcast_over_websocket(notification)
 
     return notification
 

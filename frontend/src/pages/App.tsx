@@ -649,10 +649,7 @@ export default function App() {
   function goToPitch(pitchId: string) {
     navigate(`/app/pitches/${pitchId}`);
   }
-   console.log("hello start");
-  console.log(filteredPitches.map(p => ({ name: p.name, sport_type: (p as any).sport_type })));
   
-   console.log("hello end");
 
   const TABS: { key: TabKey; label: string; icon: (p: React.SVGProps<SVGSVGElement>) => React.ReactElement }[] = [
     { key: "map", label: "Map", icon: MapTabIcon },

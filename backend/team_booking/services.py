@@ -22,8 +22,7 @@ from .models import (
     TeamBookingRequestStatus,
 )
 
-REQUEST_LIFETIME_MINUTES = 1
-
+REQUEST_LIFETIME_MINUTES = 3 # just for check ok i move fast to check the websocket terminal
 PAYMENT_LIFETIME_MINUTES = 10
 PAYMENT_REMINDER_MINUTES = 5
 
