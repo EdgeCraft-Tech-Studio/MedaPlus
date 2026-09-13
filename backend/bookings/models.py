@@ -29,6 +29,8 @@ class Slot(models.Model):
     )
     manual_booked_name = models.CharField(max_length=120, blank=True, default="")
     manual_booked_phone = models.CharField(max_length=30, blank=True, default="")
+    manual_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)  # NEW
+   
     held_until = models.DateTimeField(null=True, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
@@ -81,6 +83,8 @@ class Booking(models.Model):
 
     # Useful UX field (show to user/staff)
     booking_code = models.CharField(max_length=12, blank=True, default="")
+    booked_for_name = models.CharField(max_length=120, blank=True, default="") 
+    booked_for_phone = models.CharField(max_length=30, blank=True, default="") 
 
     notes = models.CharField(max_length=255, blank=True, default="")
 

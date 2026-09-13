@@ -2,7 +2,7 @@ from datetime import datetime, time, timedelta
 import json
 from django.contrib.auth import get_user_model
 from django.db.models.aggregates import Sum
-from django.utils import timezone
+from django.utils import timezone 
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes, parser_classes
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
@@ -22,12 +22,32 @@ from decimal import Decimal
 User = get_user_model()
 
 
+
+
+
 def is_admin(u) -> bool:
     return u.is_authenticated and u.role == UserRole.ADMIN
 
 
 def is_owner(u) -> bool:
     return u.is_authenticated and u.role == UserRole.OWNER
+
+
+WEEKDAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+
+
+def _monday_of(d):
+    return d - timedelta(days=d.weekday())
+
+
+
+
+
+def _hour_label(h, end_h):
+    ref = timezone.localdate()
+    start_str = datetime.combine(ref, time(hour=h)).strftime("%I:%M %p")
+    end_str = "12:00 AM" if end_h == 24 else datetime.combine(ref, time(hour=end_h)).strftime("%I:%M %p")
+    return f"{start_str} - {end_str}"
 
 
 def _serialize_existing_bookings(pitch: Pitch, user):
@@ -239,7 +259,7 @@ def health(request):
 @permission_classes([IsAuthenticated])
 @parser_classes([MultiPartParser, FormParser, JSONParser])
 def pitches_list_create(request):
-    u = request.user
+    u = request.user 
 
     # ------------------------
     # LIST
@@ -875,3 +895,221 @@ def admin_delete_owner(request, owner_id: str):
         return Response({"detail": "Owner not found"}, status=404)
     owner.delete()
     return Response({"ok": True})
+
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def owner_pitch_weekly_grid(request, pitch_id: str):
+    """Returns a booking grid for a pitch over an explicit date range:
+    ?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD (both inclusive). If neither
+    is given, defaults to the current Mon-Sun week. If only date_from is
+    given, returns that single day. Also supports ?name=, ?start_hour=,
+    ?end_hour= for filtering.
+    """
+    pitch = get_object_or_404(Pitch, id=pitch_id)
+    if not _can_edit_pitch(request.user, pitch):
+        return Response({"detail": "Forbidden"}, status=403)
+
+    tz = timezone.get_current_timezone()
+
+    date_from_raw = request.query_params.get("date_from")
+    date_to_raw = request.query_params.get("date_to")
+
+    if date_from_raw:
+        try:
+            date_from = datetime.strptime(date_from_raw, "%Y-%m-%d").date()
+        except ValueError:
+            return Response({"detail": "Invalid date_from."}, status=400)
+    else:
+        date_from = _monday_of(timezone.localdate())
+
+    if date_to_raw:
+        try:
+            date_to = datetime.strptime(date_to_raw, "%Y-%m-%d").date()
+        except ValueError:
+            return Response({"detail": "Invalid date_to."}, status=400)
+    else:
+        # No explicit date_to: if the caller also didn't give date_from,
+        # this is the "no filter at all" default -> show the full week.
+        # If they DID give date_from but no date_to, they want that one
+        # single day only.
+        date_to = date_from if date_from_raw else date_from + timedelta(days=6)
+
+    if date_to < date_from:
+        date_from, date_to = date_to, date_from
+
+    # Safety cap so a mistaken huge range can't blow up the grid/query.
+    MAX_RANGE_DAYS = 31
+    if (date_to - date_from).days > MAX_RANGE_DAYS - 1:
+        date_to = date_from + timedelta(days=MAX_RANGE_DAYS - 1)
+
+    range_start_dt = timezone.make_aware(datetime.combine(date_from, time.min), tz)
+    range_end_dt = timezone.make_aware(datetime.combine(date_to + timedelta(days=1), time.min), tz)
+
+    name_filter = (request.query_params.get("name") or "").strip().lower()
+
+    try:
+        min_hour = int(request.query_params.get("start_hour", pitch.opening_time.hour))
+    except (TypeError, ValueError):
+        min_hour = pitch.opening_time.hour
+    try:
+        max_hour = int(request.query_params.get("end_hour", pitch.closing_time.hour))
+    except (TypeError, ValueError):
+        max_hour = pitch.closing_time.hour
+
+    min_hour = max(min_hour, pitch.opening_time.hour)
+    max_hour = min(max_hour, pitch.closing_time.hour)
+    if max_hour <= min_hour:
+        min_hour, max_hour = pitch.opening_time.hour, pitch.closing_time.hour
+
+    num_days = (date_to - date_from).days + 1
+    days = []
+    for i in range(num_days):
+        d = date_from + timedelta(days=i)
+        days.append({
+            "date": d.isoformat(),
+            "weekday": WEEKDAY_NAMES[d.weekday()],
+            "weekday_short": WEEKDAY_NAMES[d.weekday()][:3],
+            "display_date": d.strftime("%d %b"),
+        })
+    hours = [
+        {"start_hour": h, "end_hour": h + 1, "label": _hour_label(h, h + 1)}
+        for h in range(min_hour, max_hour)
+    ]
+
+    cells = {}
+
+    bookings_qs = Booking.objects.filter(
+        pitch=pitch, status=BookingStatus.CONFIRMED,
+        start_dt__gte=range_start_dt, start_dt__lt=range_end_dt,
+    ).select_related("player")
+
+    for b in bookings_qs:
+        local_start = timezone.localtime(b.start_dt)
+        booker_name = b.booked_for_name or (
+            f"{getattr(b.player, 'first_name', '')} {getattr(b.player, 'last_name', '')}".strip()
+            or getattr(b.player, "username", "Unknown")
+        )
+        if name_filter and name_filter not in booker_name.lower():
+            continue
+        key = f"{local_start.date().isoformat()}_{local_start.hour}"
+        cells[key] = {
+            "status": "booked",
+            "kind": "manual" if b.booked_for_name else "individual",
+            "name": booker_name,
+            "amount": str(b.total_price),
+            "time_label": f"{local_start.strftime('%I:%M %p')} - {timezone.localtime(b.end_dt).strftime('%I:%M %p')}",
+            "phone": b.booked_for_phone or getattr(b.player, "phone", None),
+            "email": None if b.booked_for_name else getattr(b.player, "email", None),
+            "date": local_start.date().isoformat(),
+        }
+
+    manual_qs = Slot.objects.filter(
+        pitch=pitch, status=SlotStatus.BOOKED,
+        start_dt__gte=range_start_dt, start_dt__lt=range_end_dt,
+    ).exclude(manual_booked_name="")
+
+    for s in manual_qs:
+        local_start = timezone.localtime(s.start_dt)
+        key = f"{local_start.date().isoformat()}_{local_start.hour}"
+        if key in cells:
+            continue
+        if name_filter and name_filter not in s.manual_booked_name.lower():
+            continue
+        cells[key] = {
+            "status": "booked",
+            "kind": "manual",
+            "name": s.manual_booked_name,
+            "amount": str(s.manual_price) if s.manual_price is not None else None,
+            "time_label": f"{local_start.strftime('%I:%M %p')} - {timezone.localtime(s.end_dt).strftime('%I:%M %p')}",
+            "phone": s.manual_booked_phone or None,
+            "email": None,
+            "date": local_start.date().isoformat(),
+        }
+
+    return Response({
+        "date_from": date_from.isoformat(),
+        "date_to": date_to.isoformat(),
+        "days": days,
+        "hours": hours,
+        "cells": cells,
+    })
+
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def owner_grid_book_slot(request, pitch_id: str):
+    """Lets a pitch owner (or admin) fill in a single free grid cell by
+    hand — e.g. someone who paid in person. Ownership rule: an OWNER
+    account may only do this on a pitch belonging to their own tenant
+    (see _can_edit_pitch below — same guard used everywhere else an
+    owner mutates a pitch)."""
+    pitch = get_object_or_404(Pitch, id=pitch_id)
+
+    if not _can_edit_pitch(request.user, pitch):
+        return Response({"detail": "You can only manage bookings on your own pitch."}, status=403)
+
+    date_str = request.data.get("date")
+    start_hour = request.data.get("start_hour")
+    name = (request.data.get("name") or "").strip()
+    phone = (request.data.get("phone") or "").strip()
+    price = request.data.get("price")
+
+    if not date_str or start_hour is None or not name:
+        return Response({"detail": "date, start_hour and name are required."}, status=400)
+
+    try:
+        day = datetime.strptime(date_str, "%Y-%m-%d").date()
+        start_hour = int(start_hour)
+    except (ValueError, TypeError):
+        return Response({"detail": "Invalid date or start_hour."}, status=400)
+
+    if day < timezone.localdate():
+        return Response({"detail": "You can't book a date in the past."}, status=400)
+
+    if not (pitch.opening_time.hour <= start_hour < pitch.closing_time.hour):
+        return Response({"detail": "That hour is outside the pitch's open hours."}, status=400)
+
+    tz = timezone.get_current_timezone()
+    start_dt = timezone.make_aware(datetime.combine(day, time(hour=start_hour)), tz)
+    end_dt = start_dt + timedelta(hours=1)
+
+    if start_dt <= timezone.localtime():
+        return Response({"detail": "That time has already passed."}, status=400)
+
+    slot, _ = Slot.objects.get_or_create(
+        pitch=pitch, start_dt=start_dt, end_dt=end_dt,
+        defaults={"status": SlotStatus.AVAILABLE},
+    )
+    if slot.status != SlotStatus.AVAILABLE:
+        return Response({"detail": "That slot is no longer free."}, status=409)
+
+    price_dec = None
+    if price not in (None, ""):
+        try:
+            price_dec = Decimal(str(price))
+        except Exception:
+            return Response({"detail": "Invalid price."}, status=400)
+
+    slot.status = SlotStatus.BOOKED
+    slot.updated_by = request.user
+    slot.manual_booked_name = name
+    slot.manual_booked_phone = phone
+    slot.manual_price = price_dec
+    slot.save()
+
+    return Response({
+        "ok": True,
+        "cell": {
+            "status": "booked",
+            "kind": "manual",
+            "name": name,
+            "amount": str(price_dec) if price_dec is not None else None,
+            "time_label": f"{timezone.localtime(start_dt).strftime('%I:%M %p')} - {timezone.localtime(end_dt).strftime('%I:%M %p')}",
+            "phone": phone or None,
+            "email": None,
+            "date": day.isoformat(),
+        },
+    }, status=201)

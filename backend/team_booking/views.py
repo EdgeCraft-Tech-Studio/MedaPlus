@@ -17,7 +17,9 @@ from .serializers import (
     TeamBookingRequestLiveDetailSerializer,
 )
 from .services import (
+    acknowledge_booking_completion,
     confirm_booking_request,
+    cover_remaining_open_slots_and_start_payment,
     create_team_booking_request,
     decline_booking_request,
     get_booked_summary_for_user,
@@ -28,6 +30,7 @@ from .services import (
     get_pending_owner_action,
     get_pending_payment_for_user,
     get_team_booking_live_detail,
+    open_slots_for_declined_members,
     pay_for_booking,
     resolve_confirm_summary,
     resolve_payment_timeout,
@@ -135,19 +138,22 @@ class PendingOwnerActionView(views.APIView):
 
 class ResolveConfirmSummaryView(views.APIView):
     """POST /bookings/team-request/{request_id}/resolve-confirm-summary/
-    body: {"action": "cover" | "recalculate" | "open_slot" | "cancel"}
+    body: {"action": "cover" | "recalculate" | "cancel"}
+    NOTE: "open_slot" is intentionally NOT accepted here — opening
+    slots goes through /open-slot/ instead, which computes its own
+    slot count and price server-side.
     """
     permission_classes = [IsAuthenticated]
 
     def post(self, request, *args, **kwargs):
         action = request.data.get("action")
-        if action not in ("cover", "recalculate", "open_slot", "cancel"):
+        if action not in ("cover", "recalculate", "cancel"):
             return Response({"detail": "Invalid action."}, status=status.HTTP_400_BAD_REQUEST)
         try:
             result = resolve_confirm_summary(
                 request_id=kwargs["request_id"], owner=request.user, action=action
             )
-        except ValueError as exc: 
+        except ValueError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(result)
 
@@ -290,3 +296,78 @@ class BookedPitchSummaryView(views.APIView):
             "total_count": result["total_count"],
             "paid_members": result["paid_members"],
         })
+
+
+
+class OpenSlotForDeclinedView(views.APIView):
+    """POST /bookings/team-request/{request_id}/open-slot/
+    body: {"description": "..."} (optional)
+
+    Slot count and price are computed entirely server-side — the
+    client cannot influence either.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, *args, **kwargs):
+        description = request.data.get("description", "")
+        try:
+            result = open_slots_for_declined_members(
+                request_id=kwargs["request_id"], owner=request.user, description=description
+            )
+        except TeamBookingRequest.DoesNotExist:
+            raise NotFound("Booking not found.")
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(result)
+
+
+class AcknowledgeBookingCompletionView(views.APIView):
+    """POST /bookings/team-request/{request_id}/acknowledge-completion/
+    Dismisses the payment_success or pitch_unavailable popup.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, *args, **kwargs):
+        try:
+            acknowledge_booking_completion(request_id=kwargs["request_id"], owner=request.user)
+        except TeamBookingRequest.DoesNotExist:
+            raise NotFound("Booking not found.")
+        return Response({"status": "acknowledged"})
+
+
+class OpenSlotForDeclinedView(views.APIView):
+    """POST /bookings/team-request/{request_id}/open-slot/"""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, *args, **kwargs):
+        description = request.data.get("description", "")
+        try:
+            result = open_slots_for_declined_members(
+                request_id=kwargs["request_id"], owner=request.user, description=description
+            )
+        except TeamBookingRequest.DoesNotExist:
+            raise NotFound("Booking not found.")
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(result)
+
+
+
+class CoverOpenSlotsAndStartPaymentView(views.APIView):
+    """POST /bookings/team-request/{request_id}/cover-open-slots-and-pay/
+    Called from the Team Update live-detail screen while awaiting
+    open slots. Cancels the linked match, then starts payment with
+    the owner covering whatever slots never got filled.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, *args, **kwargs):
+        try:
+            result = cover_remaining_open_slots_and_start_payment(
+                request_id=kwargs["request_id"], owner=request.user
+            )
+        except TeamBookingRequest.DoesNotExist:
+            raise NotFound("Booking not found.")
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(result)

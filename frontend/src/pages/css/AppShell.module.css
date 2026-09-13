@@ -131,7 +131,9 @@
   font-size: 13px;
 }
 
-/* ---------------- NOTIFICATIONS ---------------- */
+/* ================================================================
+   NOTIFICATIONS — flat, professional, no decorative background shapes
+   ================================================================ */
 
 .notifWrap { position: relative; }
 
@@ -158,17 +160,18 @@
   right: 1px;
   min-width: 16px;
   height: 16px;
-  padding: 0 3px;
+  padding: 0 4px;
   border-radius: 999px;
   background: var(--danger);
   color: #fff;
   font-size: 9.5px;
-  font-weight: 700;
+  font-weight: 800;
   display: grid;
   place-items: center;
   border: 2px solid var(--paper);
 }
 
+/* Legacy dropdown panel (kept for compatibility, not used by the drawer) */
 .notifPanel {
   position: absolute;
   top: calc(100% + 10px);
@@ -180,15 +183,15 @@
   flex-direction: column;
   background: #fff;
   border: 1px solid var(--line);
-  border-radius: 18px;
-  box-shadow: 0 20px 50px rgba(14, 47, 36, 0.14);
+  border-radius: 14px;
+  box-shadow: 0 16px 40px rgba(14, 47, 36, 0.12);
   overflow: hidden;
-  animation: panelIn 0.18s ease;
+  animation: panelIn 0.16s ease;
   z-index: 40;
 }
 
 @keyframes panelIn {
-  from { opacity: 0; transform: translateY(-6px); }
+  from { opacity: 0; transform: translateY(-4px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
@@ -205,19 +208,24 @@
 .notifPanelHeadActions {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 
 .markAllBtn {
   appearance: none;
-  border: none;
-  background: none;
-  color: var(--grass);
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--green-800);
   font-family: inherit;
   font-weight: 700;
-  font-size: 11.5px;
+  font-size: 11px;
+  padding: 6px 11px;
+  border-radius: 8px;
   cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
 }
+
+.markAllBtn:hover { background: var(--grass-soft); border-color: var(--grass); }
 
 .closePanelBtn {
   appearance: none;
@@ -226,97 +234,242 @@
   color: var(--muted);
   width: 26px;
   height: 26px;
-  border-radius: 50%;
+  border-radius: 8px;
   display: grid;
   place-items: center;
   cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
 }
 
+.closePanelBtn:hover { background: #f1ecec; color: var(--danger); }
+
+/* Drawer shell */
+.notifDrawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: clamp(300px, 24vw, 380px);
+  background: #fff;
+  border-left: 1px solid var(--line);
+  box-shadow: -14px 0 36px rgba(14, 47, 36, 0.14);
+  z-index: 46;
+  display: flex;
+  flex-direction: column;
+  animation: drawerIn 0.2s ease;
+}
+
+@media (max-width: 860px) {
+  .notifDrawer { width: 88vw; }
+}
+
+/* Drawer header (also used by chat drawer) */
+.chatDrawerHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 18px;
+  background: #fff;
+  border-bottom: 1px solid var(--line);
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+  flex-shrink: 0;
+}
+
+/* List container + scrollbar */
 .notifList {
-  overflow-y: auto;
   flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--paper);
 }
 
+.notifList::-webkit-scrollbar { width: 6px; }
+.notifList::-webkit-scrollbar-track { background: transparent; }
+.notifList::-webkit-scrollbar-thumb {
+  background: var(--faint);
+  border-radius: 999px;
+}
+.notifList::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+/* Empty state */
 .notifEmpty {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
-  padding: 44px 20px;
-  color: var(--faint);
+  gap: 12px;
+  padding: 56px 20px;
+  color: var(--muted);
   font-size: 13px;
   font-weight: 600;
 }
 
+.notifEmpty svg {
+  width: 32px;
+  height: 32px;
+  color: var(--faint);
+}
+
+/* ---- Notification card ---- */
+
 .notifItem {
+  position: relative;
   display: flex;
-  gap: 10px;
-  padding: 13px 16px;
-  border-bottom: 1px solid var(--line);
-  transition: background 0.15s ease;
+  align-items: flex-start;
+  gap: 11px;
+  height: auto;
+  padding: 13px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: #fff;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.notifItem:last-child { border-bottom: none; }
-.notifItemUnread { background: var(--grass-soft); }
+.notifItem:hover {
+  border-color: var(--faint);
+  box-shadow: 0 2px 10px rgba(14, 47, 36, 0.06);
+}
 
-.notifDot {
+.notifItemUnread {
+  background: #fdfefc;
+  border-color: rgba(63, 174, 127, 0.3);
+}
+
+.notifItemUnread::before {
+  content: "";
+  position: absolute;
+  left: -1px;
+  top: 10px;
+  bottom: 10px;
+  width: 3px;
+  border-radius: 3px;
+  background: var(--grass);
+}
+
+/* ---- Icon: plain glyph, no background shape, no fill ---- */
+/* Color comes from getNotifIconMeta() in AppShell.tsx, based on what
+   the notification is actually about (cancelled/declined, confirmed/
+   paid/booked, payment due, or its category as a fallback). */
+
+.notifIconWrap {
   flex-shrink: 0;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  margin-top: 6px;
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  display: grid;
+  place-items: center;
 }
 
-.notifBody { flex: 1; min-width: 0; }
+.notifBody {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
 
 .notifTopRow {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 3px;
+  gap: 8px;
+  margin-bottom: 4px;
 }
 
+/* Category chip — color/background set inline from CATEGORY_COLORS,
+   this is just the base shape/typography. */
 .notifTag {
   font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--grass);
+  padding: 3px 8px;
+  border-radius: 6px;
+  flex-shrink: 0;
 }
 
 .notifTime {
-  font-size: 11px;
+  font-size: 10.5px;
   color: var(--faint);
+  font-weight: 600;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .notifTitle {
-  font-size: 13.5px;
+  font-size: 13px;
   font-weight: 700;
-  margin-bottom: 2px;
+  letter-spacing: -0.01em;
+  margin-bottom: 3px;
+  color: var(--ink);
+  white-space: normal;
+  overflow-wrap: break-word;
 }
 
+/* Message: clamps to 3 lines by default. Whether "Read more" is shown
+   at all is decided in TSX by comparing scrollHeight to clientHeight —
+   it only renders when text is actually cut off. */
 .notifMsg {
+  margin: 0;
   font-size: 12.5px;
   color: var(--muted);
-  line-height: 1.45;
+  line-height: 1.5;
+  overflow-wrap: break-word;
+  word-break: break-word;
+
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
 }
+
+.notifMsgExpanded {
+  -webkit-line-clamp: unset;
+  display: block;
+  overflow: visible;
+}
+
+.notifReadMoreRow {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+
+.notifReadMore {
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--grass);
+  cursor: pointer;
+}
+
+.notifReadMore:hover { color: var(--green-800); text-decoration: underline; }
 
 .notifActions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
-  margin-top: 9px;
+  margin-top: 10px;
 }
 
-.notifAcceptBtn, .notifDeclineBtn, .notifOpenBtn {
+.notifAcceptBtn, .notifDeclineBtn, .notifOpenBtn, .notifViewBtn {
   appearance: none;
   border: none;
   font-family: inherit;
   font-weight: 700;
   font-size: 12px;
   padding: 7px 13px;
-  border-radius: 999px;
+  border-radius: 8px;
   cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
 }
 
 .notifAcceptBtn {
@@ -324,30 +477,54 @@
   color: #fff;
 }
 
+.notifAcceptBtn:hover { background: #369670; }
+
 .notifDeclineBtn {
   background: #fff;
   border: 1px solid var(--line);
   color: var(--muted);
 }
 
-
-.notifViewBtn {
-  margin-top: 8px;
-  padding: 6px 14px;
-  border-radius: 999px;
-  border: none;
-  background: #0f7a52;
-  color: #fff;
-  font-size: 11.5px;
-  font-weight: 700;
-  cursor: pointer;
+.notifDeclineBtn:hover {
+  background: #fdf0f0;
+  border-color: #f0c9c9;
+  color: var(--danger);
 }
-.notifViewBtn:hover { background: #0c6544; }
 
 .notifOpenBtn {
   margin-top: 9px;
   background: var(--grass-soft);
   color: var(--green-800);
+}
+
+.notifOpenBtn:hover { background: #d9f0e5; }
+
+.notifViewBtn {
+  margin-top: 9px;
+  background: #0f7a52;
+  color: #fff;
+  font-size: 11.5px;
+}
+
+.notifViewBtn:hover { background: #0c6544; }
+
+/* Overlay behind the drawer */
+.drawerOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(14, 23, 18, 0.4);
+  z-index: 45;
+  animation: overlayIn 0.2s ease;
+}
+
+@keyframes overlayIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes drawerIn {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
 }
 
 /* ---------------- CONTENT ---------------- */
@@ -405,8 +582,6 @@
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
 }
-
-
 
 /* ---------------- CHAT DROPDOWN ---------------- */
 
@@ -508,19 +683,6 @@
 
 /* ---------------- CHAT DRAWER ---------------- */
 
-.drawerOverlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(14, 23, 18, 0.4);
-  z-index: 45;
-  animation: overlayIn 0.2s ease;
-}
-
-@keyframes overlayIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
 .chatDrawer {
   position: fixed;
   top: 0;
@@ -534,22 +696,6 @@
   display: flex;
   flex-direction: column;
   animation: drawerIn 0.22s ease;
-}
-
-@keyframes drawerIn {
-  from { transform: translateX(100%); }
-  to { transform: translateX(0); }
-}
-
-.chatDrawerHead {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 16px 14px;
-  border-bottom: 1px solid var(--line);
-  font-weight: 700;
-  font-size: 15px;
-  flex-shrink: 0;
 }
 
 .chatDrawerList {
@@ -592,26 +738,6 @@
 @media (prefers-reduced-motion: reduce) {
   .drawerOverlay, .chatDrawer { animation: none; }
 }
-
-.notifDrawer {
-  position: fixed;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: clamp(280px, 22vw, 320px);
-  background: #fff;
-  border-left: 1px solid var(--line);
-  box-shadow: -12px 0 40px rgba(14, 47, 36, 0.18);
-  z-index: 46;
-  display: flex;
-  flex-direction: column;
-  animation: drawerIn 0.22s ease;
-}
-
-@media (max-width: 860px) {
-  .notifDrawer { width: 82vw; }
-}
-
 
 .teamUpdatePill {
   display: inline-flex;

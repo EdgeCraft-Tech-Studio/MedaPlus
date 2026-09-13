@@ -4,10 +4,11 @@ import type { OwnerPitchDetailStats, BookingHistoryEntry } from "../lib/pitches"
 import { getOwnerPitchStats, getPitchBookingHistory, updatePitch } from "../lib/pitches";
 import PitchWizardModal from "../components/PitchWizardModal";
 import styles from "./css/OwnerPitchDetail.module.css";
+import BookingGrid from "./BookingGrid";
 
 type IconName =
   | "arrowLeft" | "cash" | "calendarCheck" | "pin" | "clock" | "tag"
-  | "shirt" | "droplet" | "car" | "bulb" | "imageOff" | "pencil"
+  | "shirt" | "droplet" | "car" | "bulb" | "imageOff" | "pencil" 
   | "x" | "mail" | "phone" | "user" | "chevronLeft" | "chevronRight";
 
 function Icon({ name, size = 15 }: { name: IconName; size?: number }) {
@@ -309,150 +310,154 @@ export default function OwnerPitchDetail() {
           </button>
         </div>
 
-        {/* ---------- Photos ---------- */}
-        <div className={styles.gallery}>
-          <div className={styles.galleryMain}>
-            {photos.length > 0 ? (
-              <img src={photos[activePhoto]?.url} alt={pitch.name} />
-            ) : (
-              <div className={styles.galleryEmpty}>
-                <Icon name="imageOff" size={34} />
-                No photos yet
+                <div className={styles.detailLayout}>
+          {/* ---------- Photos (30%) ---------- */}
+          <div className={styles.galleryCol}>
+            <div className={styles.gallery}>
+              <div className={styles.galleryMain}>
+                {photos.length > 0 ? (
+                  <img src={photos[activePhoto]?.url} alt={pitch.name} />
+                ) : (
+                  <div className={styles.galleryEmpty}>
+                    <Icon name="imageOff" size={34} />
+                    No photos yet
+                  </div>
+                )}
+              </div>
+              {photos.length > 1 && (
+                <div className={styles.galleryThumbs}>
+                  {photos.map((img, i) => (
+                    <button
+                      key={img.id}
+                      className={`${styles.galleryThumb} ${i === activePhoto ? styles.galleryThumbActive : ""}`}
+                      onClick={() => setActivePhoto(i)}
+                    >
+                      <img src={img.url} alt="" />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* ---------- Earnings / Bookings / Details (70%) ---------- */}
+          <div className={styles.infoCol}>
+            <div className={styles.sectionLabel}>Earnings</div>
+            <div className={styles.scoreRow}>
+              <div className={styles.scoreCard}>
+                <Icon name="cash" size={18} />
+                <div>
+                  <div className={styles.scoreValue}>{formatBirr(data?.earnings_week)}</div>
+                  <div className={styles.scoreLabel}>This week</div>
+                </div>
+              </div>
+              <div className={styles.scoreCard}>
+                <Icon name="cash" size={18} />
+                <div>
+                  <div className={styles.scoreValue}>{formatBirr(data?.earnings_month)}</div>
+                  <div className={styles.scoreLabel}>This month</div>
+                </div>
+              </div>
+              <div className={styles.scoreCard}>
+                <Icon name="cash" size={18} />
+                <div>
+                  <div className={styles.scoreValue}>{formatBirr(data?.earnings_year)}</div>
+                  <div className={styles.scoreLabel}>This year</div>
+                </div>
+              </div>
+              <div className={`${styles.scoreCard} ${styles.scoreCardGold}`}>
+                <Icon name="cash" size={18} />
+                <div>
+                  <div className={styles.scoreValue}>{formatBirr(data?.total_earnings)}</div>
+                  <div className={styles.scoreLabel}>All-time</div>
+                </div>
+              </div>
+            </div>
+
+            <div className={styles.sectionLabel}>Bookings over time</div>
+            <div className={styles.bookingRow}>
+              <div className={styles.bookingCard}>
+                <div className={styles.bookingValue}>{data?.bookings_1m ?? 0}</div>
+                <div className={styles.bookingLabel}>Last month</div>
+              </div>
+              <div className={styles.bookingCard}>
+                <div className={styles.bookingValue}>{data?.bookings_3m ?? 0}</div>
+                <div className={styles.bookingLabel}>Last 3 months</div>
+              </div>
+              <div className={styles.bookingCard}>
+                <div className={styles.bookingValue}>{data?.bookings_6m ?? 0}</div>
+                <div className={styles.bookingLabel}>Last 6 months</div>
+              </div>
+              <div className={styles.bookingCard}>
+                <div className={styles.bookingValue}>{data?.bookings_1y ?? 0}</div>
+                <div className={styles.bookingLabel}>Last 12 months</div>
+              </div>
+              <div className={`${styles.bookingCard} ${styles.bookingCardGold}`}>
+                <div className={styles.bookingValue}>{data?.total_bookings ?? 0}</div>
+                <div className={styles.bookingLabel}>All-time</div>
+              </div>
+            </div>
+
+            <div className={styles.sectionLabel}>Pitch details</div>
+            <div className={styles.detailsGrid}>
+              <div className={styles.detailItem}>
+                <Icon name="clock" />
+                <div>
+                  <div className={styles.detailValue}>
+                    {pitch.opening_time_label && pitch.closing_time_label
+                      ? `${pitch.opening_time_label} - ${pitch.closing_time_label}`
+                      : `${pitch.opening_time} - ${pitch.closing_time}`}
+                  </div>
+                  <div className={styles.detailLabel}>Open hours</div>
+                </div>
+              </div>
+              <div className={styles.detailItem}>
+                <Icon name="tag" />
+                <div>
+                  <div className={styles.detailValue}>{pitch.hourly_price} Br / hr</div>
+                  <div className={styles.detailLabel}>Hourly price</div>
+                </div>
+              </div>
+              <div className={styles.detailItem}>
+                <Icon name="tag" />
+                <div>
+                  <div className={styles.detailValue}>{pitch.weekly_price} Br / wk</div>
+                  <div className={styles.detailLabel}>Weekly price</div>
+                </div>
+              </div>
+              <div className={styles.detailItem}>
+                <Icon name="tag" />
+                <div>
+                  <div className={styles.detailValue}>{pitch.monthly_price} Br / mo</div>
+                  <div className={styles.detailLabel}>Monthly price</div>
+                </div>
+              </div>
+            </div>
+
+            <div className={styles.amenityRow}>
+              {[
+                { label: "Dressing room", on: pitch.has_dressing_room, icon: "shirt" as const },
+                { label: "Showers", on: pitch.has_showers, icon: "droplet" as const },
+                { label: "Parking", on: pitch.has_parking, icon: "car" as const },
+                { label: "Lighting", on: pitch.has_lighting, icon: "bulb" as const },
+              ].map((item) => (
+                <span key={item.label} className={`${styles.amenityChip} ${item.on ? styles.amenityChipOn : styles.amenityChipOff}`}>
+                  <Icon name={item.icon} size={13} />
+                  {item.label}
+                </span>
+              ))}
+            </div>
+
+            {pitch.other_services && (
+              <div className={styles.otherServices}>
+                <b>Other services:</b> {pitch.other_services}
               </div>
             )}
           </div>
-          {photos.length > 1 && (
-            <div className={styles.galleryThumbs}>
-              {photos.map((img, i) => (
-                <button
-                  key={img.id}
-                  className={`${styles.galleryThumb} ${i === activePhoto ? styles.galleryThumbActive : ""}`}
-                  onClick={() => setActivePhoto(i)}
-                >
-                  <img src={img.url} alt="" />
-                </button>
-              ))}
-            </div>
-          )}
         </div>
-
-        {/* ---------- Earnings scoreboard ---------- */}
-        <div className={styles.sectionLabel}>Earnings</div>
-        <div className={styles.scoreRow}>
-          <div className={styles.scoreCard}>
-            <Icon name="cash" size={18} />
-            <div>
-              <div className={styles.scoreValue}>{formatBirr(data?.earnings_week)}</div>
-              <div className={styles.scoreLabel}>This week</div>
-            </div>
-          </div>
-          <div className={styles.scoreCard}>
-            <Icon name="cash" size={18} />
-            <div>
-              <div className={styles.scoreValue}>{formatBirr(data?.earnings_month)}</div>
-              <div className={styles.scoreLabel}>This month</div>
-            </div>
-          </div>
-          <div className={styles.scoreCard}>
-            <Icon name="cash" size={18} />
-            <div>
-              <div className={styles.scoreValue}>{formatBirr(data?.earnings_year)}</div>
-              <div className={styles.scoreLabel}>This year</div>
-            </div>
-          </div>
-          <div className={`${styles.scoreCard} ${styles.scoreCardGold}`}>
-            <Icon name="cash" size={18} />
-            <div>
-              <div className={styles.scoreValue}>{formatBirr(data?.total_earnings)}</div>
-              <div className={styles.scoreLabel}>All-time</div>
-            </div>
-          </div>
-        </div>
-
-        {/* ---------- Bookings breakdown ---------- */}
-        <div className={styles.sectionLabel}>Bookings over time</div>
-        <div className={styles.bookingRow}>
-          <div className={styles.bookingCard}>
-            <div className={styles.bookingValue}>{data?.bookings_1m ?? 0}</div>
-            <div className={styles.bookingLabel}>Last month</div>
-          </div>
-          <div className={styles.bookingCard}>
-            <div className={styles.bookingValue}>{data?.bookings_3m ?? 0}</div>
-            <div className={styles.bookingLabel}>Last 3 months</div>
-          </div>
-          <div className={styles.bookingCard}>
-            <div className={styles.bookingValue}>{data?.bookings_6m ?? 0}</div>
-            <div className={styles.bookingLabel}>Last 6 months</div>
-          </div>
-          <div className={styles.bookingCard}>
-            <div className={styles.bookingValue}>{data?.bookings_1y ?? 0}</div>
-            <div className={styles.bookingLabel}>Last 12 months</div>
-          </div>
-          <div className={`${styles.bookingCard} ${styles.bookingCardGold}`}>
-            <div className={styles.bookingValue}>{data?.total_bookings ?? 0}</div>
-            <div className={styles.bookingLabel}>All-time</div>
-          </div>
-        </div>
-
-        {/* ---------- Pitch details ---------- */}
-        <div className={styles.sectionLabel}>Pitch details</div>
-        <div className={styles.detailsGrid}>
-          <div className={styles.detailItem}>
-            <Icon name="clock" />
-            <div>
-              <div className={styles.detailValue}>
-                {pitch.opening_time_label && pitch.closing_time_label
-                  ? `${pitch.opening_time_label} - ${pitch.closing_time_label}`
-                  : `${pitch.opening_time} - ${pitch.closing_time}`}
-              </div>
-              <div className={styles.detailLabel}>Open hours</div>
-            </div>
-          </div>
-          <div className={styles.detailItem}>
-            <Icon name="tag" />
-            <div>
-              <div className={styles.detailValue}>{pitch.hourly_price} Br / hr</div>
-              <div className={styles.detailLabel}>Hourly price</div>
-            </div>
-          </div>
-          <div className={styles.detailItem}>
-            <Icon name="tag" />
-            <div>
-              <div className={styles.detailValue}>{pitch.weekly_price} Br / wk</div>
-              <div className={styles.detailLabel}>Weekly price</div>
-            </div>
-          </div>
-          <div className={styles.detailItem}>
-            <Icon name="tag" />
-            <div>
-              <div className={styles.detailValue}>{pitch.monthly_price} Br / mo</div>
-              <div className={styles.detailLabel}>Monthly price</div>
-            </div>
-          </div>
-        </div>
-
-        <div className={styles.amenityRow}>
-          {[
-            { label: "Dressing room", on: pitch.has_dressing_room, icon: "shirt" as const },
-            { label: "Showers", on: pitch.has_showers, icon: "droplet" as const },
-            { label: "Parking", on: pitch.has_parking, icon: "car" as const },
-            { label: "Lighting", on: pitch.has_lighting, icon: "bulb" as const },
-          ].map((item) => (
-            <span key={item.label} className={`${styles.amenityChip} ${item.on ? styles.amenityChipOn : styles.amenityChipOff}`}>
-              <Icon name={item.icon} size={13} />
-              {item.label}
-            </span>
-          ))}
-        </div>
-
-        {pitch.other_services && (
-          <div className={styles.otherServices}>
-            <b>Other services:</b> {pitch.other_services}
-          </div>
-        )}
 
         {/* ---------- Booking history ---------- */}
-        <BookingHistorySection pitchId={pitch.id} />
+        <BookingGrid pitch={pitch} />
       </div>
 
       <PitchWizardModal

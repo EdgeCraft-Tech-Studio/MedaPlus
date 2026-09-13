@@ -5,6 +5,7 @@ from rest_framework.exceptions import PermissionDenied
 
 from django.db import transaction
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 
 from bookings.availability import finalize_team_slots_as_booked, hold_slots, is_slot_available, release_slots
 from pitches.models import Pitch
@@ -22,16 +23,12 @@ from .models import (
     TeamBookingRequestStatus,
 )
 
-REQUEST_LIFETIME_MINUTES = 1
-
-PAYMENT_LIFETIME_MINUTES = 2
-PAYMENT_REMINDER_MINUTES = 3
+REQUEST_LIFETIME_MINUTES = 30
+PAYMENT_LIFETIME_MINUTES = 1
+PAYMENT_REMINDER_MINUTES = 1
 
 
 def _format_selection_summary(selections: list) -> str:
-    """Turns raw ISO selections into short notification copy, e.g.
-    'Mon, 21 Jul, 6:00 PM (+2 more slots)'.
-    """
     if not selections:
         return "the selected time"
     first = selections[0]
@@ -51,6 +48,21 @@ def _display_name(user) -> str:
     return full or getattr(user, "username", "A teammate")
 
 
+def _to_datetime(value):
+    """selections values round-trip through a JSONField, so by the
+    time we read them back they're plain ISO strings, not datetime
+    objects — same fix as bookings/availability.py's _normalize.
+    """
+    if isinstance(value, str):
+        parsed = parse_datetime(value)
+        if parsed is None:
+            raise ValueError(f"Invalid datetime value: {value}")
+        value = parsed
+    if timezone.is_naive(value):
+        value = timezone.make_aware(value, timezone.get_current_timezone())
+    return value
+
+
 @transaction.atomic
 def create_team_booking_request(
     *,
@@ -64,11 +76,6 @@ def create_team_booking_request(
     total_price,
     notes: str = "",
 ) -> TeamBookingRequest:
-    """Called by the view when a team OWNER picks 'Team' in the
-    booking popup and hits Confirm. Creates the request, a pending
-    confirmation row per active member (owner auto-confirmed), and
-    pushes a notification to every OTHER active member.
-    """
     active_members = list(
         TeamMembership.objects.active_for_team(team).select_related("user")
     )
@@ -164,10 +171,10 @@ def decline_booking_request(*, request_id, user) -> TeamBookingConfirmation:
 
 
 def get_pending_confirmation_for_user(user):
-    """The single oldest still-open confirmation for this user, or
-    None. This is exactly what AppShell polls to decide whether to
-    show the mandatory blocking 'can you play?' modal — no separate
-    notification-parsing needed, since this reads live DB state.
+    """Still the single oldest open confirmation — the AUTO-POPUP
+    trigger on every fresh page load. The frontend now closes this
+    locally when dismissed and does NOT re-poll it into view again
+    until the next real page mount, per the new non-mandatory design.
     """
     confirmation = (
         TeamBookingConfirmation.objects.select_related("request", "request__team")
@@ -179,24 +186,15 @@ def get_pending_confirmation_for_user(user):
         .order_by("created_at")
         .first()
     )
-
     if confirmation is None:
         return None
-
     if confirmation.request.is_expired:
         confirmation.request.mark_expired()
         return None
-
     return confirmation
 
 
 def expire_stale_requests_and_notify_owners():
-    """Sweeps requests whose 10-minute window passed, marks them
-    EXPIRED, and sends the owner ONE summary notification: 'X of Y
-    confirmed'. Run this periodically — see the management command
-    below for a cron-friendly entry point, or wire it to Celery beat
-    if you're already running Celery for FCM pushes.
-    """
     stale = TeamBookingRequest.objects.expired_but_not_marked().select_related(
         "team", "created_by"
     )
@@ -226,7 +224,6 @@ def expire_stale_requests_and_notify_owners():
         booking_request.save(update_fields=["summary_sent", "updated_at"])
 
 
-
 def _all_members_responded(booking_request: TeamBookingRequest) -> bool:
     return not booking_request.confirmations.filter(
         status=MemberConfirmationStatus.PENDING
@@ -234,15 +231,53 @@ def _all_members_responded(booking_request: TeamBookingRequest) -> bool:
 
 
 def get_pending_owner_action(owner):
-    """Polled by AppShell. Returns the ONE thing needing the owner's
-    mandatory attention right now:
-      - confirm_summary: EITHER the 20-min window closed, OR every
-        member has already responded early (no reason to make the
-        owner wait out a timer nobody is still using).
-      - payment_timeout: the 10/5-min payment window closed with
-        unpaid members left.
-    Both auto-popup as soon as they're true — no waiting required.
+    """Polled by AppShell. Priority order:
+
+      1. payment_success — everyone paid, booking finalized. Shown
+         once, dismissible via its own 'Great!' button.
+      2. pitch_unavailable — someone else booked this pitch/time
+         while the request was still in confirmation/open-slots
+         limbo (deliberately NOT held during those phases). Shown
+         once, as its OWN distinct popup — never routed through the
+         payment-timeout resolver, which is exactly the bug that was
+         producing "This request is not in a payment-timeout state."
+      3. payment_timeout — payment window closed with unpaid members
+         left. MANDATORY, never dismissible.
+      4. confirm_summary — 20-min window closed, or everyone already
+         responded early. NOT mandatory anymore — frontend shows a
+         close button and re-surfaces it on every fresh page mount
+         as long as it's still true.
     """
+    booked_request = (
+        TeamBookingRequest.objects.filter(
+            created_by=owner,
+            status=TeamBookingRequestStatus.BOOKED,
+            booked_popup_shown=False,
+        )
+        .select_related("team")
+        .order_by("-updated_at")
+        .first()
+    )
+    if booked_request:
+        return _build_payment_success_payload(booked_request)
+
+    unavailable_request = (
+        TeamBookingRequest.objects.filter(
+            created_by=owner,
+            status=TeamBookingRequestStatus.UNAVAILABLE,
+            booked_popup_shown=False,
+        )
+        .order_by("-updated_at")
+        .first()
+    )
+    if unavailable_request:
+        return {
+            "type": "pitch_unavailable",
+            "request_id": str(unavailable_request.id),
+            "pitch_id": unavailable_request.pitch_id,
+            "pitch_name": unavailable_request.pitch_name,
+        }
+
     payment_timeout_request = (
         TeamBookingRequest.objects.filter(
             created_by=owner,
@@ -255,9 +290,6 @@ def get_pending_owner_action(owner):
     if payment_timeout_request:
         return _build_payment_timeout_payload(payment_timeout_request)
 
-    # Early-detect: any PENDING request where everyone already
-    # responded gets treated as ready immediately, not just once
-    # expires_at passes.
     still_open = TeamBookingRequest.objects.filter(
         created_by=owner, status=TeamBookingRequestStatus.PENDING
     ).prefetch_related("confirmations")
@@ -267,7 +299,7 @@ def get_pending_owner_action(owner):
             booking_request.mark_expired()
             return _build_confirm_summary_payload(booking_request)
         if _all_members_responded(booking_request):
-            booking_request.mark_expired()  # reuse the same downstream flow
+            booking_request.mark_expired()
             return _build_confirm_summary_payload(booking_request)
 
     summary_request = (
@@ -284,6 +316,7 @@ def get_pending_owner_action(owner):
 
     return None
 
+
 def _serialize_user(user):
     full = f"{getattr(user, 'first_name', '')} {getattr(user, 'last_name', '')}".strip()
     return {
@@ -292,6 +325,14 @@ def _serialize_user(user):
         "profile_photo_url": getattr(user, "profile_photo_url", None),
     }
 
+
+def _is_open_slots_filled(booking_request: TeamBookingRequest) -> bool:
+    if not booking_request.open_slot_match_id:
+        return False
+    match = booking_request.open_slot_match
+    return match.confirmed_participant_count >= match.slots_needed
+
+
 def _build_confirm_summary_payload(booking_request: TeamBookingRequest) -> dict:
     confirmations = booking_request.confirmations.select_related("member").exclude(
         member_id=booking_request.created_by_id
@@ -299,17 +340,22 @@ def _build_confirm_summary_payload(booking_request: TeamBookingRequest) -> dict:
     confirmed = [c for c in confirmations if c.status == MemberConfirmationStatus.CONFIRMED]
     declined = [c for c in confirmations if c.status != MemberConfirmationStatus.CONFIRMED]
 
+    if _is_open_slots_filled(booking_request):
+        declined = []
+
     return {
         "type": "confirm_summary",
         "request_id": str(booking_request.id),
+        "team_id": str(booking_request.team_id),
+        "pitch_id": booking_request.pitch_id,
         "pitch_name": booking_request.pitch_name,
         "team_name": booking_request.team.name,
         "price_per_member": str(booking_request.price_per_member),
-        "confirmed_count": len(confirmed) + 1,  # +1 for the owner
+        "selections": booking_request.selections,
+        "confirmed_count": (len(confirmations) + 1) if not declined and confirmations else len(confirmed) + 1,
         "total_count": len(confirmations) + 1,
         "declined_members": [_serialize_user(c.member) for c in declined],
     }
-
 
 
 def _build_payment_timeout_payload(booking_request: TeamBookingRequest) -> dict:
@@ -326,13 +372,49 @@ def _build_payment_timeout_payload(booking_request: TeamBookingRequest) -> dict:
     return {
         "type": "payment_timeout",
         "request_id": str(booking_request.id),
+        "team_id": str(booking_request.team_id),
+        "pitch_id": booking_request.pitch_id,
         "pitch_name": booking_request.pitch_name,
         "team_name": booking_request.team.name,
         "price_per_member": str(booking_request.price_per_member),
+        "selections": booking_request.selections,
         "unpaid_members": [_serialize_user(p.payer) for p in unpaid],
         "paid_count": paid.count(),
         "total_count": paid.count() + unpaid.count(),
     }
+
+
+def _build_payment_success_payload(booking_request: TeamBookingRequest) -> dict:
+    latest = booking_request.payment_round
+    payments = booking_request.payments.select_related("payer").filter(round=latest)
+    paid = [p for p in payments if p.status in (PaymentStatus.PAID, PaymentStatus.COVERED_BY_OWNER)]
+    outside_joiners = _get_outside_joiners(booking_request)
+
+    paid_members = [_serialize_user(p.payer) for p in paid]
+    for joiner in outside_joiners:
+        entry = _serialize_user(joiner)
+        entry["is_outside_player"] = True
+        paid_members.append(entry)
+
+    return {
+        "type": "payment_success",
+        "request_id": str(booking_request.id),
+        "pitch_name": booking_request.pitch_name,
+        "team_name": booking_request.team.name,
+        "total_price": str(booking_request.total_price),
+        "final_booking_code": booking_request.final_booking_code,
+        "paid_members": paid_members,
+        "total_count": payments.count() + len(outside_joiners),
+    }
+
+
+def acknowledge_booking_completion(*, request_id, owner) -> None:
+    """Dismisses payment_success AND pitch_unavailable popups — both
+    reuse this same one-time flag.
+    """
+    booking_request = TeamBookingRequest.objects.get(id=request_id, created_by=owner)
+    booking_request.booked_popup_shown = True
+    booking_request.save(update_fields=["booked_popup_shown"])
 
 
 def get_team_owner_membership_or_raise(team, owner):
@@ -344,21 +426,6 @@ def get_team_owner_membership_or_raise(team, owner):
 
 @transaction.atomic
 def resolve_payment_timeout(*, request_id, owner, action: str) -> dict:
-    """Owner's action once the mandatory payment_timeout popup fires
-    (payment window closed with unpaid members left). Four options:
-
-      - remind:      re-hold the pitch for 5 MORE minutes, re-notify
-                      ONLY the still-unpaid members with a fresh
-                      countdown. Everyone who already paid is untouched.
-      - cover:        owner pays the full remaining share for every
-                      unpaid member; finalizes immediately.
-      - recalculate:  unpaid members are excluded entirely; their
-                      total owed amount is split across everyone who
-                      DID pay, as a new top-up payment request (round+1),
-                      with a fresh 10-minute window.
-      - cancel:       whole request is deleted, pitch released, every
-                      payer notified.
-    """
     booking_request = TeamBookingRequest.objects.select_related("team").get(id=request_id)
     get_team_owner_membership_or_raise(booking_request.team, owner)
 
@@ -370,7 +437,6 @@ def resolve_payment_timeout(*, request_id, owner, action: str) -> dict:
         status=PaymentStatus.PENDING, round=latest_round
     ).exclude(is_owner=True)
 
-    # ---------------- cancel ----------------
     if action == "cancel":
         try:
             pitch = Pitch.objects.get(id=booking_request.pitch_id)
@@ -401,13 +467,16 @@ def resolve_payment_timeout(*, request_id, owner, action: str) -> dict:
             if not is_slot_available(pitch, item["start_iso"], item["end_iso"]):
                 booking_request.status = TeamBookingRequestStatus.UNAVAILABLE
                 booking_request.payment_timeout_needs_owner_action = False
+                booking_request.owner_action_taken = True
                 booking_request.save(
-                    update_fields=["status", "payment_timeout_needs_owner_action", "updated_at"]
+                    update_fields=[
+                        "status", "payment_timeout_needs_owner_action",
+                        "owner_action_taken", "updated_at",
+                    ]
                 )
                 return False
         return True
 
-    # ---------------- remind (5-minute reminder round) ----------------
     if action == "remind":
         if not unpaid.exists():
             raise ValueError("Everyone has already paid.")
@@ -436,7 +505,6 @@ def resolve_payment_timeout(*, request_id, owner, action: str) -> dict:
             )
         return {"unavailable": False, "cancelled": False}
 
-    # ---------------- cover ----------------
     if action == "cover":
         if not _check_available_or_mark_unavailable():
             return {"unavailable": True, "pitch_id": booking_request.pitch_id}
@@ -456,7 +524,6 @@ def resolve_payment_timeout(*, request_id, owner, action: str) -> dict:
         _finalize_booking(booking_request)
         return {"unavailable": False, "cancelled": False, "booking_code": booking_request.final_booking_code}
 
-    # ---------------- recalculate ----------------
     if action == "recalculate":
         if not unpaid.exists():
             raise ValueError("Everyone has already paid.")
@@ -491,25 +558,45 @@ def resolve_payment_timeout(*, request_id, owner, action: str) -> dict:
         )
 
         for payment in paid_payments:
-            TeamBookingPayment.objects.create(
+            new_payment = TeamBookingPayment.objects.create(
                 request=booking_request, payer=payment.payer, is_owner=payment.is_owner,
                 amount=top_up, round=new_round,
             )
-            notify(
-                recipient=payment.payer,
-                notification_type=NotificationType.TEAM_BOOKING_PAYMENT_REQUEST,
-                title="Extra payment needed",
-                body=f"Some teammates couldn't pay, so your share for {booking_request.pitch_name} increased by {top_up} Br. You have 10 minutes.",
-                data={
-                    "team_booking_request_id": str(booking_request.id),
-                    "payment_expires_at": deadline.isoformat(),
-                },
-            )
+
+            if payment.is_owner:
+                # The owner triggered this action themselves — auto-pay
+                # their new top-up row immediately, the same way
+                # resolve_confirm_summary already does via
+                # _mark_owner_paid_and_maybe_finalize. Without this,
+                # the owner would sit in PENDING and get funneled into
+                # their OWN mandatory MemberPaymentPopup, which is
+                # exactly the bug: they'd have to go dig it out of the
+                # notification drawer instead of it being handled here.
+                new_payment.mark_paid()
+                notify(
+                    recipient=payment.payer,
+                    notification_type=NotificationType.TEAM_BOOKING_PAYMENT_RECEIVED,
+                    title="Payment received",
+                    body=f"You paid {top_up} Br for {booking_request.pitch_name}.",
+                    data={"team_booking_request_id": str(booking_request.id)},
+                    send_push=False,
+                )
+            else:
+                notify(
+                    recipient=payment.payer,
+                    notification_type=NotificationType.TEAM_BOOKING_PAYMENT_REQUEST,
+                    title="Extra payment needed",
+                    body=f"Some teammates couldn't pay, so your share for {booking_request.pitch_name} increased by {top_up} Br. You have 10 minutes.",
+                    data={
+                        "team_booking_request_id": str(booking_request.id),
+                        "payment_expires_at": deadline.isoformat(),
+                    },
+                )
+
+        _try_finalize_if_all_paid(booking_request)
         return {"unavailable": False, "cancelled": False}
-
+    
     raise ValueError("Invalid action.")
-
-
 
 
 class ConfirmSummaryAction:
@@ -521,15 +608,6 @@ class ConfirmSummaryAction:
 
 @transaction.atomic
 def resolve_confirm_summary(*, request_id, owner, action: str) -> dict:
-    """Owner's action after the 20-min window closes, chosen from the
-    (now non-mandatory, bell-triggered) summary popup:
-
-      - cover:        owner pays extra for every declined/no-response member
-      - recalculate:  price is redivided across only confirmed members
-      - open_slot:    declined members' spots are simply left unpaid —
-                       pitch books at a lower total, nobody covers them
-      - cancel:       whole request is cancelled, no payment phase starts
-    """
     booking_request = TeamBookingRequest.objects.select_related("team").get(id=request_id)
 
     membership = (
@@ -541,6 +619,7 @@ def resolve_confirm_summary(*, request_id, owner, action: str) -> dict:
     all_confirmed = not booking_request.confirmations.exclude(
         status=MemberConfirmationStatus.CONFIRMED
     ).exists()
+    open_slots_filled = _is_open_slots_filled(booking_request)
 
     if booking_request.status == TeamBookingRequestStatus.PENDING and not all_confirmed:
         raise ValueError("Still waiting on responses — can't decide yet.")
@@ -555,9 +634,6 @@ def resolve_confirm_summary(*, request_id, owner, action: str) -> dict:
         pitch_name = booking_request.pitch_name
         request_id_str = str(booking_request.id)
 
-        # Notify everyone BEFORE deleting — once the row is gone,
-        # confirmations (and any FK-dependent data) cascade-delete
-        # with it, so this must happen first.
         for confirmation in booking_request.confirmations.select_related("member").exclude(
             member_id=owner.id
         ):
@@ -570,12 +646,7 @@ def resolve_confirm_summary(*, request_id, owner, action: str) -> dict:
                 send_push=False,
             )
 
-        # Hard delete — cancelled requests should disappear from the
-        # owner's Team Update list entirely, not linger as a dead row.
-        # TeamBookingConfirmation and TeamBookingPayment rows cascade
-        # via on_delete=CASCADE on their `request` FK.
         booking_request.delete()
-
         return {"unavailable": False, "cancelled": True}
 
     try:
@@ -583,6 +654,10 @@ def resolve_confirm_summary(*, request_id, owner, action: str) -> dict:
     except Pitch.DoesNotExist:
         raise ValueError("Pitch no longer exists.")
 
+    # Availability is only CHECKED here — never held before this
+    # exact moment. The pitch stays fully bookable by any other team
+    # right up until this call, which is the first time hold_slots
+    # is ever invoked for this request.
     for item in booking_request.selections:
         if not is_slot_available(pitch, item["start_iso"], item["end_iso"]):
             booking_request.status = TeamBookingRequestStatus.UNAVAILABLE
@@ -604,17 +679,24 @@ def resolve_confirm_summary(*, request_id, owner, action: str) -> dict:
         if c.status != MemberConfirmationStatus.CONFIRMED and c.member_id != owner.id
     ]
 
-    if action == ConfirmSummaryAction.RECALCULATE:
-        payer_count = len(confirmed_others) + 1  # +1 owner, excludes declined entirely
+    if open_slots_filled:
+        # Gaps already covered by outside joiners — team pays exactly
+        # its own confirmed share regardless of which action string
+        # the frontend sent (the trophy screen always sends "cover").
+        owner_amount = booking_request.price_per_member
+        member_amount = booking_request.price_per_member
+    elif action == ConfirmSummaryAction.RECALCULATE:
+        payer_count = len(confirmed_others) + 1
         share = (booking_request.total_price / payer_count).quantize(Decimal("0.01"))
         owner_amount = share
         member_amount = share
-    elif action == ConfirmSummaryAction.OPEN_SLOT:
-        owner_amount = booking_request.price_per_member
-        member_amount = booking_request.price_per_member
-    else:  # COVER
+    elif action == ConfirmSummaryAction.COVER:
         owner_amount = booking_request.price_per_member * (1 + len(declined_or_pending))
         member_amount = booking_request.price_per_member
+    else:
+        # "open_slot" must never reach here — the view rejects it, and
+        # the frontend intercepts it before ever calling this endpoint.
+        raise ValueError("Invalid action for this stage.")
 
     TeamBookingPayment.objects.create(
         request=booking_request, payer=owner, is_owner=True, amount=owner_amount,
@@ -624,6 +706,17 @@ def resolve_confirm_summary(*, request_id, owner, action: str) -> dict:
             request=booking_request, payer=confirmation.member, amount=member_amount,
         )
 
+    # If gaps were filled by outside joiners (not team members), they
+    # owe the exact same fixed share and pay in the SAME 10-minute
+    # window as the team — never at join time. This is what actually
+    # asks them to pay; joining a match only ever reserves a spot.
+    outside_payers = []
+    if open_slots_filled:
+        outside_payers = _get_outside_joiners(booking_request)
+        for joiner in outside_payers:
+            TeamBookingPayment.objects.create(
+                request=booking_request, payer=joiner, amount=member_amount,
+            )
     booking_request.status = TeamBookingRequestStatus.PAYMENT_PENDING
     booking_request.owner_action_taken = True
     booking_request.payment_started_at = now
@@ -647,19 +740,23 @@ def resolve_confirm_summary(*, request_id, owner, action: str) -> dict:
                 "payment_expires_at": payment_deadline.isoformat(),
             },
         )
+    for joiner in outside_payers:
+        notify(
+            recipient=joiner,
+            notification_type=NotificationType.TEAM_BOOKING_PAYMENT_REQUEST,
+            title="Time to pay",
+            body=f"Pay {member_amount} Br for {booking_request.pitch_name} on {when_label}. You have 10 minutes.",
+            data={
+                "team_booking_request_id": str(booking_request.id),
+                "payment_expires_at": payment_deadline.isoformat(),
+            },
+        )
 
     _mark_owner_paid_and_maybe_finalize(booking_request, owner)
     return {"unavailable": False, "cancelled": False}
-# ======================================================================
-# PHASE 3 — 10-minute payment window
-# ======================================================================
+
 
 def get_pending_payment_for_user(user):
-    """Polled by AppShell for every user (not just owners) to drive
-    the mandatory member payment popup with its countdown. Orders by
-    round DESC so a top-up request (round 2+) takes priority over an
-    already-resolved earlier round.
-    """
     payment = (
         TeamBookingPayment.objects.select_related("request", "request__team")
         .filter(
@@ -678,22 +775,8 @@ def get_pending_payment_for_user(user):
     return payment
 
 
-
-def _display_name(user) -> str:
-    full = f"{getattr(user, 'first_name', '')} {getattr(user, 'last_name', '')}".strip()
-    return full or getattr(user, "username", "A teammate")
-
 @transaction.atomic
 def pay_for_booking(*, request_id, user) -> TeamBookingPayment:
-    """Stub payment — no real charge, just marks PAID. Swap the body
-    of this function for real gateway integration later; everything
-    downstream (notifications, finalize check) stays the same.
-
-    STRICTLY rejects any attempt after the payment window has closed
-    — even if the person is still staring at a countdown that reads
-    0:00 client-side due to network lag, the SERVER's clock is what
-    decides whether a payment counts, never the client's.
-    """
     payment = (
         TeamBookingPayment.objects.select_related("request")
         .filter(request_id=request_id, payer=user, status=PaymentStatus.PENDING)
@@ -736,6 +819,23 @@ def _try_finalize_if_all_paid(booking_request: TeamBookingRequest):
     if not still_pending:
         _finalize_booking(booking_request)
 
+def _get_outside_joiners(booking_request: TeamBookingRequest):
+    """Users who joined the linked open-slots Match but are NOT team
+    members — they never get a TeamBookingPayment row (payment for
+    match participants isn't built yet), but they still need to be
+    counted and notified once the booking finalizes.
+    """
+    if not booking_request.open_slot_match_id:
+        return []
+    from match.models import MatchParticipant
+
+    return [
+        p.user
+        for p in MatchParticipant.objects.active()
+        .for_match(booking_request.open_slot_match)
+        .select_related("user")
+    ]
+
 
 def _finalize_booking(booking_request: TeamBookingRequest):
     try:
@@ -762,6 +862,9 @@ def _finalize_booking(booking_request: TeamBookingRequest):
 
     when_label = _format_selection_summary(booking_request.selections)
     recipients = {p.payer for p in booking_request.payments.select_related("payer")}
+    outside_joiners = _get_outside_joiners(booking_request)
+    recipients.update(outside_joiners)
+
     for member in recipients:
         notify(
             recipient=member,
@@ -771,15 +874,7 @@ def _finalize_booking(booking_request: TeamBookingRequest):
             data={"team_booking_request_id": str(booking_request.id), "booking_code": booking_code},
         )
 
-
-
 def sweep_payment_timeouts():
-    """Companion sweep to expire_stale_requests_and_notify_owners —
-    run on the same cron cadence. Any PAYMENT_PENDING request whose
-    window passed with unpaid members left gets flagged for the
-    owner's second mandatory popup; slots are released so the pitch
-    becomes bookable again until the owner resolves it.
-    """
     stale = TeamBookingRequest.objects.filter(
         status=TeamBookingRequestStatus.PAYMENT_PENDING,
         payment_expires_at__lte=timezone.now(),
@@ -789,7 +884,7 @@ def sweep_payment_timeouts():
     for booking_request in stale:
         still_unpaid = booking_request.payments.filter(status=PaymentStatus.PENDING).exists()
         if not still_unpaid:
-            continue  # a race with _try_finalize_if_all_paid — nothing to do
+            continue
 
         try:
             pitch = Pitch.objects.get(id=booking_request.pitch_id)
@@ -801,26 +896,58 @@ def sweep_payment_timeouts():
         booking_request.save(update_fields=["payment_timeout_needs_owner_action", "updated_at"])
 
 
-# ======================================================================
-# Anytime owner visibility — list every active team booking request,
-# and live detail for one of them. Not tied to the 20-min expiry at
-# all; the owner can open these the moment a request is created.
-# ======================================================================
+def sweep_pitch_conflicts_and_notify_owners():
+    """Because the pitch is deliberately NOT held during PENDING/
+    EXPIRED/AWAITING_OPEN_SLOTS, another team can legitimately book
+    the same pitch/time first while this request is still in
+    progress. Catches that proactively and notifies the owner.
+    """
+    at_risk = TeamBookingRequest.objects.filter(
+        status__in=[
+            TeamBookingRequestStatus.PENDING,
+            TeamBookingRequestStatus.EXPIRED,
+            TeamBookingRequestStatus.AWAITING_OPEN_SLOTS,
+        ]
+    ).select_related("team", "created_by")
+
+    for booking_request in at_risk:
+        try:
+            pitch = Pitch.objects.get(id=booking_request.pitch_id)
+        except Pitch.DoesNotExist:
+            continue
+
+        still_available = all(
+            is_slot_available(pitch, item["start_iso"], item["end_iso"])
+            for item in booking_request.selections
+        )
+        if still_available:
+            continue
+
+        booking_request.status = TeamBookingRequestStatus.UNAVAILABLE
+        booking_request.owner_action_taken = True
+        booking_request.save(update_fields=["status", "owner_action_taken", "updated_at"])
+
+        notify(
+            recipient=booking_request.created_by,
+            notification_type=NotificationType.TEAM_BOOKING_PITCH_UNAVAILABLE,
+            title="Pitch booked by someone else",
+            body=f"{booking_request.pitch_name} was booked by another team before you finished. Pick a new time or pitch.",
+            data={
+                "team_booking_request_id": str(booking_request.id),
+                "pitch_id": booking_request.pitch_id,
+            },
+        )
+
 
 _ACTIVE_STATUSES = [
     TeamBookingRequestStatus.PENDING,
     TeamBookingRequestStatus.EXPIRED,
+    TeamBookingRequestStatus.AWAITING_OPEN_SLOTS,
     TeamBookingRequestStatus.PAYMENT_PENDING,
 ]
 
 
 def get_my_active_team_bookings(owner):
-    """Every booking request for teams where THIS user is the
-    CURRENT active owner — checked via live TeamMembership, not the
-    `created_by` snapshot on the request. This matters if ownership
-    is ever transferred: access always follows who owns the team
-    right now, not who happened to click Confirm & Notify originally.
-    """
     owned_team_ids = (
         TeamMembership.objects.active()
         .owners()
@@ -835,16 +962,6 @@ def get_my_active_team_bookings(owner):
 
 
 def get_team_booking_live_detail(*, request_id, owner) -> TeamBookingRequest:
-    """One request's full live state — confirmed/pending/declined
-    member breakdown. Callable at ANY time, not just after expiry.
-
-    Access control: the requesting user must be the CURRENT active
-    OWNER of the specific team this request belongs to. This is a
-    fresh membership check every call, not `created_by == owner` —
-    so it stays correct even after an ownership transfer, and a
-    regular member (not the owner) is correctly refused even if they
-    somehow guess a valid request_id.
-    """
     booking_request = TeamBookingRequest.objects.select_related("team").get(id=request_id)
 
     membership = (
@@ -857,15 +974,6 @@ def get_team_booking_live_detail(*, request_id, owner) -> TeamBookingRequest:
         booking_request.mark_expired()
     return booking_request
 
-
-
-# ======================================================================
-# Member-side lookups for clicking "View" on a notification, even
-# after the relevant window has closed. Unlike get_pending_*_for_user
-# (which only returns something while a response is still allowed),
-# these ALWAYS return the row if it exists, plus a can_respond /
-# can_pay flag so the frontend can render a disabled, read-only view.
-# ======================================================================
 
 def get_my_confirmation_detail(*, request_id, user):
     confirmation = TeamBookingConfirmation.objects.select_related(
@@ -900,20 +1008,16 @@ def get_my_payment_detail(*, request_id, user):
     return payment, can_pay
 
 
-
-
 def get_booked_summary_for_user(*, request_id, user):
-    """Called when ANYONE involved in a booking (owner, admin, or any
-    member who confirmed/paid) clicks 'View' on their 'Pitch booked!'
-    notification. Returns different detail depending on role:
-      - regular member: just a paid_count number
-      - team OWNER or ADMIN: full list of who actually paid, by name
-    """
     booking_request = TeamBookingRequest.objects.select_related("team").get(id=request_id)
+
+    outside_joiners = _get_outside_joiners(booking_request)
+    is_outside_joiner = any(u.id == user.id for u in outside_joiners)
 
     involved = (
         booking_request.confirmations.filter(member=user).exists()
         or booking_request.payments.filter(payer=user).exists()
+        or is_outside_joiner
     )
     if not involved:
         raise PermissionDenied("You are not part of this booking.")
@@ -929,10 +1033,193 @@ def get_booked_summary_for_user(*, request_id, user):
     )
     total_qs = booking_request.payments.filter(round=latest_round)
 
+    paid_members = []
+    if is_owner_or_admin:
+        paid_members = [_serialize_user(p.payer) for p in paid_qs]
+        for joiner in outside_joiners:
+            entry = _serialize_user(joiner)
+            entry["is_outside_player"] = True
+            paid_members.append(entry)
+
     return {
         "booking_request": booking_request,
         "is_owner_or_admin": is_owner_or_admin,
-        "paid_count": paid_qs.count(),
-        "total_count": total_qs.count(),
-        "paid_members": [_serialize_user(p.payer) for p in paid_qs] if is_owner_or_admin else [],
+        "paid_count": paid_qs.count() + len(outside_joiners),
+        "total_count": total_qs.count() + len(outside_joiners),
+        "paid_members": paid_members,
     }
+
+
+@transaction.atomic
+def open_slots_for_declined_members(*, request_id, owner, description: str = "") -> dict:
+    """Slot count and price are both computed server-side from real
+    confirmation data — never trusted from the client. The pitch is
+    deliberately NOT held here — see the module docstring above.
+    """
+    booking_request = TeamBookingRequest.objects.select_related("team").get(id=request_id)
+    get_team_owner_membership_or_raise(booking_request.team, owner)
+
+    if booking_request.status not in (
+        TeamBookingRequestStatus.PENDING,
+        TeamBookingRequestStatus.EXPIRED,
+    ):
+        raise ValueError("This request is not awaiting a decision.")
+
+    all_confirmed = not booking_request.confirmations.exclude(
+        status=MemberConfirmationStatus.CONFIRMED
+    ).exists()
+    if all_confirmed:
+        raise ValueError("Everyone already confirmed — no need to open slots.")
+
+    slots_needed = (
+        booking_request.confirmations.exclude(member_id=booking_request.created_by_id)
+        .exclude(status=MemberConfirmationStatus.CONFIRMED)
+        .count()
+    )
+    if slots_needed <= 0:
+        raise ValueError("No open slots to fill.")
+
+    try:
+        pitch = Pitch.objects.get(id=booking_request.pitch_id)
+    except Pitch.DoesNotExist:
+        raise ValueError("Pitch no longer exists.")
+
+    if not booking_request.selections:
+        raise ValueError("This booking has no time selected.")
+
+    for item in booking_request.selections:
+        if not is_slot_available(pitch, item["start_iso"], item["end_iso"]):
+            booking_request.status = TeamBookingRequestStatus.UNAVAILABLE
+            booking_request.owner_action_taken = True
+            booking_request.save(update_fields=["status", "owner_action_taken", "updated_at"])
+            return {"unavailable": True, "pitch_id": booking_request.pitch_id}
+
+    first_selection = booking_request.selections[0]
+    start_time = _to_datetime(first_selection["start_iso"])
+    end_time = _to_datetime(first_selection["end_iso"])
+
+    from match.exceptions import MatchServiceError
+    from match.services import create_match as _create_open_slot_match
+
+    try:
+        match = _create_open_slot_match(
+            creator_team=booking_request.team,
+            created_by=owner,
+            pitch=pitch,
+            start_time=start_time,
+            end_time=end_time,
+            slots_needed=slots_needed,
+            price_per_slot=booking_request.price_per_member,
+            description=description,
+        )
+    except (MatchServiceError, ValueError) as exc:
+        raise ValueError(str(exc))
+
+    booking_request.open_slot_match = match
+    booking_request.status = TeamBookingRequestStatus.AWAITING_OPEN_SLOTS
+    booking_request.owner_action_taken = True
+    booking_request.save(
+        update_fields=["open_slot_match", "status", "owner_action_taken", "updated_at"]
+    )
+
+    return {"unavailable": False, "match_id": str(match.id), "slots_needed": slots_needed}
+
+
+@transaction.atomic
+def handle_open_slot_match_filled(booking_request: TeamBookingRequest) -> None:
+    booking_request.refresh_from_db()
+    if booking_request.status != TeamBookingRequestStatus.AWAITING_OPEN_SLOTS:
+        return
+    booking_request.status = TeamBookingRequestStatus.EXPIRED
+    booking_request.owner_action_taken = False
+    booking_request.save(update_fields=["status", "owner_action_taken", "updated_at"])
+
+
+@transaction.atomic
+def cover_remaining_open_slots_and_start_payment(*, request_id, owner) -> dict:
+    """Owner's action from the Team Update live-detail screen while a
+    request is AWAITING_OPEN_SLOTS and not yet fully joined: cancel
+    the linked Match first (so no more outside players can join, and
+    anyone already on a reserved/confirmed slot there is released —
+    they were never charged anyway, since match-side payment isn't
+    built yet), THEN start the normal payment window, with the owner
+    covering exactly the slots nobody filled.
+    """
+    booking_request = TeamBookingRequest.objects.select_related("team", "open_slot_match").get(
+        id=request_id
+    )
+    get_team_owner_membership_or_raise(booking_request.team, owner)
+
+    if booking_request.status != TeamBookingRequestStatus.AWAITING_OPEN_SLOTS:
+        raise ValueError("This request is not awaiting open slots.")
+
+    match = booking_request.open_slot_match
+    if not match:
+        raise ValueError("No linked match found for this request.")
+
+    filled = match.confirmed_participant_count
+    remaining = max(match.slots_needed - filled, 0)
+
+    # Disable the match FIRST — no new joins can land mid-transaction.
+    from match.services import cancel_match as _cancel_open_slot_match
+
+    _cancel_open_slot_match(match=match, cancelled_by=owner)
+
+    try:
+        pitch = Pitch.objects.get(id=booking_request.pitch_id)
+    except Pitch.DoesNotExist:
+        raise ValueError("Pitch no longer exists.")
+
+    for item in booking_request.selections:
+        if not is_slot_available(pitch, item["start_iso"], item["end_iso"]):
+            booking_request.status = TeamBookingRequestStatus.UNAVAILABLE
+            booking_request.owner_action_taken = True
+            booking_request.save(update_fields=["status", "owner_action_taken", "updated_at"])
+            return {"unavailable": True, "pitch_id": booking_request.pitch_id}
+
+    now = timezone.now()
+    payment_deadline = now + timedelta(minutes=PAYMENT_LIFETIME_MINUTES)
+    hold_slots(pitch, booking_request.selections, held_until=payment_deadline, updated_by=owner)
+
+    confirmed_others = [
+        c for c in booking_request.confirmations.select_related("member")
+        if c.status == MemberConfirmationStatus.CONFIRMED and c.member_id != owner.id
+    ]
+
+    owner_amount = booking_request.price_per_member * (1 + remaining)
+    member_amount = booking_request.price_per_member
+
+    TeamBookingPayment.objects.create(
+        request=booking_request, payer=owner, is_owner=True, amount=owner_amount,
+    )
+    for confirmation in confirmed_others:
+        TeamBookingPayment.objects.create(
+            request=booking_request, payer=confirmation.member, amount=member_amount,
+        )
+
+    booking_request.status = TeamBookingRequestStatus.PAYMENT_PENDING
+    booking_request.owner_action_taken = True
+    booking_request.payment_started_at = now
+    booking_request.payment_expires_at = payment_deadline
+    booking_request.save(
+        update_fields=[
+            "status", "owner_action_taken", "payment_started_at",
+            "payment_expires_at", "updated_at",
+        ]
+    )
+
+    when_label = _format_selection_summary(booking_request.selections)
+    for confirmation in confirmed_others:
+        notify(
+            recipient=confirmation.member,
+            notification_type=NotificationType.TEAM_BOOKING_PAYMENT_REQUEST,
+            title="Time to pay",
+            body=f"Pay {member_amount} Br for {booking_request.pitch_name} on {when_label}. You have 10 minutes.",
+            data={
+                "team_booking_request_id": str(booking_request.id),
+                "payment_expires_at": payment_deadline.isoformat(),
+            },
+        )
+
+    _mark_owner_paid_and_maybe_finalize(booking_request, owner)
+    return {"unavailable": False, "covered_slots": remaining}

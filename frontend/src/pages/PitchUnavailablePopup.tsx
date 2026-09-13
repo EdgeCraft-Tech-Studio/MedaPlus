@@ -43,7 +43,7 @@ export default function PitchUnavailablePopup({ pitchId, onClose }: Props) {
             className={styles.primaryBtn}
             onClick={() => {
               onClose();
-              navigate(`/pitches/${pitchId}`);
+              navigate(`/app/pitches/${pitchId}`);
             }}
           >
             Change time

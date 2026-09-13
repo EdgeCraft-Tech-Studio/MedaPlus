@@ -224,3 +224,17 @@
   height: 13px;
   border-radius: 5px;
 }
+
+/* Log out button spinner — same animation as .spinner, tinted for a
+   red-on-white row instead of white-on-green. */
+.logoutSpinner {
+  width: 14px; height: 14px; border-radius: 50%;
+  border: 2px solid rgba(192, 57, 43, 0.25); border-top-color: var(--danger);
+  animation: spin 0.65s linear infinite;
+  flex-shrink: 0;
+}
+
+.rowBtn:disabled {
+  opacity: 0.8;
+  cursor: default;
+}

@@ -9,7 +9,7 @@
   --color-text-muted: #6b7280;
   --color-text-faint: #9aa1ab;
 
-  --color-pitch-900: #0f2e1c;
+  --color-pitch-900: #0f2e1c; 
   --color-pitch-700: #1c5c37;
 
   --color-gold: #e2a63b;
@@ -182,8 +182,8 @@
 /* ---------- Gallery ---------- */
 
 .gallery {
-  margin-top: 6px;
-  margin-bottom: 26px;
+  margin-top: 0;
+  margin-bottom: 0;
 }
 
 .galleryMain {
@@ -791,4 +791,37 @@
 
 .bookingNotes b {
   color: var(--color-text);
+}
+
+
+/* ---------- two-column layout: image (30%) / info (70%) ---------- */
+
+.detailLayout {
+  display: flex;
+  align-items: flex-start;
+  gap: 24px;
+  margin-bottom: 6px;
+}
+
+.galleryCol {
+  flex: 0 0 40%;
+  max-width: 90%;
+  min-width: 0;
+}
+
+.infoCol {
+  flex: 1 1 70%;
+  min-width: 0;
+}
+
+@media (max-width: 860px) {
+  .detailLayout {
+    flex-direction: column;
+  }
+
+  .galleryCol,
+  .infoCol {
+    flex: 1 1 auto;
+    max-width: 100%;
+  }
 }

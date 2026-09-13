@@ -457,6 +457,7 @@ export default function ProfilePage() {
 
   const [showPhoneForm, setShowPhoneForm] = useState(false);
 
+  const [loggingOut, setLoggingOut] = useState(false);
   useEffect(() => {
     async function load() {
       try {
@@ -564,9 +565,15 @@ export default function ProfilePage() {
     }
   }
 
-  async function handleLogout() {
-    await logout();
-    nav("/login", { replace: true });
+    async function handleLogout() {
+    setLoggingOut(true);
+    try {
+      await logout();
+      nav("/login", { replace: true });
+    } catch (err) {
+      console.error("Failed to log out:", err);
+      setLoggingOut(false);
+    }
   }
 
   if (loading) {
@@ -731,11 +738,25 @@ export default function ProfilePage() {
       </div>
 
       {/* ---------- Account ---------- */}
+            {/* ---------- Account ---------- */}
       <div className={styles.sectionTitle}>Account</div>
       <div className={styles.card}>
-        <button className={`${styles.row} ${styles.rowBtn} ${styles.rowDanger}`} onClick={handleLogout}>
-          <span className={styles.rowLabel}>Log out</span>
-          <ChevronRightIcon width={15} height={15} />
+        <button
+          className={`${styles.row} ${styles.rowBtn} ${styles.rowDanger}`}
+          onClick={handleLogout}
+          disabled={loggingOut}
+        >
+          <span className={styles.rowLabel}>
+            {loggingOut ? (
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                <span className={styles.logoutSpinner} aria-hidden="true" />
+                Logging out...
+              </span>
+            ) : (
+              "Log out"
+            )}
+          </span>
+          {!loggingOut && <ChevronRightIcon width={15} height={15} />}
         </button>
       </div>
     </div>

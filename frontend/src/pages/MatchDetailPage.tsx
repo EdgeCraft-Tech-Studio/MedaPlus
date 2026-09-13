@@ -2,15 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { MapContainer, Marker, TileLayer } from "react-leaflet";
 import L from "leaflet";
-import { getMatch, joinMatch, acceptChallenge, type Match } from "../lib/match";
+import { getMatch, joinMatch, type Match } from "../lib/match";
 import { getPitchDetail, type Pitch } from "../lib/pitches";
-import { getMyTeams, type MyTeam } from "../lib/team";
 import styles from "./css/MatchDetailPage.module.css";
 
-/* ---------------- icons ---------------- */
-
 type IconName =
-  | "arrowLeft" | "pin" | "clock" | "cash" | "users" | "swords"
+  | "arrowLeft" | "pin" | "clock" | "cash" | "users"
   | "shirt" | "droplet" | "car" | "bulb" | "imageOff" | "check" | "calendar" | "shield";
 
 function Icon({ name, size = 16 }: { name: IconName; size?: number }) {
@@ -45,12 +42,6 @@ function Icon({ name, size = 16 }: { name: IconName; size?: number }) {
         <path d="M3.5 20c0-3.6 2.6-6 5.5-6s5.5 2.4 5.5 6" />
         <path d="M16 8.5a3 3 0 1 1 0-6" />
         <path d="M15 14.2c2.6.3 4.5 2.6 4.5 5.8" />
-      </>
-    ),
-    swords: (
-      <>
-        <path d="m5 5 14 14M19 5 5 19" />
-        <path d="M5 5h4M5 5v4M19 5h-4M19 5v4M5 19h4M5 19v-4M19 19h-4M19 19v-4" />
       </>
     ),
     shirt: <path d="M8 3 4 6v4l2-1v11h12V9l2 1V6l-4-3-2 2h-4L8 3z" />,
@@ -112,16 +103,11 @@ function BasketballIcon(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
-/* ---------------- helpers ---------------- */
-
 function formatBirr(value: string | number | null | undefined) {
   const num = Number(value) || 0;
   return `${num.toLocaleString(undefined, { maximumFractionDigits: 0 })} Br`;
 }
 
-/** Time info anchored to Addis Ababa's own clock, not the visitor's device timezone —
- *  matches, players, and pitches all live in Ethiopia, so the match's local time
- *  should never silently shift for someone browsing from abroad. */
 function addisTimeInfo(iso: string) {
   const d = new Date(iso);
   const tz = "Africa/Addis_Ababa";
@@ -145,8 +131,6 @@ function durationLabel(startIso: string, endIso: string) {
   return `${(mins / 60).toFixed(1)} hours`;
 }
 
-// Same marker artwork as the match-creation map in MatchesTab — a real football
-// or basketball rendered inside a pin, so the sport is identifiable at a glance.
 function buildBallDivIcon(sport: "FOOTBALL" | "BASKETBALL") {
   const isBasketball = sport === "BASKETBALL";
   const pinColor = isBasketball ? "#c9942a" : "#3fae7f";
@@ -183,14 +167,12 @@ function buildBallDivIcon(sport: "FOOTBALL" | "BASKETBALL") {
 
 const RULES: string[] = [
   "Arrive at least 10 minutes before kickoff — late arrivals can lose their reserved slot to someone else.",
-  "Payment for your slot (or your team's share) confirms your place. Unpaid reservations may be released.",
-  "Cancelling less than 24 hours before the match may forfeit your payment — check the match organizer's own policy before booking.",
+  "Payment for your slot confirms your place. Unpaid reservations may be released.",
+  "Cancelling less than 24 hours before the match may forfeit your payment — check the organizer's own policy before booking.",
   "Wear footwear appropriate for the pitch surface. Studs may not be allowed on all surfaces — confirm with the venue.",
-  "Respect the pitch, opposing players, and venue staff. Repeated reports of unsporting conduct can result in removal from future matches.",
+  "Respect the pitch, opposing players, and venue staff.",
   "MedaPlus connects teams, players, and pitches — disputes about a specific match are between its organizer and participants, not the platform.",
 ];
-
-/* ---------------- page ---------------- */
 
 export default function MatchDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -198,12 +180,10 @@ export default function MatchDetailPage() {
 
   const [match, setMatch] = useState<Match | null>(null);
   const [pitch, setPitch] = useState<Pitch | null>(null);
-  const [myTeams, setMyTeams] = useState<MyTeam[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [activePhoto, setActivePhoto] = useState(0);
   const [busy, setBusy] = useState(false);
-  const [pickingTeam, setPickingTeam] = useState(false);
   const [banner, setBanner] = useState("");
 
   async function load() {
@@ -213,12 +193,8 @@ export default function MatchDetailPage() {
       setError(false);
       const m = await getMatch(id);
       setMatch(m);
-      const [p, teams] = await Promise.all([
-        getPitchDetail(m.pitch_id).then((d) => d.pitch).catch(() => null),
-        getMyTeams().catch(() => []),
-      ]);
+      const p = await getPitchDetail(m.pitch_id).then((d) => d.pitch).catch(() => null);
       setPitch(p);
-      setMyTeams(teams);
       setActivePhoto(0);
     } catch (err) {
       console.error("Failed to load match:", err);
@@ -233,11 +209,6 @@ export default function MatchDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  const eligibleTeams = useMemo(() => {
-    if (!match) return [];
-    return myTeams.filter((t) => (t.role === "owner" || t.role === "admin") && t.id !== match.creator_team_id);
-  }, [myTeams, match]);
-
   async function handleJoin() {
     if (!match) return;
     setBusy(true);
@@ -248,22 +219,6 @@ export default function MatchDetailPage() {
       await load();
     } catch (err: any) {
       setBanner(err?.response?.data?.detail || "Couldn't join this match. It may already be full.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function handleAccept(teamId: string) {
-    if (!match) return;
-    setBusy(true);
-    setBanner("");
-    try {
-      await acceptChallenge(match.id, teamId);
-      setBanner("Challenge accepted — match confirmed!");
-      setPickingTeam(false);
-      await load();
-    } catch (err: any) {
-      setBanner(err?.response?.data?.detail || "Couldn't accept this challenge.");
     } finally {
       setBusy(false);
     }
@@ -294,14 +249,12 @@ export default function MatchDetailPage() {
     );
   }
 
-  const isOpenSlots = match.match_type === "open_slots";
   const startInfo = addisTimeInfo(match.start_time);
   const endInfo = addisTimeInfo(match.end_time);
   const photos = pitch?.images && pitch.images.length > 0 ? pitch.images : [];
   const sport = pitch?.sport_type;
   const SportIcon = sport === "BASKETBALL" ? BasketballIcon : FootballIcon;
   const isJoinable = match.status === "open";
-  const canAcceptHere = !isOpenSlots && isJoinable && !match.opponent_team_id;
 
   return (
     <div className={styles.page}>
@@ -314,12 +267,11 @@ export default function MatchDetailPage() {
         {banner && <div className={styles.banner}>{banner}</div>}
 
         <div className={styles.layout}>
-          {/* ---------------- left: match info ---------------- */}
           <div className={styles.infoCol}>
             <div className={styles.badgeRow}>
-              <span className={`${styles.typePill} ${isOpenSlots ? styles.typePillOpen : styles.typePillTeam}`}>
-                <Icon name={isOpenSlots ? "users" : "swords"} size={13} />
-                {isOpenSlots ? "Open slots" : "Team vs team"}
+              <span className={`${styles.typePill} ${styles.typePillOpen}`}>
+                <Icon name="users" size={13} />
+                Open slots
               </span>
               <span className={`${styles.statusPill} ${styles[`status_${match.status}`]}`}>
                 {match.status[0].toUpperCase() + match.status.slice(1)}
@@ -334,7 +286,6 @@ export default function MatchDetailPage() {
               </div>
             )}
 
-            {/* ---------- time card ---------- */}
             <div className={styles.timeCard}>
               <div className={styles.timeCardHead}>
                 <Icon name="calendar" size={16} />
@@ -359,60 +310,29 @@ export default function MatchDetailPage() {
               <div className={styles.timeCardFoot}>All times shown in Addis Ababa local time (EAT).</div>
             </div>
 
-            {/* ---------- teams / slots ---------- */}
-            {isOpenSlots ? (
-              <div className={styles.detailCard}>
-                <div className={styles.detailCardHead}>
-                  <Icon name="users" size={16} />
-                  Open slots
+            <div className={styles.detailCard}>
+              <div className={styles.detailCardHead}>
+                <Icon name="users" size={16} />
+                Open slots
+              </div>
+              <div className={styles.slotsBarWrap}>
+                <div className={styles.slotsBar}>
+                  <div
+                    className={styles.slotsBarFill}
+                    style={{ width: `${Math.min(((match.confirmed_participant_count || 0) / (match.slots_needed || 1)) * 100, 100)}%` }}
+                  />
                 </div>
-                <div className={styles.slotsBarWrap}>
-                  <div className={styles.slotsBar}>
-                    <div
-                      className={styles.slotsBarFill}
-                      style={{ width: `${Math.min(((match.confirmed_participant_count || 0) / (match.slots_needed || 1)) * 100, 100)}%` }}
-                    />
-                  </div>
-                  <div className={styles.slotsBarText}>
-                    {match.confirmed_participant_count}/{match.slots_needed} players joined
-                    {" · "}
-                    <b>{match.available_slots} spot{match.available_slots === 1 ? "" : "s"} left</b>
-                  </div>
-                </div>
-                <div className={styles.priceLine}>
-                  <Icon name="cash" size={15} />
-                  <b>{formatBirr(match.price_per_slot)}</b> per player to join
+                <div className={styles.slotsBarText}>
+                  {match.confirmed_participant_count}/{match.slots_needed} players joined
+                  {" · "}
+                  <b>{match.available_slots} spot{match.available_slots === 1 ? "" : "s"} left</b>
                 </div>
               </div>
-            ) : (
-              <div className={styles.detailCard}>
-                <div className={styles.detailCardHead}>
-                  <Icon name="swords" size={16} />
-                  Challenge
-                </div>
-                <div className={styles.vsRow}>
-                  <div className={styles.vsTeam}>
-                    <span className={styles.vsTeamAvatar}>{match.creator_team_name?.[0]?.toUpperCase() || "?"}</span>
-                    {match.creator_team_name}
-                  </div>
-                  <span className={styles.vsLabel}>vs</span>
-                  <div className={styles.vsTeam}>
-                    {match.opponent_team_name ? (
-                      <>
-                        <span className={styles.vsTeamAvatar}>{match.opponent_team_name[0]?.toUpperCase()}</span>
-                        {match.opponent_team_name}
-                      </>
-                    ) : (
-                      <span className={styles.vsOpen}>Open challenge — no opponent yet</span>
-                    )}
-                  </div>
-                </div>
-                <div className={styles.priceLine}>
-                  <Icon name="cash" size={15} />
-                  <b>{formatBirr(match.total_price)}</b> total pitch cost · <b>{formatBirr(match.price_per_team)}</b> per team
-                </div>
+              <div className={styles.priceLine}>
+                <Icon name="cash" size={15} />
+                <b>{formatBirr(match.price_per_slot)}</b> per player to join
               </div>
-            )}
+            </div>
 
             {match.description && (
               <div className={styles.detailCard}>
@@ -424,7 +344,6 @@ export default function MatchDetailPage() {
               </div>
             )}
 
-            {/* ---------- rules ---------- */}
             <div className={styles.detailCard}>
               <div className={styles.detailCardHead}>
                 <Icon name="shield" size={16} />
@@ -440,48 +359,19 @@ export default function MatchDetailPage() {
               </ul>
             </div>
 
-            {/* ---------- action ---------- */}
             <div className={styles.actionZone}>
-              {isOpenSlots ? (
-                !isJoinable ? (
-                  <div className={styles.noteBox}>This match is no longer open to join.</div>
-                ) : (match.available_slots ?? 0) <= 0 ? (
-                  <div className={styles.noteBox}>All slots are filled for this match.</div>
-                ) : (
-                  <button className={styles.primaryBtn} onClick={handleJoin} disabled={busy}>
-                    {busy ? "Joining…" : `Join match · ${formatBirr(match.price_per_slot)}`}
-                  </button>
-                )
-              ) : canAcceptHere ? (
-                pickingTeam ? (
-                  <div className={styles.teamPicker}>
-                    {eligibleTeams.length === 0 ? (
-                      <div className={styles.noteBox}>You need to own or admin a team to accept this challenge.</div>
-                    ) : (
-                      eligibleTeams.map((t) => (
-                        <button key={t.id} className={styles.teamPickerOption} onClick={() => handleAccept(t.id)} disabled={busy}>
-                          {t.name}
-                        </button>
-                      ))
-                    )}
-                    <button className={styles.teamPickerCancel} onClick={() => setPickingTeam(false)}>Cancel</button>
-                  </div>
-                ) : eligibleTeams.length === 0 ? (
-                  <div className={styles.noteBox}>You need to own or admin a team to accept this challenge.</div>
-                ) : (
-                  <button className={styles.primaryBtn} onClick={() => setPickingTeam(true)} disabled={busy}>
-                    Accept challenge
-                  </button>
-                )
+              {!isJoinable ? (
+                <div className={styles.noteBox}>This match is no longer open to join.</div>
+              ) : (match.available_slots ?? 0) <= 0 ? (
+                <div className={styles.noteBox}>All slots are filled for this match.</div>
               ) : (
-                <div className={styles.noteBox}>
-                  {match.opponent_team_id ? "This challenge has already been accepted." : "This match is no longer open."}
-                </div>
+                <button className={styles.primaryBtn} onClick={handleJoin} disabled={busy}>
+                  {busy ? "Joining…" : `Join match · ${formatBirr(match.price_per_slot)}`}
+                </button>
               )}
             </div>
           </div>
 
-          {/* ---------------- right: pitch gallery + map ---------------- */}
           <div className={styles.mediaCol}>
             <div className={styles.gallery}>
               <div className={styles.galleryMain}>
@@ -515,7 +405,7 @@ export default function MatchDetailPage() {
               )}
             </div>
 
-                        {pitch && pitch.latitude != null && pitch.longitude != null && (
+            {pitch && pitch.latitude != null && pitch.longitude != null && (
               <div className={styles.mapCard}>
                 <MapContainer
                   center={[pitch.latitude, pitch.longitude]}

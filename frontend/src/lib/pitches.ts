@@ -317,7 +317,7 @@ export type BookingHistoryEntry = {
 export type BookingHistoryResponse = {
   results: BookingHistoryEntry[];
   page: number;
-  total_pages: number;
+  total_pages: number; 
   total_count: number;
 };
 
@@ -336,3 +336,43 @@ export type AlreadyBookedSlotInput = {
   name: string;
   phone: string;
 };
+
+
+
+export type GridDay = { date: string; weekday: string; weekday_short: string; display_date: string };
+export type GridHour = { start_hour: number; end_hour: number; label: string };
+
+export type GridCell = {
+  status: "booked" | "free";
+  kind?: "individual" | "manual" | "team";
+  name?: string;
+  amount?: string | null;
+  time_label?: string;
+  phone?: string | null;
+  email?: string | null;
+  date?: string;
+};
+
+export type WeeklyGridResponse = {
+  date_from: string;
+  date_to: string;
+  days: GridDay[];
+  hours: GridHour[];
+  cells: Record<string, GridCell>;
+};
+
+export async function getPitchWeeklyGrid(
+  pitchId: string,
+  params: { date_from?: string; date_to?: string; name?: string; start_hour?: number; end_hour?: number }
+) {
+  const res = await api.get(`/pitches/${pitchId}/weekly-grid/`, { params });
+  return res.data as WeeklyGridResponse;
+}
+
+export async function bookGridSlot(
+  pitchId: string,
+  payload: { date: string; start_hour: number; name: string; phone?: string; price?: string }
+) {
+  const res = await api.post(`/pitches/${pitchId}/weekly-grid/book/`, payload);
+  return res.data as { ok: boolean; cell: GridCell };
+}

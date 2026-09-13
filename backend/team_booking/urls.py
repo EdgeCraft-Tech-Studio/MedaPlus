@@ -1,12 +1,15 @@
 from django.urls import path
 
 from .views import (
+    AcknowledgeBookingCompletionView,
     BookedPitchSummaryView,
     ConfirmTeamBookingView,
+    CoverOpenSlotsAndStartPaymentView,
     DeclineTeamBookingView,
     MyActiveTeamBookingsView,
     MyConfirmationDetailView,
     MyPaymentDetailView,
+    OpenSlotForDeclinedView,
     PayForBookingView,
     PendingOwnerActionView,
     PendingPaymentView,
@@ -32,4 +35,7 @@ urlpatterns = [
     path("bookings/team-request/<uuid:request_id>/my-confirmation/", MyConfirmationDetailView.as_view()),
     path("bookings/team-request/<uuid:request_id>/my-payment/", MyPaymentDetailView.as_view()),
     path("bookings/team-request/<uuid:request_id>/booked-summary/", BookedPitchSummaryView.as_view()),
+    path("bookings/team-request/<uuid:request_id>/open-slot/", OpenSlotForDeclinedView.as_view()),
+    path("bookings/team-request/<uuid:request_id>/acknowledge-completion/", AcknowledgeBookingCompletionView.as_view()),
+        path("bookings/team-request/<uuid:request_id>/cover-open-slots-and-pay/", CoverOpenSlotsAndStartPaymentView.as_view()),
 ]

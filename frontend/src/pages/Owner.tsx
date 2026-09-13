@@ -351,19 +351,7 @@ function InsightSkeletonRows({ count = 3 }: { count?: number }) {
   );
 }
 
-function FreePitchesSkeleton({ count = 3 }: { count?: number }) {
-  return (
-    <div className={styles.freeList}>
-      {Array.from({ length: count }).map((_, i) => (
-        <div className={styles.freeRow} key={i}>
-          <SkeletonBlock className={styles.skelFreeName} />
-          <SkeletonBlock className={styles.skelFreeTime} />
-          <SkeletonBlock className={styles.skelFreeBtn} />
-        </div>
-      ))}
-    </div>
-  );
-}
+
 
 function PitchCardSkeleton() {
   return (
@@ -475,7 +463,6 @@ export default function Owner() {
   }, [stats]);
 
   const todayBookings = stats?.today_bookings || [];
-  const todayFree = stats?.today_free || [];
 
   const filteredPitches = useMemo(() => {
     return pitches.filter(
@@ -607,42 +594,7 @@ export default function Owner() {
             </div>
           </div>
 
-          {/* ---------- Today's free pitches — full width, own row ---------- */}
-          <div className={styles.freeCard}>
-            <div className={styles.insightHead}>
-              <div className={`${styles.insightIconWrap} ${styles.insightIconGreen}`}>
-                <Icon name="checkCircle" size={16} />
-              </div>
-              <div className={styles.insightTitle}>Today's free pitches</div>
-            </div>
-            {loading ? (
-              <FreePitchesSkeleton count={3} />
-            ) : todayFree.length === 0 ? (
-              <div className={styles.insightEmpty}>
-                No open time left today across your pitches.
-              </div>
-            ) : (
-              <div className={styles.freeList}>
-                {todayFree.map((f, i) => (
-                  <div key={`${f.pitch_id}-${i}`} className={styles.freeRow}>
-                    <span className={styles.freeRowName}>{f.pitch_name}</span>
-                    <span className={styles.freeRowTime}>
-                      <Icon name="clock" size={12} />
-                      {f.time_label}
-                    </span>
-                    <button
-                      type="button"
-                      className={styles.freeBookBtn}
-                      onClick={() => navigate(`/app/pitches/${f.pitch_id}`)}
-                    >
-                      <Icon name="calendarCheck" size={13} />
-                      Book
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+        
 
           {/* ---------- Insight cards — sit below the hero, never overlapping it ---------- */}
           <div className={styles.insightRow}>
@@ -783,6 +735,7 @@ export default function Owner() {
               await refresh();
             }}
           />
+          <hr className={styles.divider} />
 
           {/* ---------- Filters, centered ---------- */}
           <div className={styles.filterZone}>
@@ -876,7 +829,6 @@ export default function Owner() {
             </div>
           </div>
 
-          <hr className={styles.divider} />
 
           <div className={styles.section}>
             <div className={styles.sectionHeader}>
@@ -964,7 +916,7 @@ export default function Owner() {
                         className={styles.bookCornerBtn}
                         onClick={(e) => {
                           e.stopPropagation();
-                          navigate(`/app/pitches/${p.id}`);
+                          navigate(`/app/owner/pitches/${p.id}`);
                         }}
                       >
                         <Icon name="calendarCheck" size={13} />

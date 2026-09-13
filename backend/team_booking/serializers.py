@@ -99,7 +99,6 @@ class TeamBookingRequestListItemSerializer(serializers.ModelSerializer):
         return obj.confirmations.count()
 
 
-
 class TeamBookingRequestLiveDetailSerializer(serializers.ModelSerializer):
     team_name = serializers.CharField(source="team.name", read_only=True)
     team_logo = serializers.CharField(source="team.logo", read_only=True, allow_null=True)
@@ -108,6 +107,8 @@ class TeamBookingRequestLiveDetailSerializer(serializers.ModelSerializer):
     pending_members = serializers.SerializerMethodField()
     paid_members = serializers.SerializerMethodField()
     unpaid_members = serializers.SerializerMethodField()
+    open_slots_needed = serializers.SerializerMethodField()
+    open_slots_filled_count = serializers.SerializerMethodField()
 
     class Meta:
         model = TeamBookingRequest
@@ -117,10 +118,11 @@ class TeamBookingRequestLiveDetailSerializer(serializers.ModelSerializer):
             "expires_at", "payment_expires_at", "payment_round", "final_booking_code",
             "confirmed_members", "declined_members", "pending_members",
             "paid_members", "unpaid_members",
+            "open_slots_needed", "open_slots_filled_count",
         ]
         read_only_fields = fields
 
-    def _serialize_user(self, user):
+    def _serialize_member(self, user):
         full = f"{getattr(user, 'first_name', '')} {getattr(user, 'last_name', '')}".strip()
         return {
             "id": str(user.id),
@@ -130,33 +132,29 @@ class TeamBookingRequestLiveDetailSerializer(serializers.ModelSerializer):
 
     def get_confirmed_members(self, obj):
         return [
-            self._serialize_user(c.member)
+            self._serialize_member(c.member)
             for c in obj.confirmations.select_related("member")
             if c.status == "confirmed"
         ]
 
     def get_declined_members(self, obj):
         return [
-            self._serialize_user(c.member)
+            self._serialize_member(c.member)
             for c in obj.confirmations.select_related("member")
             if c.status == "declined"
         ]
 
     def get_pending_members(self, obj):
         return [
-            self._serialize_user(c.member)
+            self._serialize_member(c.member)
             for c in obj.confirmations.select_related("member")
             if c.status == "pending"
         ]
 
     def get_paid_members(self, obj):
-        """Live during the payment phase — visible even before the
-        window closes, per the requirement that the owner can check
-        who's paid at any point during the countdown, not just after.
-        """
         latest = obj.payment_round
         return [
-            self._serialize_user(p.payer)
+            self._serialize_member(p.payer)
             for p in obj.payments.select_related("payer").filter(
                 round=latest, status__in=["paid", "covered_by_owner"]
             )
@@ -165,11 +163,19 @@ class TeamBookingRequestLiveDetailSerializer(serializers.ModelSerializer):
     def get_unpaid_members(self, obj):
         latest = obj.payment_round
         return [
-            self._serialize_user(p.payer)
+            self._serialize_member(p.payer)
             for p in obj.payments.select_related("payer").filter(round=latest, status="pending")
         ]
 
+    def get_open_slots_needed(self, obj):
+        return obj.open_slot_match.slots_needed if obj.open_slot_match_id else None
 
+    def get_open_slots_filled_count(self, obj):
+        return obj.open_slot_match.confirmed_participant_count if obj.open_slot_match_id else None
+
+
+
+    
 class ConfirmationDetailSerializer(serializers.ModelSerializer):
     request_id = serializers.UUIDField(source="request.id")
     pitch_name = serializers.CharField(source="request.pitch_name")

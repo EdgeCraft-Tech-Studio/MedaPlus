@@ -13,6 +13,8 @@ interface Props {
   requestId: string;
   onClose: () => void;
   onResolveSummary: (requestId: string, action: ConfirmSummaryAction) => Promise<void>;
+  onOpenSlotChosen: (detail: TeamBookingLiveDetail) => void;
+  onCoverRemainingAndPay: (requestId: string) => Promise<void>;
   resolveLoading: boolean;
 }
 
@@ -83,10 +85,13 @@ function MemberChip({ m, tone }: { m: TeamBookingMemberStatus; tone: "green" | "
   );
 }
 
-export default function TeamBookingLiveDetailPopup({ requestId, onClose, onResolveSummary, resolveLoading }: Props) {
+export default function TeamBookingLiveDetailPopup({
+  requestId, onClose, onResolveSummary, onOpenSlotChosen, onCoverRemainingAndPay, resolveLoading,
+}: Props) {
   const [detail, setDetail] = useState<TeamBookingLiveDetail | null>(null);
   const [chosen, setChosen] = useState<ConfirmSummaryAction | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [willCoverRemaining, setWillCoverRemaining] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -142,6 +147,10 @@ export default function TeamBookingLiveDetailPopup({ requestId, onClose, onResol
   const canAct =
     (detail.status === "pending" && allConfirmed) || detail.status === "expired";
   const isWaiting = detail.status === "pending" && !allConfirmed;
+  const isAwaitingOpenSlots = detail.status === "awaiting_open_slots";
+  const openSlotsNeeded = detail.open_slots_needed ?? 0;
+  const openSlotsFilled = detail.open_slots_filled_count ?? 0;
+  const openSlotsRemaining = Math.max(openSlotsNeeded - openSlotsFilled, 0);
 
   return (
     <div className={styles.overlay} onMouseDown={onClose}>
@@ -193,6 +202,12 @@ export default function TeamBookingLiveDetailPopup({ requestId, onClose, onResol
               new Date(detail.payment_expires_at).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}
           </div>
         )}
+        {isAwaitingOpenSlots && (
+          <div className={`${styles.statusBanner} ${styles.statusBannerPurple}`}>
+            Slots opened to outside players — waiting for {openSlotsRemaining} more
+            player{openSlotsRemaining === 1 ? "" : "s"} to join ({openSlotsFilled}/{openSlotsNeeded} joined)
+          </div>
+        )}
         {detail.status === "booked" && (
           <div className={`${styles.statusBanner} ${styles.statusBannerGreen}`}>
             Booked! Code: <b>{detail.final_booking_code}</b>
@@ -232,7 +247,25 @@ export default function TeamBookingLiveDetailPopup({ requestId, onClose, onResol
           </div>
         )}
 
-        {/* Everyone confirmed — celebratory, single action, no cover/recalculate/etc. */}
+        {isAwaitingOpenSlots && openSlotsRemaining > 0 && (
+          <>
+            <button
+              className={`${styles.optionBtn} ${willCoverRemaining ? styles.optionBtnActive : ""}`}
+              style={{ width: "100%", marginBottom: 12 }}
+              onClick={() => setWillCoverRemaining((v) => !v)}
+            >
+              I'll cover the remaining {openSlotsRemaining} spot{openSlotsRemaining === 1 ? "" : "s"}
+            </button>
+            <button
+              className={styles.primaryBtn}
+              disabled={resolveLoading || !willCoverRemaining}
+              onClick={() => onCoverRemainingAndPay(detail.id)}
+            >
+              {resolveLoading ? <SpinnerIcon className={styles.spinner} /> : "Start Payment"}
+            </button>
+          </>
+        )}
+
         {canAct && allConfirmed && (
           <>
             <div className={styles.allConfirmedBanner}>
@@ -249,7 +282,6 @@ export default function TeamBookingLiveDetailPopup({ requestId, onClose, onResol
           </>
         )}
 
-        {/* Window closed with gaps — show the 4 resolution options */}
         {canAct && !allConfirmed && (
           <>
             <div className={styles.optionsGrid}>
@@ -272,9 +304,16 @@ export default function TeamBookingLiveDetailPopup({ requestId, onClose, onResol
             <button
               className={styles.primaryBtn}
               disabled={resolveLoading || !chosen}
-              onClick={() => chosen && onResolveSummary(detail.id, chosen)}
+              onClick={() => {
+                if (!chosen) return;
+                if (chosen === "open_slot") {
+                  onOpenSlotChosen(detail);
+                  return;
+                }
+                onResolveSummary(detail.id, chosen);
+              }}
             >
-              {resolveLoading ? <SpinnerIcon className={styles.spinner} /> : "Continue"}
+              {resolveLoading ? <SpinnerIcon className={styles.spinner} /> : chosen === "open_slot" ? "Open Slot" : "Continue"}
             </button>
           </>
         )}

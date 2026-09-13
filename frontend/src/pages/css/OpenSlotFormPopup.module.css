@@ -1,0 +1,91 @@
+.overlay {
+  position: fixed; inset: 0;
+  background: rgba(10, 12, 16, 0.5);
+  backdrop-filter: blur(3px);
+  z-index: 2200;
+}
+
+.card {
+  position: fixed;
+  top: 0; right: 0; bottom: 0;
+  width: min(420px, 100vw);
+  overflow-y: auto;
+  background: var(--surface, #fff);
+  box-shadow: -20px 0 50px rgba(10, 12, 16, 0.25);
+  padding: 28px 22px 24px;
+  font-family: var(--font, 'Inter', sans-serif);
+  color: var(--text, #111318);
+  animation: slideIn 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slideIn {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+.closeBtn {
+  position: absolute; top: 18px; right: 18px;
+  width: 32px; height: 32px; border-radius: 50%;
+  border: none; background: var(--surface-alt, #f4f5f6);
+  color: var(--text-muted, #686d76);
+  display: grid; place-items: center; cursor: pointer;
+}
+.closeBtn:hover { background: #fdecec; color: #dc2626; }
+.closeBtn svg { width: 14px; height: 14px; }
+
+.iconWrap {
+  width: 54px; height: 54px; border-radius: 16px;
+  background: var(--accent-soft, #e7f4ee); color: var(--accent, #0f7a52);
+  display: grid; place-items: center; margin-bottom: 14px;
+}
+.icon { width: 26px; height: 26px; }
+
+.title { font-size: 18px; font-weight: 800; margin-bottom: 4px; }
+.subtitle { font-size: 13px; color: var(--text-muted, #686d76); margin-bottom: 20px; }
+
+.fieldGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.field { display: grid; gap: 6px; }
+.fieldLabel { font-size: 12px; font-weight: 700; color: var(--text-muted, #686d76); }
+.input, .textarea {
+  padding: 10px 12px; border-radius: 10px;
+  border: 1px solid var(--border, #e6e7ea); font-size: 13.5px;
+  font-family: inherit; color: var(--text, #111318);
+}
+.priceInputWrap { display: flex; align-items: center; border: 1px solid var(--border, #e6e7ea); border-radius: 10px; overflow: hidden; }
+.priceInput { flex: 1; border: none; padding: 10px 12px; font-size: 13.5px; font-family: inherit; }
+.priceInputSuffix { padding: 0 12px; color: var(--text-muted, #686d76); font-size: 12.5px; font-weight: 600; }
+
+.errorMsg {
+  margin-top: 14px; padding: 10px 12px; border-radius: 10px;
+  background: #fdecec; color: #dc2626; font-size: 12.5px;
+}
+
+.submitBtn {
+  width: 100%; margin-top: 18px; padding: 13px; border-radius: 12px;
+  border: none; background: var(--accent, #0f7a52); color: #fff;
+  font-weight: 700; font-size: 14px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.submitBtn:disabled { background: var(--border-strong, #d7d9dd); cursor: not-allowed; }
+.spinner { width: 16px; height: 16px; animation: spin 0.7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 460px) {
+  .card { width: 100vw; }
+  .fieldGrid { grid-template-columns: 1fr; }
+}
+
+
+.fixedGrid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+}
+.fixedField {
+  display: grid; gap: 4px;
+  background: var(--surface-alt, #f4f5f6);
+  border: 1px solid var(--border, #e6e7ea);
+  border-radius: 10px;
+  padding: 12px;
+}
+.fixedLabel { font-size: 11px; font-weight: 700; color: var(--text-muted, #686d76); text-transform: uppercase; }
+.fixedValue { font-size: 20px; font-weight: 800; color: var(--text, #111318); font-family: var(--font-mono, monospace); }
+.fixedHint { font-size: 10.5px; color: var(--text-faint, #9a9ea5); }

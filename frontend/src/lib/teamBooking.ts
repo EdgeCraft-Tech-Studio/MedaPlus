@@ -27,16 +27,38 @@ export async function declineTeamBooking(requestId: string): Promise<{ status: s
 
 
 export interface PendingOwnerAction {
-  type: "confirm_summary" | "payment_timeout";
+  type: "confirm_summary" | "payment_timeout" | "payment_success" | "pitch_unavailable";
   request_id: string;
+  team_id?: string;
+  pitch_id?: string;
   pitch_name: string;
-  team_name: string;
-  price_per_member: string;
+  team_name?: string;
+  price_per_member?: string;
+  selections?: { start_iso: string; end_iso: string }[];
   confirmed_count?: number;
   total_count?: number;
   declined_members?: { id: string; name: string; profile_photo_url: string | null }[];
   unpaid_members?: { id: string; name: string; profile_photo_url: string | null }[];
+  paid_members?: { id: string; name: string; profile_photo_url: string | null }[];
   paid_count?: number;
+  total_price?: string;
+  final_booking_code?: string;
+  is_outside_player?: boolean;
+}
+
+
+export async function acknowledgeBookingCompletion(requestId: string): Promise<void> {
+  await api.post(`/bookings/team-request/${requestId}/acknowledge-completion/`);
+}
+
+export async function openSlotsForDeclinedMembers(
+  requestId: string,
+  description?: string
+): Promise<{ unavailable: boolean; pitch_id?: string; match_id?: string; slots_needed?: number }> {
+  const res = await api.post(`/bookings/team-request/${requestId}/open-slot/`, {
+    description: description || "",
+  });
+  return res.data;
 }
 
 
@@ -92,7 +114,7 @@ export interface TeamBookingListItem {
   team_name: string;
   team_logo: string | null;
   pitch_name: string;
-  status: "pending" | "expired" | "payment_pending";
+  status: "pending" | "expired" | "awaiting_open_slots" | "payment_pending";
   confirmed_count: number;
   total_count: number;
   created_at: string;
@@ -114,7 +136,7 @@ export interface TeamBookingLiveDetail {
   pitch_name: string;
   booking_type: string;
   selections: { start_iso: string; end_iso: string }[];
-  status: "pending" | "expired" | "payment_pending" | "booked" | "unavailable" | "cancelled";
+  status: "pending" | "expired" | "awaiting_open_slots" | "payment_pending" | "booked" | "unavailable" | "cancelled";
   price_per_member: string;
   total_price: string;
   expires_at: string;
@@ -126,7 +148,11 @@ export interface TeamBookingLiveDetail {
   pending_members: TeamBookingMemberStatus[];
   paid_members: TeamBookingMemberStatus[];
   unpaid_members: TeamBookingMemberStatus[];
+  open_slots_needed: number | null;
+  open_slots_filled_count: number | null;
 }
+
+
 
 
 export async function getMyActiveTeamBookings(): Promise<TeamBookingListItem[]> {
@@ -184,10 +210,19 @@ export interface BookedPitchSummary {
   is_owner_or_admin: boolean;
   paid_count: number;
   total_count: number;
-  paid_members: { id: string; name: string; profile_photo_url: string | null }[];
+  paid_members: { id: string; name: string; profile_photo_url: string | null;     
+  is_outside_player?: boolean }[];
 }
 
 export async function getBookedPitchSummary(requestId: string): Promise<BookedPitchSummary> {
   const res = await api.get(`/bookings/team-request/${requestId}/booked-summary/`);
+  return res.data;
+}
+
+
+export async function coverRemainingOpenSlotsAndStartPayment(
+  requestId: string
+): Promise<{ unavailable: boolean; pitch_id?: string; covered_slots?: number }> {
+  const res = await api.post(`/bookings/team-request/${requestId}/cover-open-slots-and-pay/`);
   return res.data;
 }

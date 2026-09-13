@@ -4,18 +4,10 @@ from django.utils import timezone
 from team.services.exceptions import InsufficientPermissionError
 from team.services.membership_service import get_active_membership_or_raise
 
-from .choices import MatchParticipantStatus, MatchStatus, MatchType
+from .choices import MatchParticipantStatus, MatchStatus
 from .exceptions import MatchFullError, MatchNotJoinableError, MatchScheduleConflictError
 from .models import Match, MatchParticipant
 
-
-# ------------------------------------------------------------------
-# Conflict checks — "if they try to join other match with same time
-# it is not possible." Only CONFIRMED team commitments and
-# active (reserved/confirmed) player participations count as real
-# conflicts — a merely OPEN, unconfirmed challenge isn't a commitment
-# yet, so it doesn't block anything.
-# ------------------------------------------------------------------
 
 def _team_has_conflict(team, *, start_time, end_time, exclude_match_id=None) -> bool:
     qs = Match.objects.for_team(team).confirmed().overlapping(start_time=start_time, end_time=end_time)
@@ -44,28 +36,29 @@ def _require_management_permission(team, user):
     return membership
 
 
-# ------------------------------------------------------------------
-# Create
-# ------------------------------------------------------------------
-
 @transaction.atomic
 def create_match(
     *,
     creator_team,
     created_by,
-    match_type: str,
     pitch,
     start_time,
     end_time,
+    slots_needed,
+    price_per_slot,
     description: str = "",
-    total_price=None,
-    slots_needed=None,
-    price_per_slot=None,
 ) -> Match:
+    """Open-slots only. A team leaves a game open for outside players
+    to fill the seats it couldn't fill itself.
+    """
     _require_management_permission(creator_team, created_by)
 
     if end_time <= start_time:
         raise ValueError("end_time must be after start_time.")
+    if slots_needed is None or slots_needed <= 0:
+        raise ValueError("slots_needed must be a positive number.")
+    if price_per_slot is None or price_per_slot < 0:
+        raise ValueError("price_per_slot must be zero or greater.")
 
     if _team_has_conflict(creator_team, start_time=start_time, end_time=end_time):
         raise MatchScheduleConflictError(
@@ -73,24 +66,17 @@ def create_match(
         )
 
     return Match.objects.create(
-        match_type=match_type,
         creator_team=creator_team,
         pitch=pitch,
         start_time=start_time,
         end_time=end_time,
         description=description,
-        total_price=total_price,
         slots_needed=slots_needed,
         price_per_slot=price_per_slot,
         created_by=created_by,
         status=MatchStatus.OPEN,
     )
 
-
-# ------------------------------------------------------------------
-# Update (OPEN matches only — editing after commitment is unfair to
-# whoever already committed to the original time/price)
-# ------------------------------------------------------------------
 
 @transaction.atomic
 def update_match(*, match: Match, updated_by, **fields) -> Match:
@@ -118,74 +104,11 @@ def update_match(*, match: Match, updated_by, **fields) -> Match:
     return match
 
 
-# ------------------------------------------------------------------
-# TEAM_VS_TEAM: accept a challenge
-# ------------------------------------------------------------------
-
-@transaction.atomic
-def accept_challenge(*, match_id, accepting_team, accepted_by) -> Match:
-    """Locks the match row so two teams can't both accept the same
-    open challenge at once, then re-checks both teams' schedules
-    under that lock — time may have passed since the challenge was
-    posted, so a fresh conflict could exist for either side now.
-    """
-    match = Match.objects.select_for_update().get(id=match_id)
-
-    if match.match_type != MatchType.TEAM_VS_TEAM:
-        raise MatchNotJoinableError("This match isn't a team-vs-team challenge.")
-    if not match.is_open or match.opponent_team_id is not None:
-        raise MatchNotJoinableError("This challenge is no longer open.")
-    if accepting_team.id == match.creator_team_id:
-        raise ValueError("A team cannot accept its own challenge.")
-
-    _require_management_permission(accepting_team, accepted_by)
-
-    if _team_has_conflict(
-        accepting_team, start_time=match.start_time, end_time=match.end_time
-    ):
-        raise MatchScheduleConflictError(
-            "Your team already has a confirmed match that overlaps this time."
-        )
-    if _team_has_conflict(
-        match.creator_team, start_time=match.start_time, end_time=match.end_time,
-        exclude_match_id=match.id,
-    ):
-        raise MatchScheduleConflictError(
-            "The challenging team is no longer free at this time."
-        )
-
-    match.opponent_team = accepting_team
-    match.status = MatchStatus.CONFIRMED
-    match.confirmed_at = timezone.now()
-    match.save(update_fields=["opponent_team", "status", "confirmed_at", "updated_at"])
-    return match
-
-
-# ------------------------------------------------------------------
-# OPEN_SLOTS: join / leave
-# ------------------------------------------------------------------
-
 @transaction.atomic
 def join_open_match(*, match_id, user) -> MatchParticipant:
-    """Locks the match row for the duration of this transaction —
-    same reasoning as team roster capacity: without it, two players
-    joining the last open slot at the same instant could both
-    squeeze past a naive count check.
-    """
     match = Match.objects.select_for_update().get(id=match_id)
 
-    if match.match_type != MatchType.OPEN_SLOTS:
-        raise MatchNotJoinableError("This match doesn't have open slots to join.")
     if not match.is_open:
-        # Covers CANCELLED/COMPLETED matches, AND the common full-match
-        # case too: once the last slot fills, join_open_match below
-        # atomically flips status to CONFIRMED in the same transaction
-        # — so a subsequent join attempt sees status=CONFIRMED here,
-        # not a separate "full" state. MatchFullError below still
-        # guards the narrow window where confirmed_count reaches
-        # capacity within THIS same call before the status flip
-        # commits; it's a real defensive check, just one that rarely
-        # fires in sequential use.
         raise MatchNotJoinableError("This match is no longer open.")
 
     already_in = MatchParticipant.objects.active().for_match(match).for_user(user).exists()
@@ -205,12 +128,6 @@ def join_open_match(*, match_id, user) -> MatchParticipant:
         match=match, user=user, status=MatchParticipantStatus.RESERVED,
         amount_due=match.price_per_slot,
     )
-
-    # Simplification, matching what was asked: a reserved slot counts
-    # toward filling the match immediately (no separate payment-
-    # confirmation gate here yet — that's the hook point for a real
-    # payment integration later, not built now since no payment
-    # gateway details were given).
     participant.status = MatchParticipantStatus.CONFIRMED
     participant.status_changed_at = timezone.now()
     participant.save(update_fields=["status", "status_changed_at"])
@@ -221,26 +138,60 @@ def join_open_match(*, match_id, user) -> MatchParticipant:
         match.confirmed_at = timezone.now()
         match.save(update_fields=["status", "confirmed_at", "updated_at"])
 
+    _notify_linked_booking_request_of_join(match, user)
+
     return participant
 
+
+def _notify_linked_booking_request_of_join(match, joined_user) -> None:
+    """If this match exists because a TeamBookingRequest opened slots
+    for declined members, notify the requesting owner every time
+    someone joins, and — once every slot is filled — hand control
+    back to team_booking's normal confirm/payment flow. A local,
+    function-level import avoids a circular import between the two
+    apps (team_booking already imports match; match must not import
+    team_booking at module load time).
+    """
+    from notification.choices import NotificationType
+    from notification.services import notify
+    from team_booking.models import TeamBookingRequest
+    from team_booking.services import handle_open_slot_match_filled
+
+    booking_request = (
+        TeamBookingRequest.objects.select_related("team")
+        .filter(open_slot_match_id=match.id)
+        .first()
+    )
+    if not booking_request:
+        return
+
+    full_name = f"{getattr(joined_user, 'first_name', '')} {getattr(joined_user, 'last_name', '')}".strip()
+    display_name = full_name or getattr(joined_user, "username", "A player")
+
+    notify(
+        recipient=booking_request.created_by,
+        notification_type=NotificationType.TEAM_BOOKING_OPEN_SLOT_JOINED,
+        title="Player joined the match",
+        body=f"{display_name} joined the match at {booking_request.pitch_name}.",
+        data={"team_booking_request_id": str(booking_request.id), "match_id": str(match.id)},
+        send_push=False,
+    )
+
+    match.refresh_from_db()
+    if match.confirmed_participant_count >= match.slots_needed:
+        handle_open_slot_match_filled(booking_request)
 
 @transaction.atomic
 def leave_open_match(*, participant: MatchParticipant, cancelled_by) -> MatchParticipant:
     if participant.user_id != cancelled_by.id:
         raise InsufficientPermissionError("You can only cancel your own participation.")
     if not participant.is_active:
-        return participant  # idempotent
+        return participant
 
     participant.status = MatchParticipantStatus.CANCELLED
     participant.status_changed_at = timezone.now()
     participant.save(update_fields=["status", "status_changed_at"])
 
-    # Re-fetch the match fresh under lock — participant.match is a
-    # cached relation from whenever THIS participant row was created,
-    # which can be stale (e.g. p1 joined while the match was still
-    # OPEN; by the time p1 leaves, the match may since have become
-    # CONFIRMED via p2 filling the last slot — that later change is
-    # invisible on p1's cached `.match`).
     match = Match.objects.select_for_update().get(id=participant.match_id)
     if match.status == MatchStatus.CONFIRMED:
         remaining = match.participants.filter(status=MatchParticipantStatus.CONFIRMED).count()
@@ -252,16 +203,7 @@ def leave_open_match(*, participant: MatchParticipant, cancelled_by) -> MatchPar
     return participant
 
 
-# ------------------------------------------------------------------
-# Cancel a match entirely
-# ------------------------------------------------------------------
-
 def _is_team_manager(team, user) -> bool:
-    """Returns False for 'not a member at all' rather than raising —
-    unlike most permission checks in this codebase, NOT being on one
-    of the two teams involved is an expected, normal case here (the
-    canceller is only ever on at most one side), not an error.
-    """
     from team.models import TeamMembership
 
     membership = TeamMembership.objects.active_for_team(team).for_user(user).first()
@@ -270,18 +212,9 @@ def _is_team_manager(team, user) -> bool:
 
 @transaction.atomic
 def cancel_match(*, match: Match, cancelled_by) -> Match:
-    """Either involved team's manager can cancel. Cascades: every
-    active participant slot is freed too, since the match they were
-    holding a slot for no longer exists — leaving their rows as
-    RESERVED/CONFIRMED after the match itself is cancelled would be
-    a dangling, confusing state.
-    """
-    can_cancel = _is_team_manager(match.creator_team, cancelled_by) or (
-        match.opponent_team is not None and _is_team_manager(match.opponent_team, cancelled_by)
-    )
-    if not can_cancel:
+    if not _is_team_manager(match.creator_team, cancelled_by):
         raise InsufficientPermissionError(
-            "Only a manager of one of the involved teams can cancel this match."
+            "Only a manager of this team can cancel this match."
         )
 
     match.status = MatchStatus.CANCELLED

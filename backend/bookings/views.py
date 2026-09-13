@@ -143,6 +143,8 @@ def create_booking_group(request):
             total_price=price_per_slot,
             booking_code=booking_code,
             notes=combined_notes,
+            booked_for_name=booked_for_name,         
+            booked_for_phone=data.get("booked_for_phone", ""),
         )
         created.append(booking)
 

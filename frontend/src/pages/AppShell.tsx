@@ -1,5 +1,5 @@
 // AppShell.tsx
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useLayoutEffect, type ReactElement } from "react";
 import { NavLink, Outlet, Link, useNavigate } from "react-router-dom";
 import styles from "./css/AppShell.module.css";
 import {
@@ -7,21 +7,18 @@ import {
   BellIcon, XIcon, InboxEmptyIcon,
   FootballPitchIcon,
 } from "./Icons";
-// NOTE: AppNotification / NotificationCategory come from wherever this
-// resolves on your machine. Confirm that file (not necessarily
-// "components/types.ts") has `rawType?: string` and `data?: Record<string, any>`
-// added to the AppNotification interface — both are used below.
 import { type AppNotification, type NotificationCategory } from "./types";
 import { getUnreadSummary, type ChatUnreadSummary } from "../lib/chat";
 import { me } from "../lib/auth";
 import type { SessionUser } from "../lib/session";
 import {
-  confirmTeamBooking, declineTeamBooking, getBookedPitchSummary, getMyActiveTeamBookings,
+  acknowledgeBookingCompletion,
+  confirmTeamBooking, coverRemainingOpenSlotsAndStartPayment, declineTeamBooking, getBookedPitchSummary, getMyActiveTeamBookings,
   getMyConfirmationDetail, getMyPaymentDetail, getPendingOwnerAction, getPendingPayment,
   getPendingTeamBookingConfirmation, payForBooking, resolveConfirmSummary, resolvePaymentTimeout,
   type BookedPitchSummary, type ConfirmationDetail, type ConfirmSummaryAction, type PaymentDetail,
   type PaymentTimeoutAction, type PendingOwnerAction, type PendingPayment,
-  type PendingTeamBookingConfirmation,
+  type PendingTeamBookingConfirmation, type TeamBookingLiveDetail,
 } from "../lib/teamBooking";
 import {
   getUnreadNotificationCount, listNotifications, markAllNotificationsRead, markNotificationRead,
@@ -34,6 +31,7 @@ import OwnerBookingSummaryPopup from "./OwnerBookingSummaryPopup";
 import TeamBookingListPopup from "./TeamBookingListPopup";
 import TeamBookingLiveDetailPopup from "./TeamBookingLiveDetailPopup";
 import BookedPitchSummaryPopup from "./BookedPitchSummaryPopup";
+import OpenSlotFormPopup from "./OpenSlotFormPopup";
 
 function DashboardIcon({ width = 20, height = 20 }: { width?: number; height?: number }) {
   return (
@@ -65,15 +63,22 @@ const CATEGORY_LABEL: Record<NotificationCategory, string> = {
   team: "Team", match: "Match", booking: "Booking", tournament: "Tournament",
 };
 
-const CHAT_POLL_INTERVAL_MS = 20000;
-const NOTIFICATIONS_POLL_INTERVAL_MS = 20000;
-const BOOKING_CONFIRMATION_POLL_INTERVAL_MS = 15000;
-const OWNER_ACTION_POLL_INTERVAL_MS = 15000;
-const TEAM_UPDATE_BADGE_POLL_INTERVAL_MS = 15000;
-const PENDING_PAYMENT_POLL_INTERVAL_MS = 5000;
+// Colors for the category chip — pulled from the CSS custom properties
+// defined in AppShell.module.css so JS and CSS stay in sync.
+const CATEGORY_COLORS: Record<NotificationCategory, { color: string; bg: string }> = {
+  team: { color: "var(--c-team)", bg: "var(--c-team-soft)" },
+  match: { color: "var(--c-match)", bg: "var(--c-match-soft)" },
+  booking: { color: "var(--c-pitch)", bg: "var(--c-pitch-soft)" },
+  tournament: { color: "var(--c-tournament)", bg: "var(--c-tournament-soft)" },
+};
 
-// Notification types that carry a "View" action pointing at a
-// team_booking_request_id in their `data` payload.
+const CHAT_POLL_INTERVAL_MS = 20000;
+const NOTIFICATIONS_POLL_INTERVAL_MS = 10000;
+const BOOKING_CONFIRMATION_POLL_INTERVAL_MS = 3000;
+const OWNER_ACTION_POLL_INTERVAL_MS = 3000;
+const TEAM_UPDATE_BADGE_POLL_INTERVAL_MS = 5000;
+const PENDING_PAYMENT_POLL_INTERVAL_MS = 2000;
+
 const VIEWABLE_TYPES = new Set([
   "team_booking_request_received",
   "team_booking_payment_request",
@@ -101,21 +106,10 @@ function mapDtoToAppNotification(dto: AppNotificationDTO): AppNotification {
   };
 }
 
-function timeAgoColor(read: boolean) {
-  return read ? "var(--muted)" : "var(--grass)";
-}
-
-function notifAccentColor(n: AppNotification): string {
-  const title = n.title.toLowerCase();
-  if (title.includes("confirmed") || title.includes("paid") || title.includes("booked")) return "#0f7a52";
-  if (title.includes("can't") || title.includes("unavailable") || title.includes("declined")) return "#dc2626";
-  return timeAgoColor(n.read);
-}
-
 function notifBgColor(n: AppNotification): string {
   const title = n.title.toLowerCase();
   if (title.includes("confirmed") || title.includes("paid") || title.includes("booked")) return "#eefaf3";
-  if (title.includes("can't") || title.includes("unavailable") || title.includes("declined")) return "#fdf0f0";
+  if (title.includes("can't") || title.includes("unavailable") || title.includes("declined") || title.includes("cancel")) return "#fdf0f0";
   return "transparent";
 }
 
@@ -138,6 +132,124 @@ function ChatBubbleIcon({ width = 20, height = 20 }: { width?: number; height?: 
       <circle cx="15.7" cy="10.5" r="1" fill="currentColor" />
     </svg>
   );
+}
+
+/* ---------------- Notification-meaning icons ---------------- */
+/* Small, flat, currentColor-only glyphs — no fills, no background shapes. */
+
+function CheckCircleIcon({ width = 18, height = 18 }: { width?: number; height?: number }) {
+  return (
+    <svg width={width} height={height} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.7" />
+      <path d="M8 12.5l2.5 2.5L16 9.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function XCircleIcon({ width = 18, height = 18 }: { width?: number; height?: number }) {
+  return (
+    <svg width={width} height={height} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.7" />
+      <path d="M9.3 9.3l5.4 5.4M14.7 9.3l-5.4 5.4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function CreditCardIcon({ width = 18, height = 18 }: { width?: number; height?: number }) {
+  return (
+    <svg width={width} height={height} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="3" y="5.5" width="18" height="13" rx="2" stroke="currentColor" strokeWidth="1.7" />
+      <path d="M3 9.5h18" stroke="currentColor" strokeWidth="1.7" />
+      <path d="M6.5 14.5h4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function CalendarIcon({ width = 18, height = 18 }: { width?: number; height?: number }) {
+  return (
+    <svg width={width} height={height} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="3.5" y="5" width="17" height="15.5" rx="2" stroke="currentColor" strokeWidth="1.7" />
+      <path d="M3.5 9.5h17" stroke="currentColor" strokeWidth="1.7" />
+      <path d="M8 3v4M16 3v4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function TrophyIcon({ width = 18, height = 18 }: { width?: number; height?: number }) {
+  return (
+    <svg width={width} height={height} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M7 4h10v4a5 5 0 0 1-10 0V4Z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+      <path d="M7 5.5H4.5A1.5 1.5 0 0 0 3 7v.5A3.5 3.5 0 0 0 6.5 11H7M17 5.5h2.5A1.5 1.5 0 0 1 21 7v.5A3.5 3.5 0 0 1 17.5 11H17" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <path d="M12 13v3M9 20h6M10 20v-2.2M14 20v-2.2" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+type IconComp = (props: { width?: number; height?: number }) => ReactElement;
+
+/* Picks an icon + color that reflect what the notification is actually
+   about — status first (cancelled/declined, confirmed/paid/booked,
+   payment due), then falls back to its category. No randomness, no
+   position-based cycling. */
+function getNotifIconMeta(n: AppNotification): { Icon: IconComp; color: string } {
+  const title = n.title.toLowerCase();
+
+  if (title.includes("cancel") || title.includes("declined") || title.includes("can't") || title.includes("unavailable")) {
+    return { Icon: XCircleIcon, color: "#dc2626" };
+  }
+  if (title.includes("confirmed") || title.includes("paid") || title.includes("booked")) {
+    return { Icon: CheckCircleIcon, color: "#0f7a52" };
+  }
+  if ((n.rawType || "").includes("payment")) {
+    return { Icon: CreditCardIcon, color: "#c9942a" };
+  }
+  switch (n.category) {
+    case "team": return { Icon: UsersIcon, color: "#2f5d8a" };
+    case "match": return { Icon: FootballPitchIcon, color: "#b3352f" };
+    case "booking": return { Icon: CalendarIcon, color: "#2f8a5e" };
+    case "tournament": return { Icon: TrophyIcon, color: "#c9942a" };
+    default: return { Icon: BellIcon, color: "#6b7a72" };
+  }
+}
+
+/* Message body with a "Read more" toggle that only appears when the
+   text is actually clipped by the 3-line clamp — measured against the
+   real rendered height, not guessed from character count. */
+function NotifMessage({ text }: { text: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const [isTruncated, setIsTruncated] = useState(false);
+  const ref = useRef<HTMLParagraphElement>(null);
+
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    if (!expanded) {
+      setIsTruncated(el.scrollHeight > el.clientHeight + 1);
+    }
+  }, [text, expanded]);
+
+  return (
+    <>
+      <p ref={ref} className={`${styles.notifMsg} ${expanded ? styles.notifMsgExpanded : ""}`}>
+        {text}
+      </p>
+      {(isTruncated || expanded) && (
+        <div className={styles.notifReadMoreRow}>
+          <button className={styles.notifReadMore} onClick={() => setExpanded((v) => !v)}>
+            {expanded ? "Show less" : "Read more"}
+          </button>
+        </div>
+      )}
+    </>
+  );
+}
+
+interface OpenSlotContext {
+  requestId: string;
+  pitchName: string;
+  teamName: string;
+  slotsNeeded: number;
+  pricePerSlot: number;
 }
 
 export default function AppShell() {
@@ -166,6 +278,11 @@ export default function AppShell() {
   const [teamBookingListOpen, setTeamBookingListOpen] = useState(false);
   const [activeLiveDetailId, setActiveLiveDetailId] = useState<string | null>(null);
   const [teamUpdateNeedsDecision, setTeamUpdateNeedsDecision] = useState(false);
+
+  const [openSlotContext, setOpenSlotContext] = useState<OpenSlotContext | null>(null);
+
+  const [dismissedConfirmationId, setDismissedConfirmationId] = useState<string | null>(null);
+  const [dismissedOwnerActionId, setDismissedOwnerActionId] = useState<string | null>(null);
 
   // ---------------- user ----------------
   useEffect(() => {
@@ -232,13 +349,31 @@ export default function AppShell() {
     return () => clearInterval(interval);
   }, []);
 
-  // ---------------- mandatory owner action (confirm summary / payment timeout) ----------------
+  // ---------------- mandatory owner action ----------------
   async function refreshPendingOwnerAction() {
     try {
       const action = await getPendingOwnerAction();
+      if (action?.type === "pitch_unavailable" && action.pitch_id) {
+        setUnavailablePitchId(action.pitch_id);
+        await acknowledgeBookingCompletion(action.request_id); // one-time, don't loop
+        setPendingOwnerAction(null);
+        return;
+      }
       setPendingOwnerAction(action);
     } catch (err) {
       console.error("Failed to check pending owner action:", err);
+    }
+  }
+
+  async function handleAcknowledgeSuccess(requestId: string) {
+    setOwnerActionLoading(true);
+    try {
+      await acknowledgeBookingCompletion(requestId);
+      setPendingOwnerAction(null);
+      refreshPendingOwnerAction();
+      refreshTeamUpdateBadge();
+    } finally {
+      setOwnerActionLoading(false);
     }
   }
 
@@ -381,6 +516,46 @@ export default function AppShell() {
       } catch (err) {
         console.error("Failed to load booked pitch summary:", err);
       }
+    }
+  }
+
+  // ---------------- open-slot popup triggers ----------------
+  function openSlotFromOwnerAction() {
+    if (!pendingOwnerAction) return;
+    setOpenSlotContext({
+      requestId: pendingOwnerAction.request_id,
+      pitchName: pendingOwnerAction.pitch_name,
+      teamName: pendingOwnerAction.team_name || "",
+      slotsNeeded: pendingOwnerAction.declined_members?.length || 0,
+      pricePerSlot: Number(pendingOwnerAction.price_per_member) || 0,
+    });
+  }
+
+  function openSlotFromLiveDetail(detail: TeamBookingLiveDetail) {
+    setOpenSlotContext({
+      requestId: detail.id,
+      pitchName: detail.pitch_name,
+      teamName: detail.team_name,
+      slotsNeeded: detail.declined_members?.length || 0,
+      pricePerSlot: Number(detail.price_per_member) || 0,
+    });
+  }
+
+  async function handleCoverRemainingAndPay(requestId: string) {
+    setOwnerActionLoading(true);
+    try {
+      const result = await coverRemainingOpenSlotsAndStartPayment(requestId);
+      if (result.unavailable && result.pitch_id) {
+        setUnavailablePitchId(result.pitch_id);
+      }
+      setActiveLiveDetailId(null);
+      setTeamBookingListOpen(false);
+      refreshPendingOwnerAction();
+      refreshTeamUpdateBadge();
+    } catch (err) {
+      console.error("Failed to cover remaining slots and start payment:", err);
+    } finally {
+      setOwnerActionLoading(false);
     }
   }
 
@@ -532,7 +707,7 @@ export default function AppShell() {
         })}
       </nav>
 
-      {/* Notification drawer — slides in from the LEFT */}
+      {/* Notification drawer */}
       {notifDrawerOpen && (
         <>
           <div className={styles.drawerOverlay} onClick={() => setNotifDrawerOpen(false)} />
@@ -557,64 +732,95 @@ export default function AppShell() {
                 </div>
               )}
 
-              {notifications.map((n) => (
-                <div
-                  key={n.id}
-                  className={`${styles.notifItem} ${!n.read ? styles.notifItemUnread : ""}`}
-                  style={{ backgroundColor: notifBgColor(n) }}
-                >
-                  <span className={styles.notifDot} style={{ background: notifAccentColor(n) }} />
-                  <div className={styles.notifBody}>
-                    <div className={styles.notifTopRow}>
-                      <span className={styles.notifTag}>{CATEGORY_LABEL[n.category]}</span>
-                      <span className={styles.notifTime}>{n.time}</span>
-                    </div>
-                    <div className={styles.notifTitle}>{n.title}</div>
-                    <div className={styles.notifMsg}>{n.message}</div>
-
-                    {n.action?.kind === "accept_decline" && (
-                      <div className={styles.notifActions}>
-                        <button className={styles.notifAcceptBtn} onClick={() => handleAction(n, "accept")}>Accept</button>
-                        <button className={styles.notifDeclineBtn} onClick={() => handleAction(n, "decline")}>Decline</button>
+              {notifications.map((n) => {
+                const { Icon, color } = getNotifIconMeta(n);
+                return (
+                  <div
+                    key={n.id}
+                    className={`${styles.notifItem} ${!n.read ? styles.notifItemUnread : ""}`}
+                    style={{ backgroundColor: notifBgColor(n) }}
+                  >
+                    <span className={styles.notifIconWrap} style={{ color }}>
+                      <Icon width={18} height={18} />
+                    </span>
+                    <div className={styles.notifBody}>
+                      <div className={styles.notifTopRow}>
+                        <span
+                          className={styles.notifTag}
+                          style={{
+                            color: CATEGORY_COLORS[n.category].color,
+                            background: CATEGORY_COLORS[n.category].bg,
+                          }}
+                        >
+                          {CATEGORY_LABEL[n.category]}
+                        </span>
+                        <span className={styles.notifTime}>{n.time}</span>
                       </div>
-                    )}
-                    {n.action?.kind === "open" && (
-                      <button className={styles.notifOpenBtn} onClick={() => handleAction(n)}>
-                        {n.action.label}
-                      </button>
-                    )}
-                    {VIEWABLE_TYPES.has(n.rawType || "") && n.data?.team_booking_request_id && (
-                      <button className={styles.notifViewBtn} onClick={() => handleViewNotification(n)}>
-                        View
-                      </button>
-                    )}
+                      <div className={styles.notifTitle}>{n.title}</div>
+
+                      <NotifMessage text={n.message} />
+
+                      {n.action?.kind === "accept_decline" && (
+                        <div className={styles.notifActions}>
+                          <button className={styles.notifAcceptBtn} onClick={() => handleAction(n, "accept")}>Accept</button>
+                          <button className={styles.notifDeclineBtn} onClick={() => handleAction(n, "decline")}>Decline</button>
+                        </div>
+                      )}
+                      {n.action?.kind === "open" && (
+                        <button className={styles.notifOpenBtn} onClick={() => handleAction(n)}>
+                          {n.action.label}
+                        </button>
+                      )}
+                      {VIEWABLE_TYPES.has(n.rawType || "") && n.data?.team_booking_request_id && (
+                        <button className={styles.notifViewBtn} onClick={() => handleViewNotification(n)}>
+                          View
+                        </button>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </>
       )}
 
-      {/* ---------------- Mandatory popups (highest priority first) ---------------- */}
+      {/* ---------------- Mandatory / dismissible popups ---------------- */}
 
-      {pendingBookingConfirmation && (
+      {pendingBookingConfirmation && pendingBookingConfirmation.id !== dismissedConfirmationId && (
         <TeamBookingConfirmPopup
           confirmation={pendingBookingConfirmation}
           onConfirmed={() => {}}
           onDeclined={() => {}}
           onConfirm={handleBookingConfirmYes}
           onDecline={handleBookingConfirmNo}
+          onClose={() => setDismissedConfirmationId(pendingBookingConfirmation.id)}
         />
       )}
 
       {!pendingBookingConfirmation && pendingOwnerAction && (
-        <OwnerBookingSummaryPopup
-          action={pendingOwnerAction}
-          loading={ownerActionLoading}
-          onResolveSummary={handleResolveSummary}
-          onResolvePaymentTimeout={handleResolvePaymentTimeout}
-        />
+        pendingOwnerAction.type === "confirm_summary"
+          ? pendingOwnerAction.request_id !== dismissedOwnerActionId && (
+              <OwnerBookingSummaryPopup
+                action={pendingOwnerAction}
+                loading={ownerActionLoading}
+                onResolveSummary={handleResolveSummary}
+                onResolvePaymentTimeout={handleResolvePaymentTimeout}
+                onAcknowledgeSuccess={handleAcknowledgeSuccess}
+                onOpenSlotChosen={openSlotFromOwnerAction}
+                onClose={() => setDismissedOwnerActionId(pendingOwnerAction.request_id)}
+              />
+            )
+          : (
+              <OwnerBookingSummaryPopup
+                action={pendingOwnerAction}
+                loading={ownerActionLoading}
+                onResolveSummary={handleResolveSummary}
+                onResolvePaymentTimeout={handleResolvePaymentTimeout}
+                onAcknowledgeSuccess={handleAcknowledgeSuccess}
+                onOpenSlotChosen={openSlotFromOwnerAction}
+              />
+            )
       )}
 
       {!pendingBookingConfirmation && !pendingOwnerAction && pendingPayment && (
@@ -630,7 +836,7 @@ export default function AppShell() {
         />
       )}
 
-      {activeLiveDetailId && (
+      {activeLiveDetailId && !openSlotContext && (
         <TeamBookingLiveDetailPopup
           requestId={activeLiveDetailId}
           onClose={() => {
@@ -638,6 +844,8 @@ export default function AppShell() {
             setTeamBookingListOpen(false);
           }}
           onResolveSummary={handleResolveSummary}
+          onOpenSlotChosen={openSlotFromLiveDetail}
+          onCoverRemainingAndPay={handleCoverRemainingAndPay}
           resolveLoading={ownerActionLoading}
         />
       )}
@@ -649,7 +857,24 @@ export default function AppShell() {
         />
       )}
 
-      {/* ---------------- "View" from a notification — read-only if window closed ---------------- */}
+      {openSlotContext && (
+        <OpenSlotFormPopup
+          requestId={openSlotContext.requestId}
+          pitchName={openSlotContext.pitchName}
+          teamName={openSlotContext.teamName}
+          slotsNeeded={openSlotContext.slotsNeeded}
+          pricePerSlot={openSlotContext.pricePerSlot}
+          onClose={() => setOpenSlotContext(null)}
+          onCreated={() => {
+            setOpenSlotContext(null);
+            refreshPendingOwnerAction();
+            refreshTeamUpdateBadge();
+          }}
+          onUnavailable={(pitchId) => setUnavailablePitchId(pitchId)}
+        />
+      )}
+
+      {/* ---------------- "View" from a notification ---------------- */}
 
       {viewedConfirmation && (
         <TeamBookingConfirmPopup

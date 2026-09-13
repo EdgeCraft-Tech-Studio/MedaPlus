@@ -71,11 +71,12 @@ export default function BookedPitchSummaryPopup({ summary, onClose }: Props) {
             <div className={styles.sectionLabel}>
               Paid ({summary.paid_count}/{summary.total_count})
             </div>
-            <div className={styles.chipList}>
+                        <div className={styles.chipList}>
               {summary.paid_members.map((m) => (
-                <div key={m.id} className={styles.chip}>
+                <div key={m.id} className={`${styles.chip} ${m.is_outside_player ? styles.chipOutside : ""}`}>
                   <TeamAvatar src={m.profile_photo_url} name={m.name} className={styles.chipAvatar} fallbackClassName={styles.chipAvatarFallback} />
                   <span>{m.name}</span>
+                  {m.is_outside_player && <span className={styles.outsideTag}>Guest</span>}
                 </div>
               ))}
             </div>

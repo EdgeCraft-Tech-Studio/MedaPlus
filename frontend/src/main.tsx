@@ -33,7 +33,6 @@ import JoinTeam from "./pages/JoinTeam";
 
 // Matches
 import MatchesPage from "./pages/MatchesPage";
-import MatchDetail from "./pages/MatchDetail";
 import MakeMatch from "./pages/MakeMatch";
 
 // Discover
@@ -106,14 +105,10 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
             
             {/* Matches */}
             <Route path="/matches" element={<MatchesPage />} />
-            <Route
-              path="/matches/:matchId"
-              element={<MatchDetail />}
-            />
+            <Route path="/discover/matches/:id" element={<MatchDetailPage />} />
 
             {/* Discover */}
             <Route path="/discover" element={<DiscoverPage />} />
-            <Route path="/discover/matches/:id" element={<MatchDetailPage />} />
             <Route
               path="/discover/tournaments/:tournamentId"
               element={<TournamentDetail />}

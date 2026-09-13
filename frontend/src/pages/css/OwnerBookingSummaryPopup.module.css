@@ -183,16 +183,14 @@
 }
 .optionBtn:hover { border-color: var(--border-strong, #d7d9dd); transform: translateY(-1px); }
 .optionBtnActive {
-  border-color: var(--accent, #0f7a52);
-  background: var(--accent-soft, #e7f4ee);
-  color: var(--accent-hover, #0c6544);
-  box-shadow: 0 0 0 3px rgba(15, 122, 82, 0.12);
+  border-color: #111318;
+  background: #111318;
+  color: #ffffff;
 }
 .optionBtnDanger.optionBtnActive {
-  border-color: #dc2626;
-  background: #fdecec;
-  color: #dc2626;
-  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.12);
+  border-color: #111318;
+  background: #111318;
+  color: #ffffff;
 }
 
 .primaryBtn {

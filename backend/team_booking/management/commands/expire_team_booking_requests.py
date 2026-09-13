@@ -3,6 +3,7 @@ from django.core.management.base import BaseCommand
 from team_booking.services import (
     expire_stale_requests_and_notify_owners,
     sweep_payment_timeouts,
+    sweep_pitch_conflicts_and_notify_owners,
 )
 
 
@@ -16,4 +17,5 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         expire_stale_requests_and_notify_owners()
         sweep_payment_timeouts()
+        sweep_pitch_conflicts_and_notify_owners()
         self.stdout.write(self.style.SUCCESS("Team booking sweep complete."))

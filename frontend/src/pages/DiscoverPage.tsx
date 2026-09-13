@@ -23,76 +23,6 @@ const AGE_LABEL: Record<string, string> = {
   other: "Other",
 };
 
-/* ---------------- sport theming ---------------- */
-
-function isBasketballSport(sport?: string | null) {
-  return !!sport && sport.toLowerCase().includes("basket");
-}
-
-interface SportTheme {
-  isBasketball: boolean;
-  border: string;
-  soft: string;
-  text: string;
-  grad: string;
-  ballSrc: string;
-}
-
-/** Football -> grass theme (the app's existing green palette).
- * Basketball -> a muted terracotta/amber theme — distinct at a glance
- * but deliberately not a loud/childish orange. Both feed into CSS
- * custom properties on the card, so buttons, borders, and hover
- * states all pick up the right color without per-element inline hacks. */
-function getSportTheme(sport?: string | null): SportTheme {
-  if (isBasketballSport(sport)) {
-    return {
-      isBasketball: true,
-      border: "#c97a2e",
-      soft: "#fbeee0",
-      text: "#a15c1c",
-      grad: "linear-gradient(135deg, #8a4a12, #c97a2e)",
-      ballSrc: "/basketball.png",
-    };
-  }
-  return {
-    isBasketball: false,
-    border: "var(--grass)",
-    soft: "var(--grass-soft)",
-    text: "var(--green-700)",
-    grad: "linear-gradient(135deg, var(--green-700), var(--grass))",
-    ballSrc: "/football.png",
-  };
-}
-
-function sportCssVars(theme: SportTheme): React.CSSProperties {
-  return {
-    ["--sport-border" as any]: theme.border,
-    ["--sport-soft" as any]: theme.soft,
-    ["--sport-text" as any]: theme.text,
-    ["--sport-grad" as any]: theme.grad,
-  };
-}
-
-/* ---------------- ball image (shimmer while loading) ---------------- */
-
-function BallImage({ sport, className }: { sport?: string | null; className?: string }) {
-  const [loaded, setLoaded] = useState(false);
-  const theme = getSportTheme(sport);
-
-  return (
-    <span className={`${styles.ballWrap} ${className || ""}`}>
-      {!loaded && <span className={`${styles.ballShimmer} ${styles.shimmer}`} />}
-      <img
-        src={theme.ballSrc}
-        alt={theme.isBasketball ? "Basketball" : "Football"}
-        className={styles.ballImg}
-        style={{ opacity: loaded ? 1 : 0 }}
-        onLoad={() => setLoaded(true)}
-      />
-    </span>
-  );
-}
-
 /* ---------------- icons ---------------- */
 
 function LocationIcon(props: React.SVGProps<SVGSVGElement>) {
@@ -166,6 +96,27 @@ function ChevronIcon(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
+/** The little "person" glyph mobile apps use for their profile tab —
+ *  reused here to mark anything about people/headcount: roster size,
+ *  players still needed to join a match. */
+function ProfileIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <circle cx="12" cy="8" r="4" />
+      <path d="M4 20c0-4.4 3.6-7 8-7s8 2.6 8 7" />
+    </svg>
+  );
+}
+
+/** Real ball artwork (not a line icon) so football/basketball is
+ *  identifiable at a glance, matching the assets already used in
+ *  MatchesTab and MatchDetailPage. */
+function SportBall({ sport, size = 20 }: { sport?: string; size?: number }) {
+  const isBasketball = (sport || "").toUpperCase() === "BASKETBALL";
+  const src = isBasketball ? "/basketball.png" : "/football.png";
+  return <img src={src} alt="" width={size} height={size} />;
+}
+
 /* ---------------- helpers ---------------- */
 
 function formatBirr(value: string | number | null | undefined) {
@@ -182,8 +133,11 @@ function formatWhen(startIso: string, endIso: string) {
   return `${dateLabel} · ${startLabel} – ${endLabel}`;
 }
 
+function formatSince(iso: string) {
+  return new Date(iso).toLocaleDateString(undefined, { month: "short", year: "numeric" });
+}
+
 type DiscoverMode = "teams" | "matches";
-type MatchTypeFilter = "" | "team_vs_team" | "open_slots";
 
 export default function DiscoverPage() {
   const navigate = useNavigate();
@@ -191,10 +145,13 @@ export default function DiscoverPage() {
   const [mode, setMode] = useState<DiscoverMode>(
     searchParams.get("mode") === "matches" ? "matches" : "teams"
   );
+
+  /* ---------- shared: location ---------- */
   const [nearMeCity, setNearMeCity] = useState<string | null>(null);
   const [locating, setLocating] = useState(false);
   const [locateError, setLocateError] = useState(false);
 
+  /* ---------- teams state ---------- */
   const [query, setQuery] = useState("");
   const [teams, setTeams] = useState<PublicTeam[]>([]);
   const [teamsLoading, setTeamsLoading] = useState(true);
@@ -205,6 +162,7 @@ export default function DiscoverPage() {
   const [ageFilter, setAgeFilter] = useState("");
   const [sportFilter, setSportFilter] = useState("");
 
+  /* ---------- matches state ---------- */
   const [matchQuery, setMatchQuery] = useState("");
   const [matches, setMatches] = useState<Match[]>([]);
   const [pitches, setPitches] = useState<Pitch[]>([]);
@@ -213,8 +171,8 @@ export default function DiscoverPage() {
   const [matchesLoading, setMatchesLoading] = useState(true);
   const [matchesError, setMatchesError] = useState(false);
   const [matchSportFilter, setMatchSportFilter] = useState<"" | "FOOTBALL" | "BASKETBALL">("");
-  const [matchTypeFilter, setMatchTypeFilter] = useState<MatchTypeFilter>("");
 
+  /* ---------- load teams ---------- */
   useEffect(() => {
     async function load() {
       try {
@@ -241,6 +199,7 @@ export default function DiscoverPage() {
     load();
   }, []);
 
+  /* ---------- load matches lazily ---------- */
   useEffect(() => {
     if (mode !== "matches" || matchesLoaded) return;
 
@@ -266,6 +225,8 @@ export default function DiscoverPage() {
     }
     loadMatches();
   }, [mode, matchesLoaded]);
+
+  /* ---------- teams actions ---------- */
 
   async function handleRequestJoin(slug: string) {
     setBusySlug(slug);
@@ -296,6 +257,8 @@ export default function DiscoverPage() {
       setBusySlug(null);
     }
   }
+
+  /* ---------- shared: near me ---------- */
 
   async function handleNearMe() {
     if (nearMeCity) {
@@ -337,6 +300,8 @@ export default function DiscoverPage() {
     );
   }
 
+  /* ---------- teams derived data ---------- */
+
   const BASE_SPORTS = ["Football", "Basketball"];
 
   const sportOptions = useMemo(() => {
@@ -369,12 +334,17 @@ export default function DiscoverPage() {
     setNearMeCity(null);
   }
 
+  /* ---------- matches derived data ---------- */
+
   const pitchById = useMemo(() => {
     const map = new Map<string, Pitch>();
     pitches.forEach((p) => map.set(p.id, p));
     return map;
   }, [pitches]);
 
+  // Every team the current user belongs to, any role — a match your own
+  // team posted isn't something to "discover", whether you're the owner
+  // who created it or just a member.
   const myTeamIds = useMemo(() => new Set(myTeams.map((t) => t.id)), [myTeams]);
 
   const filteredMatches = useMemo(() => {
@@ -388,23 +358,19 @@ export default function DiscoverPage() {
         if (!haystack.includes(q)) return false;
       }
       if (matchSportFilter && pitch?.sport_type !== matchSportFilter) return false;
-      if (matchTypeFilter && m.match_type !== matchTypeFilter) return false;
       if (nearMeCity) {
         const loc = (pitch?.address || "").toLowerCase();
         if (!loc.includes(nearMeCity.toLowerCase())) return false;
       }
-      if (m.match_type === "team_vs_team" && m.opponent_team_id) return false;
-      if (m.match_type === "open_slots" && (m.available_slots ?? 0) <= 0) return false;
+      if ((m.available_slots ?? 0) <= 0) return false;
       return true;
     });
-  }, [matches, matchQuery, matchSportFilter, matchTypeFilter, nearMeCity, pitchById, myTeamIds]);
+  }, [matches, matchQuery, matchSportFilter, nearMeCity, pitchById, myTeamIds]);
 
-  const activeMatchFilterCount =
-    (matchSportFilter ? 1 : 0) + (matchTypeFilter ? 1 : 0) + (nearMeCity ? 1 : 0);
+  const activeMatchFilterCount = (matchSportFilter ? 1 : 0) + (nearMeCity ? 1 : 0);
 
   function clearMatchFilters() {
     setMatchSportFilter("");
-    setMatchTypeFilter("");
     setNearMeCity(null);
   }
 
@@ -413,7 +379,9 @@ export default function DiscoverPage() {
   return (
     <div className={styles.page}>
       <span className={styles.eyebrow}>Explore</span>
+      <h1 className={styles.title}>{isTeams ? "Find a team" : "Find a match"}</h1>
 
+      {/* ---------------- mode toggle ---------------- */}
       <div className={styles.modeToggle}>
         <button
           type="button"
@@ -435,6 +403,7 @@ export default function DiscoverPage() {
 
       {isTeams ? (
         <>
+          {/* ---------------- teams filter bar ---------------- */}
           <div className={styles.filterBar}>
             <div className={styles.searchField}>
               <SearchIcon width={16} height={16} />
@@ -534,42 +503,54 @@ export default function DiscoverPage() {
                 const isPending = pendingRequests.has(t.slug);
                 const isBusy = busySlug === t.slug;
                 const spotsLeft = Math.max(t.max_roster_size - t.active_member_count, 0);
-                const theme = getSportTheme(t.sport);
+                const capacityPct = Math.min((t.active_member_count / t.max_roster_size) * 100, 100);
 
                 return (
-                  <div key={t.id} className={styles.card} style={sportCssVars(theme)}>
+                  <div key={t.id} className={styles.card}>
                     <div className={styles.cardTop}>
                       <span className={styles.logo}>
                         {t.logo ? <img src={t.logo} alt="" /> : t.name.split(" ").map((w) => w[0]).slice(0, 2).join("")}
                       </span>
-                      <div className={styles.cardTopRight}>
-                        <BallImage sport={t.sport} className={styles.ballCard} />
-                        <span className={styles.pill} data-tone="team">
-                          {t.skill_level ? SKILL_LABEL[t.skill_level] ?? t.skill_level : "Any skill level"}
-                        </span>
-                      </div>
+                      <span className={styles.sportBadgeTeam}>
+                        <SportBall sport={t.sport} size={16} />
+                        {t.sport}
+                      </span>
                     </div>
 
                     <div className={styles.name}>{t.name}</div>
+
                     <div className={styles.metaRow}>
                       <LocationIcon width={12} height={12} className={styles.metaIcon} />
-                      {t.sport} · {t.area || t.city}
+                      {t.area ? `${t.area}, ${t.city}` : t.city || "Location not set"}
                     </div>
-                    <div className={styles.meta}>{AGE_LABEL[t.age_category] ?? t.age_category}</div>
 
-                    <div className={styles.capBar}>
-                      <div
-                        className={styles.capFillThemed}
-                        style={{ width: `${Math.min((t.active_member_count / t.max_roster_size) * 100, 100)}%` }}
-                      />
+                    <div className={styles.tagRow}>
+                      <span className={styles.pill} data-tone="team">
+                        {t.skill_level ? SKILL_LABEL[t.skill_level] ?? t.skill_level : "Any skill level"}
+                      </span>
+                      <span className={styles.pill} data-tone="grass">
+                        {(AGE_LABEL[t.age_category] ?? t.age_category) || "Open"}
+                      </span>
                     </div>
-                    <div className={styles.rowBetween}>
-                      <span className={styles.capText}>{t.active_member_count}/{t.max_roster_size} members</span>
-                      {t.is_full ? (
-                        <span className={styles.fullBadge}>Full</span>
-                      ) : (
-                        <span className={styles.spotsBadge}>{spotsLeft} spot{spotsLeft === 1 ? "" : "s"} left</span>
-                      )}
+
+                    <div className={styles.sinceRow}>On MedaPlus since {formatSince(t.created_at)}</div>
+
+                    <div className={styles.capacityBlock}>
+                      <div className={styles.capacityHead}>
+                        <ProfileIcon width={13} height={13} />
+                        {t.active_member_count}/{t.max_roster_size} players on roster
+                      </div>
+                      <div className={styles.capBar}>
+                        <div className={styles.capFill} style={{ width: `${capacityPct}%` }} />
+                      </div>
+                      <div className={styles.rowBetween}>
+                        <span className={styles.capText}>{capacityPct.toFixed(0)}% full</span>
+                        {t.is_full ? (
+                          <span className={styles.fullBadge}>Full</span>
+                        ) : (
+                          <span className={styles.spotsBadge}>{spotsLeft} spot{spotsLeft === 1 ? "" : "s"} left</span>
+                        )}
+                      </div>
                     </div>
 
                     {isPending ? (
@@ -588,7 +569,7 @@ export default function DiscoverPage() {
                       </div>
                     ) : (
                       <button
-                        className={`${styles.actionBtn} ${t.is_full ? styles.actionBtnDisabled : styles.actionBtnThemed}`}
+                        className={`${styles.actionBtn} ${t.is_full ? styles.actionBtnDisabled : ""}`}
                         onClick={() => !t.is_full && handleRequestJoin(t.slug)}
                         disabled={isBusy || t.is_full}
                       >
@@ -603,6 +584,7 @@ export default function DiscoverPage() {
         </>
       ) : (
         <>
+          {/* ---------------- matches filter bar ---------------- */}
           <div className={`${styles.filterBar} ${styles.filterBarMatch}`}>
             <div className={styles.searchField}>
               <SearchIcon width={16} height={16} />
@@ -646,14 +628,6 @@ export default function DiscoverPage() {
               </select>
             </div>
 
-            <div className={styles.selectField}>
-              <select className={styles.select} value={matchTypeFilter} onChange={(e) => setMatchTypeFilter(e.target.value as MatchTypeFilter)}>
-                <option value="">Any match type</option>
-                <option value="team_vs_team">Team vs team</option>
-                <option value="open_slots">Open slots</option>
-              </select>
-            </div>
-
             {activeMatchFilterCount > 0 && (
               <>
                 <div className={styles.pillDivider} />
@@ -689,24 +663,23 @@ export default function DiscoverPage() {
             <div className={styles.grid}>
               {filteredMatches.map((m) => {
                 const pitch = pitchById.get(m.pitch_id);
-                const isOpenSlots = m.match_type === "open_slots";
-                const theme = getSportTheme(pitch?.sport_type);
+                const joinedPct = Math.min(((m.confirmed_participant_count || 0) / (m.slots_needed || 1)) * 100, 100);
 
                 return (
                   <div
                     key={m.id}
                     className={styles.matchCard}
-                    style={sportCssVars(theme)}
                     onClick={() => navigate(`/discover/matches/${m.id}`)}
                     role="button"
                     tabIndex={0}
                   >
-                   
-
                     <div className={styles.matchCardTop}>
-                      <BallImage sport={pitch?.sport_type} className={styles.ballLogo} />
-                      <span className={styles.pill} data-tone={isOpenSlots ? "tournament" : "match"}>
-                        {isOpenSlots ? "Open slots" : "Team vs team"}
+                      <span className={styles.logoMatch}>
+                        <SportBall sport={pitch?.sport_type} size={22} />
+                      </span>
+                      <span className={styles.pill} data-tone="tournament">
+                        <ProfileIcon width={11} height={11} />
+                        Open slots
                       </span>
                     </div>
 
@@ -726,45 +699,25 @@ export default function DiscoverPage() {
                       {formatWhen(m.start_time, m.end_time)}
                     </div>
 
-                    {isOpenSlots ? (
-                      <>
-                        <div className={styles.capBar}>
-                          <div
-                            className={styles.capFillThemed}
-                            style={{
-                              width: `${Math.min(
-                                ((m.confirmed_participant_count || 0) / (m.slots_needed || 1)) * 100,
-                                100
-                              )}%`,
-                            }}
-                          />
-                        </div>
-                        <div className={styles.rowBetween}>
-                          <span className={styles.capText}>
-                            {m.confirmed_participant_count}/{m.slots_needed} joined
-                          </span>
-                          <span className={styles.spotsBadgeThemed}>
-                            {m.available_slots} spot{m.available_slots === 1 ? "" : "s"} left
-                          </span>
-                        </div>
-                        <div className={styles.priceRowMatch}>
-                          <CashIcon width={20} height={20} />
-                          <span>{formatBirr(m.price_per_slot)}<small>to join</small></span>
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <div className={styles.challengeRowThemed}>
-                          <span className={styles.challengeOpen}>Open challenge — waiting for an opponent</span>
-                        </div>
-                        <div className={styles.priceRowMatch}>
-                          <CashIcon width={20} height={20} />
-                          <span>{formatBirr(m.price_per_team)}<small>per team</small></span>
-                        </div>
-                      </>
-                    )}
+                    <div className={styles.capacityBlock}>
+                      <div className={styles.capacityHead}>
+                        <ProfileIcon width={13} height={13} />
+                        {m.confirmed_participant_count}/{m.slots_needed} players joined
+                      </div>
+                      <div className={styles.capBar}>
+                        <div className={styles.capFillMatch} style={{ width: `${joinedPct}%` }} />
+                      </div>
+                      <span className={styles.spotsBadgeMatch}>
+                        {m.available_slots} spot{m.available_slots === 1 ? "" : "s"} still need players
+                      </span>
+                    </div>
 
-                    <div className={styles.viewDetailRowThemed}>
+                    <div className={styles.priceRowMatch}>
+                      <CashIcon width={20} height={20} />
+                      <span>{formatBirr(m.price_per_slot)}<small>to join</small></span>
+                    </div>
+
+                    <div className={styles.viewDetailRow}>
                       View match details
                       <ChevronIcon width={14} height={14} />
                     </div>

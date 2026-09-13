@@ -92,12 +92,10 @@ function todayLabel() {
 }
 
 /** Why this match shows up for the user — team commitment vs a personal join. */
+/** Why this match shows up for the user — their team opened it, or
+ *  they personally joined an open slot on someone else's match.
+ */
 function classifyMatch(m: Match, myTeamIds: Set<string>): { label: string; tone: "team" | "match" } {
-  if (m.match_type === "team_vs_team") {
-    const isCreator = myTeamIds.has(m.creator_team_id);
-    const teamName = isCreator ? m.creator_team_name : m.opponent_team_name;
-    return { label: `Your team — ${teamName || "—"}`, tone: "team" };
-  }
   if (myTeamIds.has(m.creator_team_id)) {
     return { label: `Your team — ${m.creator_team_name}`, tone: "team" };
   }
@@ -113,7 +111,6 @@ function HomeMatchRow({
 }: { match: Match; pitch: Pitch | undefined; myTeamIds: Set<string> }) {
   const { day, month, weekday } = formatDateBlock(match.start_time);
   const { timeLabel, dayPartEn, dayPartAm } = addisTimeInfo(match.start_time);
-  const isOpenSlots = match.match_type === "open_slots";
   const SportIcon = pitch?.sport_type === "BASKETBALL" ? BasketballIcon : FootballIcon;
   const reason = classifyMatch(match, myTeamIds);
 
@@ -140,9 +137,7 @@ function HomeMatchRow({
         </div>
 
         <div className={styles.matchTitle}>
-          {isOpenSlots
-            ? `${match.creator_team_name} · Open slots (${match.confirmed_participant_count}/${match.slots_needed})`
-            : `${match.creator_team_name} vs ${match.opponent_team_name || "waiting for opponent"}`}
+          {match.creator_team_name} · Open slots ({match.confirmed_participant_count}/{match.slots_needed})
         </div>
 
         <div className={styles.matchMeta}>
@@ -154,7 +149,7 @@ function HomeMatchRow({
         </div>
 
         <div className={styles.matchPriceLine}>
-          {isOpenSlots ? formatBirr(match.price_per_slot) + " to join" : formatBirr(match.price_per_team) + " for your team"}
+          {formatBirr(match.price_per_slot)} to join
         </div>
       </div>
 

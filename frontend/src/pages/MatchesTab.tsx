@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { MapContainer, Marker, TileLayer } from "react-leaflet";
 import L from "leaflet";
-import type { Match, MatchType, CreateMatchPayload, UpdateMatchPayload } from "../lib/match";
+import type { Match, CreateMatchPayload, UpdateMatchPayload } from "../lib/match";
 import { listMatches, createMatch, updateMatch, cancelMatch } from "../lib/match";
 import type { Pitch } from "../lib/pitches";
 import { listPitches } from "../lib/pitches";
@@ -9,11 +9,9 @@ import styles from "./css/MatchesTab.module.css";
 
 const ADDIS_ABABA = { lat: 8.9806, lng: 38.7578 };
 
-/* ---------------- icons ---------------- */
-
 type IconName =
   | "plus" | "pin" | "clock" | "x" | "pencil" | "trash"
-  | "users" | "swords" | "calendar" | "cash" | "check" | "arrowRight" | "note" | "alertTriangle";
+  | "users" | "calendar" | "check" | "arrowRight" | "note" | "alertTriangle";
 
 function Icon({ name, size = 15 }: { name: IconName; size?: number }) {
   const paths: Record<IconName, React.ReactNode> = {
@@ -47,23 +45,11 @@ function Icon({ name, size = 15 }: { name: IconName; size?: number }) {
         <path d="M15 14.2c2.6.3 4.5 2.6 4.5 5.8" />
       </>
     ),
-    swords: (
-      <>
-        <path d="m5 5 14 14M19 5 5 19" />
-        <path d="M5 5h4M5 5v4M19 5h-4M19 5v4M5 19h4M5 19v-4M19 19h-4M19 19v-4" />
-      </>
-    ),
     calendar: (
       <>
         <rect x="3" y="4.5" width="18" height="16" rx="2" />
         <path d="M3 9.5h18" />
         <path d="M8 3v3M16 3v3" />
-      </>
-    ),
-    cash: (
-      <>
-        <rect x="2.5" y="6" width="19" height="12" rx="2.5" />
-        <circle cx="12" cy="12" r="3" />
       </>
     ),
     check: <path d="M20 6 9 17l-5-5" />,
@@ -95,8 +81,6 @@ function SportBall({ sport, size = 20, className }: { sport?: "FOOTBALL" | "BASK
   return <img src={src} alt="" width={size} height={size} className={className} />;
 }
 
-/* ---------------- helpers ---------------- */
-
 function formatBirr(value: string | number | null | undefined) {
   const num = Number(value) || 0;
   return `${num.toLocaleString(undefined, { maximumFractionDigits: 0 })} Br`;
@@ -115,11 +99,9 @@ function statusTone(status: Match["status"]) {
   if (status === "confirmed") return "team";
   if (status === "cancelled") return "danger";
   if (status === "completed") return "faint";
-  return "grass"; // open
+  return "grass";
 }
 
-// Confirmed matches are the "live and locked in" ones — surface them first,
-// then open, then completed/cancelled at the bottom. Ties broken by soonest.
 const STATUS_ORDER: Record<Match["status"], number> = {
   confirmed: 0,
   open: 1,
@@ -150,8 +132,6 @@ const DURATION_OPTIONS = [
   { minutes: 180, label: "3 hours" },
 ];
 
-/* ---------------- map marker icon ---------------- */
-
 function buildBallDivIcon(sport: "FOOTBALL" | "BASKETBALL", selected: boolean) {
   const isBasketball = sport === "BASKETBALL";
   const pinColor = isBasketball ? "#c9942a" : "#3fae7f";
@@ -178,8 +158,6 @@ function buildBallDivIcon(sport: "FOOTBALL" | "BASKETBALL", selected: boolean) {
     popupAnchor: [0, -h + 6],
   });
 }
-
-/* ---------------- pitch map field ---------------- */
 
 function PitchMapField({
   pitches,
@@ -243,8 +221,6 @@ function PitchMapField({
   );
 }
 
-/* ---------------- create / edit drawer ---------------- */
-
 function MatchFormModal({
   open,
   onClose,
@@ -262,14 +238,11 @@ function MatchFormModal({
   pitches: Pitch[];
   onSubmit: (payload: CreateMatchPayload | UpdateMatchPayload) => Promise<void>;
 }) {
-  const [matchType, setMatchType] = useState<MatchType>("team_vs_team");
   const [pitchId, setPitchId] = useState("");
   const [date, setDate] = useState("");
   const [startTime, setStartTime] = useState("18:00");
   const [durationMinutes, setDurationMinutes] = useState(60);
   const [description, setDescription] = useState("");
-  const [totalPrice, setTotalPrice] = useState("");
-  const [priceTouched, setPriceTouched] = useState(false);
   const [slotsNeeded, setSlotsNeeded] = useState("4");
   const [pricePerSlot, setPricePerSlot] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -281,52 +254,36 @@ function MatchFormModal({
     if (mode === "edit" && initialMatch) {
       const start = new Date(initialMatch.start_time);
       const end = new Date(initialMatch.end_time);
-      setMatchType(initialMatch.match_type);
       setPitchId(initialMatch.pitch_id);
       setDate(toLocalDateInput(start));
       setStartTime(toLocalTimeInput(start));
       setDurationMinutes(Math.max(30, Math.round((end.getTime() - start.getTime()) / 60000)));
       setDescription(initialMatch.description || "");
-      setTotalPrice(initialMatch.total_price || "");
-      setSlotsNeeded(initialMatch.slots_needed ? String(initialMatch.slots_needed) : "4");
+      setSlotsNeeded(String(initialMatch.slots_needed));
       setPricePerSlot(initialMatch.price_per_slot || "");
-      setPriceTouched(true);
     } else {
       const soon = new Date(Date.now() + 24 * 60 * 60 * 1000);
-      setMatchType("team_vs_team");
       setPitchId("");
       setDate(toLocalDateInput(soon));
       setStartTime("18:00");
       setDurationMinutes(60);
       setDescription("");
-      setTotalPrice("");
       setSlotsNeeded("4");
       setPricePerSlot("");
-      setPriceTouched(false);
     }
     setFormError("");
   }, [open, mode, initialMatch]);
 
-  const selectedPitch = pitches.find((p) => p.id === pitchId) || null;
-
-  useEffect(() => {
-    if (mode !== "create" || priceTouched || !selectedPitch) return;
-    const suggested = Math.round((Number(selectedPitch.hourly_price) || 0) * (durationMinutes / 60));
-    setTotalPrice(String(suggested));
-  }, [selectedPitch, durationMinutes, mode, priceTouched]);
-
   if (!open) return null;
 
-  const totalPriceNum = Number(totalPrice) || 0;
   const slotsNum = Number(slotsNeeded) || 0;
   const priceSlotNum = Number(pricePerSlot) || 0;
-  const isTeamType = matchType === "team_vs_team";
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setFormError("");
 
-    if (!pitchId || !selectedPitch) {
+    if (!pitchId) {
       setFormError("Select a pitch on the map first.");
       return;
     }
@@ -334,11 +291,7 @@ function MatchFormModal({
       setFormError("Choose a date and start time.");
       return;
     }
-    if (matchType === "team_vs_team" && (!totalPrice || totalPriceNum <= 0)) {
-      setFormError("Enter the total pitch price to split between both teams.");
-      return;
-    }
-    if (matchType === "open_slots" && (!slotsNeeded || slotsNum <= 0 || !pricePerSlot || priceSlotNum <= 0)) {
+    if (!slotsNeeded || slotsNum <= 0 || !pricePerSlot || priceSlotNum <= 0) {
       setFormError("Enter how many players you need and the price per player.");
       return;
     }
@@ -354,15 +307,12 @@ function MatchFormModal({
       start_time: startDate.toISOString(),
       end_time: endDate.toISOString(),
       description: description.trim(),
-      ...(matchType === "team_vs_team"
-        ? { total_price: totalPriceNum }
-        : { slots_needed: slotsNum, price_per_slot: priceSlotNum }),
+      slots_needed: slotsNum,
+      price_per_slot: priceSlotNum,
     };
 
     const payload: CreateMatchPayload | UpdateMatchPayload =
-      mode === "create"
-        ? { creator_team_id: teamId, match_type: matchType, pitch_id: pitchId, ...shared }
-        : shared;
+      mode === "create" ? { creator_team_id: teamId, pitch_id: pitchId, ...shared } : shared;
 
     try {
       setSubmitting(true);
@@ -385,19 +335,14 @@ function MatchFormModal({
 
   return (
     <div className={styles.drawerOverlay} onClick={onClose}>
-      <div
-        className={`${styles.drawer} ${isTeamType ? styles.drawerTeam : styles.drawerOpen}`}
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className={`${styles.drawer} ${styles.drawerOpen}`} onClick={(e) => e.stopPropagation()}>
         <div className={styles.drawerHeader}>
           <span className={styles.drawerHeaderIcon}>
-            <Icon name={isTeamType ? "swords" : "users"} size={18} />
+            <Icon name="users" size={18} />
           </span>
           <div className={styles.drawerHeaderText}>
-            <h3 className={styles.drawerTitle}>{mode === "create" ? "Create a match" : "Edit match"}</h3>
-            <p className={styles.drawerSubtitle}>
-              {isTeamType ? "Challenge another team, split the pitch cost" : "Open spots for players to join"}
-            </p>
+            <h3 className={styles.drawerTitle}>{mode === "create" ? "Open slots for players" : "Edit open match"}</h3>
+            <p className={styles.drawerSubtitle}>Let outside players fill spots your team couldn't.</p>
           </div>
           <button type="button" className={styles.drawerCloseBtn} onClick={onClose} aria-label="Close">
             <Icon name="x" size={16} />
@@ -406,37 +351,6 @@ function MatchFormModal({
 
         <form className={styles.drawerForm} onSubmit={handleSubmit}>
           <div className={styles.drawerBody}>
-            <div className={styles.block}>
-              <span className={styles.blockLabel}>Match type</span>
-              <div className={styles.typeToggle} data-disabled={mode === "edit" || undefined}>
-                <span
-                  className={styles.typeToggleThumb}
-                  style={{ transform: isTeamType ? "translateX(0%)" : "translateX(100%)" }}
-                />
-                <button
-                  type="button"
-                  className={`${styles.typeToggleBtn} ${isTeamType ? styles.typeToggleBtnActive : ""}`}
-                  onClick={() => setMatchType("team_vs_team")}
-                  disabled={mode === "edit"}
-                >
-                  <Icon name="swords" size={14} />
-                  Team vs team
-                </button>
-                <button
-                  type="button"
-                  className={`${styles.typeToggleBtn} ${!isTeamType ? styles.typeToggleBtnActive : ""}`}
-                  onClick={() => setMatchType("open_slots")}
-                  disabled={mode === "edit"}
-                >
-                  <Icon name="users" size={14} />
-                  Open slots
-                </button>
-              </div>
-              {mode === "edit" && <div className={styles.fieldHint}>Match type can't be changed after creation.</div>}
-            </div>
-
-            <div className={styles.divider} />
-
             <div className={styles.block}>
               <span className={styles.blockLabel}>Pitch</span>
               <PitchMapField pitches={pitches} selectedId={pitchId} onSelect={(p) => setPitchId(p.id)} />
@@ -470,47 +384,25 @@ function MatchFormModal({
 
             <div className={styles.block}>
               <span className={styles.blockLabel}>Pricing</span>
-
-              {isTeamType ? (
-                <div className={styles.priceCard}>
+              <div className={styles.priceCard}>
+                <div className={styles.fieldGridTwo}>
                   <label className={styles.field}>
-                    <span className={styles.fieldSubLabel}>Total pitch cost</span>
+                    <span className={styles.fieldSubLabel}>Players needed</span>
+                    <input type="number" min={1} className={styles.input} value={slotsNeeded} onChange={(e) => setSlotsNeeded(e.target.value)} />
+                  </label>
+                  <label className={styles.field}>
+                    <span className={styles.fieldSubLabel}>Price per player</span>
                     <div className={styles.priceInputWrap}>
-                      <input
-                        type="number" min={0} className={styles.priceInput}
-                        value={totalPrice}
-                        onChange={(e) => { setTotalPrice(e.target.value); setPriceTouched(true); }}
-                        placeholder="0"
-                      />
+                      <input type="number" min={0} className={styles.priceInput} value={pricePerSlot} onChange={(e) => setPricePerSlot(e.target.value)} placeholder="0" />
                       <span className={styles.priceInputSuffix}>Br</span>
                     </div>
                   </label>
-                  <div className={styles.priceSplitRow}>
-                    <span>Your team pays</span>
-                    <b>{formatBirr(totalPriceNum / 2)}</b>
-                  </div>
                 </div>
-              ) : (
-                <div className={styles.priceCard}>
-                  <div className={styles.fieldGridTwo}>
-                    <label className={styles.field}>
-                      <span className={styles.fieldSubLabel}>Players needed</span>
-                      <input type="number" min={1} className={styles.input} value={slotsNeeded} onChange={(e) => setSlotsNeeded(e.target.value)} />
-                    </label>
-                    <label className={styles.field}>
-                      <span className={styles.fieldSubLabel}>Price per player</span>
-                      <div className={styles.priceInputWrap}>
-                        <input type="number" min={0} className={styles.priceInput} value={pricePerSlot} onChange={(e) => setPricePerSlot(e.target.value)} placeholder="0" />
-                        <span className={styles.priceInputSuffix}>Br</span>
-                      </div>
-                    </label>
-                  </div>
-                  <div className={styles.priceSplitRow}>
-                    <span>Total if every slot fills</span>
-                    <b>{formatBirr(slotsNum * priceSlotNum)}</b>
-                  </div>
+                <div className={styles.priceSplitRow}>
+                  <span>Total if every slot fills</span>
+                  <b>{formatBirr(slotsNum * priceSlotNum)}</b>
                 </div>
-              )}
+              </div>
             </div>
 
             <div className={styles.divider} />
@@ -531,8 +423,8 @@ function MatchFormModal({
 
           <div className={styles.drawerFooter}>
             <button type="button" className={styles.cancelBtn} onClick={onClose}>Cancel</button>
-            <button type="submit" className={`${styles.submitBtn} ${isTeamType ? styles.submitBtnTeam : styles.submitBtnOpen}`} disabled={submitting}>
-              {submitting ? "Saving…" : mode === "create" ? "Create match" : "Save changes"}
+            <button type="submit" className={`${styles.submitBtn} ${styles.submitBtnOpen}`} disabled={submitting}>
+              {submitting ? "Saving…" : mode === "create" ? "Open slots" : "Save changes"}
               {!submitting && <Icon name="arrowRight" size={15} />}
             </button>
           </div>
@@ -541,8 +433,6 @@ function MatchFormModal({
     </div>
   );
 }
-
-/* ---------------- cancel-match confirm popup ---------------- */
 
 function CancelMatchDialog({
   match, onConfirm, onDismiss, cancelling,
@@ -560,9 +450,7 @@ function CancelMatchDialog({
         </span>
         <h3 className={styles.confirmTitle}>Cancel this match?</h3>
         <p className={styles.confirmText}>
-          {match.match_type === "team_vs_team"
-            ? `This will cancel the match against ${match.opponent_team_name || "the other team"}. This can't be undone.`
-            : "Players who already joined will be freed from their slots. This can't be undone."}
+          Players who already joined will be freed from their slots. This can't be undone.
         </p>
         <div className={styles.confirmActions}>
           <button type="button" className={styles.confirmNoBtn} onClick={onDismiss} disabled={cancelling}>
@@ -577,8 +465,6 @@ function CancelMatchDialog({
   );
 }
 
-/* ---------------- match ticket card ---------------- */
-
 function MatchCard({
   match, pitch, canManage, onEdit, onCancel, cancelling,
 }: {
@@ -592,15 +478,10 @@ function MatchCard({
   const tone = statusTone(match.status);
   const canEdit = canManage && match.status === "open";
   const canCancel = canManage && (match.status === "open" || match.status === "confirmed");
-  const isOpenSlots = match.match_type === "open_slots";
   const isConfirmed = match.status === "confirmed";
 
   return (
-    <div
-      className={`${styles.ticket} ${isOpenSlots ? styles.ticketOpenType : styles.ticketTeamType} ${
-        isConfirmed ? styles.ticketConfirmed : ""
-      }`}
-    >
+    <div className={`${styles.ticket} ${styles.ticketOpenType} ${isConfirmed ? styles.ticketConfirmed : ""}`}>
       {isConfirmed && (
         <span className={styles.confirmedFlag}>
           <Icon name="check" size={11} /> Confirmed
@@ -610,26 +491,18 @@ function MatchCard({
       <div className={styles.ticketMain}>
         <div className={styles.ticketTopRow}>
           <span className={styles.typeTag}>
-            <Icon name={isOpenSlots ? "users" : "swords"} size={12} />
-            {isOpenSlots ? "Open slots" : "Team vs team"}
+            <Icon name="users" size={12} />
+            Open slots
           </span>
           <span className={styles.matchPitchBall}>
             <SportBall sport={pitch?.sport_type} size={18} />
           </span>
         </div>
 
-        {match.match_type === "team_vs_team" ? (
-          <div className={styles.matchup}>
-            <span className={styles.matchupTeam}>{match.creator_team_name}</span>
-            <span className={styles.matchupVs}>vs</span>
-            <span className={styles.matchupTeam}>{match.opponent_team_name || "..."}</span>
-          </div>
-        ) : (
-          <div className={styles.matchup}>
-            <span className={styles.slotsCount}>{match.confirmed_participant_count}/{match.slots_needed}</span>
-            <span className={styles.matchupVs}>players joined</span>
-          </div>
-        )}
+        <div className={styles.matchup}>
+          <span className={styles.slotsCount}>{match.confirmed_participant_count}/{match.slots_needed}</span>
+          <span className={styles.matchupVs}>players joined</span>
+        </div>
 
         <div className={styles.metaLine}>
           <Icon name="clock" size={13} />
@@ -648,10 +521,8 @@ function MatchCard({
         <span className={styles.statusText}>{match.status[0].toUpperCase() + match.status.slice(1)}</span>
 
         <div className={styles.stubPrice}>
-          {match.match_type === "team_vs_team"
-            ? formatBirr(match.price_per_team)
-            : formatBirr(match.price_per_slot)}
-          <span className={styles.stubPriceUnit}>{match.match_type === "team_vs_team" ? "/ team" : "/ player"}</span>
+          {formatBirr(match.price_per_slot)}
+          <span className={styles.stubPriceUnit}>/ player</span>
         </div>
 
         {canManage && (
@@ -668,8 +539,6 @@ function MatchCard({
     </div>
   );
 }
-
-/* ---------------- ticket skeleton (loading state) ---------------- */
 
 function SkeletonBlock({ className }: { className: string }) {
   return <div className={`${styles.shimmer} ${className}`} />;
@@ -705,8 +574,6 @@ function MatchesSkeleton() {
     </div>
   );
 }
-
-/* ---------------- main tab ---------------- */
 
 export default function MatchesTab({
   team, canManage,
@@ -748,8 +615,6 @@ export default function MatchesTab({
     return map;
   }, [pitches]);
 
-  // Confirmed matches surface first, so managers and members immediately
-  // see what's locked in before scanning open/completed/cancelled ones.
   const orderedMatches = useMemo(() => sortMatches(matches), [matches]);
 
   async function handleCreate(payload: any) {
@@ -766,8 +631,6 @@ export default function MatchesTab({
     await refresh();
   }
 
-  // "Cancel" click now just opens the confirm popup — the actual API call
-  // only fires once the person taps "Yes, cancel match" inside it.
   function requestCancel(match: Match) {
     setMatchPendingCancel(match);
   }
@@ -794,13 +657,13 @@ export default function MatchesTab({
           <div className={styles.tabTitle}>Matches</div>
           <div className={styles.tabSub}>
             {canManage
-              ? "Challenge another team or open slots for outside players to join."
+              ? "Open slots for outside players when your squad can't fill a game."
               : "Matches this team has scheduled."}
           </div>
         </div>
         {canManage && (
           <button type="button" className={styles.createBtn} onClick={() => { setEditingMatch(null); setModalMode("create"); }}>
-            <Icon name="plus" size={15} />Create match
+            <Icon name="plus" size={15} />Open slots
           </button>
         )}
       </div>
@@ -811,12 +674,12 @@ export default function MatchesTab({
         <MatchesSkeleton />
       ) : orderedMatches.length === 0 ? (
         <div className={styles.emptyState}>
-          <Icon name="swords" size={26} />
-          <div className={styles.emptyStateTitle}>No matches yet</div>
+          <Icon name="users" size={26} />
+          <div className={styles.emptyStateTitle}>No open matches yet</div>
           <div className={styles.emptyStateText}>
             {canManage
-              ? "Create a team-vs-team challenge or open some slots for players to join."
-              : "Check back once team's owner or admin schedules one."}
+              ? "Open some slots for players to join when your team can't fill a game."
+              : "Check back once the team's owner or admin opens some slots."}
           </div>
         </div>
       ) : (

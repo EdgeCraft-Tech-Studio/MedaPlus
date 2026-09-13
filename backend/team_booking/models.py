@@ -8,6 +8,7 @@ from django.utils import timezone
 class TeamBookingRequestStatus(models.TextChoices):
     PENDING = "pending", "Pending"                       # 20-min play-confirmation window open
     EXPIRED = "expired", "Expired"                        # window closed, owner hasn't acted yet
+    AWAITING_OPEN_SLOTS = "awaiting_open_slots", "Awaiting Open Slots"  # outside players filling gaps
     PAYMENT_PENDING = "payment_pending", "Payment Pending"  # 10-min payment window open, slots held
     BOOKED = "booked", "Booked"                            # fully paid, real Booking rows created
     UNAVAILABLE = "unavailable", "Pitch Unavailable"        # owner tried to finalize, slot was taken
@@ -71,7 +72,7 @@ class TeamBookingRequest(models.Model):
     member_count_at_creation = models.PositiveIntegerField()
 
     status = models.CharField(
-        max_length=16,
+        max_length=24,  # bumped from 16 — "awaiting_open_slots" is 19 chars
         choices=TeamBookingRequestStatus.choices,
         default=TeamBookingRequestStatus.PENDING,
     )
@@ -96,6 +97,20 @@ class TeamBookingRequest(models.Model):
     payment_timeout_needs_owner_action = models.BooleanField(default=False)
 
     final_booking_code = models.CharField(max_length=12, blank=True, default="")
+
+    booked_popup_shown = models.BooleanField(default=False)
+
+    # Set when the owner chooses "Leave slot open" — links to the real
+    # open-slots Match created in the match app so join events can be
+    # tracked back to this booking. OneToOne (not ForeignKey) because
+    # a single Match belongs to at most one team-booking request.
+    open_slot_match = models.OneToOneField(
+        "match.Match",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="team_booking_request",
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

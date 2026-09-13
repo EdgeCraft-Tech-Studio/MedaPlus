@@ -111,8 +111,8 @@ class PitchSerializer(serializers.ModelSerializer):
         qs = obj.images.order_by("created_at")
         return PitchImageSerializer(qs, many=True, context=self.context).data
 
-
-class AlreadyBookedSlotSerializer(serializers.Serializer):
+ 
+class AlreadyBookedSlotSerializer(serializers.Serializer): 
     """One historical/manual booking entered by the owner — a slot that
     was already taken before the pitch went on the platform, so it needs
     to show up as unavailable and be attributed to someone.

@@ -8,9 +8,9 @@ interface Props {
   onDeclined: () => void;
   onConfirm: (requestId: string) => Promise<void>;
   onDecline: (requestId: string) => Promise<void>;
-  onClose?: () => void; // only used in read-only mode
+  onClose: () => void;          // now REQUIRED — no longer read-only-only
   readOnly?: boolean;
-  readOnlyStatusLabel?: string; // e.g. "You confirmed" / "You declined" / "Window closed"
+  readOnlyStatusLabel?: string;
 }
 
 function BallIcon(props: React.SVGProps<SVGSVGElement>) {
@@ -114,18 +114,16 @@ export default function TeamBookingConfirmPopup({
     // Escape handler — this is intentionally NOT dismissible. It
     // only disappears once the user answers Yes, or Yes on the
     // decline sub-confirm.
-        <div className={styles.overlay} onMouseDown={readOnly ? onClose : undefined}>
+            <div className={styles.overlay} onMouseDown={onClose}>
       <div
         className={styles.card}
         role="alertdialog"
         aria-modal="true"
         onMouseDown={(e) => e.stopPropagation()}
       >
-        {readOnly && onClose && (
-          <button className={styles.readOnlyClose} onClick={onClose} aria-label="Close">
-            ✕
-          </button>
-        )}
+        <button className={styles.readOnlyClose} onClick={onClose} aria-label="Close">
+          ✕
+        </button>
 
         {readOnly && (
           <div className={styles.readOnlyBanner}>{readOnlyStatusLabel || "This window has closed."}</div>
