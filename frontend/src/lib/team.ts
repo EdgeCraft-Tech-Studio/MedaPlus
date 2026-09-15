@@ -383,3 +383,28 @@ export async function requestTeamBooking(
   const res = await api.post("/bookings/team-request/", payload);
   return res.data;
 }
+
+
+// ---------- Update team (owner/admin only) ----------
+
+export interface UpdateTeamPayload {
+  name?: string;
+  description?: string;
+  sport?: string;
+  area?: string;
+  city?: string;
+  latitude?: number;
+  longitude?: number;
+  skill_level?: string;
+  age_category?: string;
+  preferred_days?: string[];
+  play_time?: string;
+  max_roster_size?: number;
+  visibility?: string;
+  version: number;
+}
+
+export async function updateTeam(slug: string, payload: UpdateTeamPayload): Promise<TeamDashboardData> {
+  const res = await api.patch(`/teams/${slug}/`, payload);
+  return res.data as TeamDashboardData;
+}

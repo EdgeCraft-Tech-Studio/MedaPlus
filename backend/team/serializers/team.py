@@ -106,13 +106,23 @@ class TeamCreateSerializer(serializers.ModelSerializer):
  
 class TeamUpdateSerializer(serializers.ModelSerializer):
     version = serializers.IntegerField()
+    latitude = serializers.FloatField(required=False)
+    longitude = serializers.FloatField(required=False)
 
     class Meta:
         model = Team
         fields = [
-            "name", "logo", "description", "area", "city",
-            "skill_level", "age_category", "version",
+            "name", "logo", "description", "sport", "area", "city",
+            "latitude", "longitude", "skill_level", "age_category",
+            "preferred_days", "play_time", "max_roster_size",
+            "visibility", "version",
         ]
+
+    def validate_preferred_days(self, value):
+        valid = {"mon", "tue", "wed", "thu", "fri", "sat", "sun"}
+        if not isinstance(value, list) or not set(value).issubset(valid):
+            raise serializers.ValidationError("Invalid day code.")
+        return value
 
     def validate_version(self, value: int) -> int:
         if self.instance is not None and value != self.instance.version:
@@ -121,6 +131,22 @@ class TeamUpdateSerializer(serializers.ModelSerializer):
                 "loaded it. Refresh and try again."
             )
         return value
+
+    def validate(self, attrs):
+        lat = attrs.get("latitude")
+        lng = attrs.get("longitude")
+        if lat is not None and not (-90 <= lat <= 90):
+            raise serializers.ValidationError({"latitude": "Latitude must be between -90 and 90."})
+        if lng is not None and not (-180 <= lng <= 180):
+            raise serializers.ValidationError({"longitude": "Longitude must be between -180 and 180."})
+
+        # latitude/longitude must travel together — a half-updated pin
+        # would leave the team's location inconsistent.
+        if (lat is None) != (lng is None):
+            raise serializers.ValidationError(
+                {"latitude": "Latitude and longitude must be sent together."}
+            )
+        return attrs
 
     def update(self, instance: Team, validated_data):
         validated_data.pop("version", None)

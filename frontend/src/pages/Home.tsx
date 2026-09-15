@@ -11,6 +11,7 @@ import type { Match } from "../lib/match";
 import { listPitches, type Pitch } from "../lib/pitches";
 import { getMyTeams, type MyTeam } from "../lib/team";
 import { getHomeMatches } from "../lib/home";
+import TourGuide from "../tours/TourGuide";
 
 const PITCH_OWNER_ROLE = "OWNER";
 const ADMIN_ROLE = "ADMIN";
@@ -91,7 +92,6 @@ function todayLabel() {
   return new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
 }
 
-/** Why this match shows up for the user — team commitment vs a personal join. */
 /** Why this match shows up for the user — their team opened it, or
  *  they personally joined an open slot on someone else's match.
  */
@@ -250,8 +250,13 @@ export default function Home() {
   const confirmedCount = sortedMatches.filter((m) => m.status === "confirmed").length;
   const totalUpcoming = sortedMatches.length;
 
+  // Only the first render's data is loaded yet during the tour, but the
+  // tour targets DOM elements (buttons/heading), not this data — so it's
+  // safe to mount regardless of feedLoading.
   return (
     <div className={styles.page}>
+      <TourGuide page="home" waitForPage="appshell" />
+
       {/* ---------------- HERO ---------------- */}
       <div className={styles.heroBanner}>
         {!heroLoaded && <div className={styles.heroShimmer} />}
@@ -278,7 +283,12 @@ export default function Home() {
           {quickActions.map((a) => {
             const Icon = a.icon;
             return (
-              <Link key={a.key} to={a.to} className={styles.quickBtn}>
+              <Link
+                key={a.key}
+                to={a.to}
+                className={styles.quickBtn}
+                data-tour={`tour-${a.key}`}
+              >
                 <span className={`${styles.quickIconWrap} ${styles[`tone_${a.tone}`]}`}>
                   <Icon width={18} height={18} />
                 </span>
@@ -312,7 +322,9 @@ export default function Home() {
         {/* ---------------- UPCOMING MATCHES ---------------- */}
         <section className={styles.section}>
           <div className={styles.sectionHead}>
-            <span className={styles.sectionTitle}>Upcoming matches</span>
+            <span className={styles.sectionTitle} data-tour="tour-upcoming-matches">
+              Upcoming matches
+            </span>
           </div>
 
           {feedLoading ? (

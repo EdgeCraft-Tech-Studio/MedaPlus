@@ -2,7 +2,7 @@
   --green-900: #0e2f24; --green-800: #123c2d; --green-700: #16513f;
   --grass: #3fae7f; --grass-bright: #4fd897; --grass-soft: #e6f5ee;
   --c-team: #2f5d8a; --c-team-soft: #eaf1f8;
-  --c-tournament: #c9942a; --c-tournament-soft: #fbf1dd;
+  --c-tournament: #c9942a; --c-tournament-soft: #fbf1dd; 
   --c-match: #b3352f; --c-match-soft: #fbeceb; 
   --danger: #c0392b; --danger-soft: #fdeeec;
   --ink: #0e1712; --muted: #6b7a72; --faint: #b7c2bb; --line: #ece9df; --paper: #fbfbf8;
@@ -340,4 +340,420 @@
   width: 80%;
   height: 13px;
   border-radius: 5px;
+}
+
+
+/* ---------------------------------------------------------------------- */
+/* Overview tab — edit mode                                               */
+/* ---------------------------------------------------------------------- */
+
+.sectionHeaderRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.sectionHeaderRow .sectionTitle { margin-bottom: 0; }
+
+.editToggleBtn {
+  appearance: none;
+  border: 1px solid var(--grass);
+  background: #fff;
+  color: var(--green-800);
+  font-weight: 700;
+  font-size: 12.5px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.editToggleBtn:hover { background: var(--grass-soft); }
+
+.editActions { display: flex; gap: 8px; }
+
+.saveBtn {
+  appearance: none;
+  border: none;
+  background: var(--grass);
+  color: #fff;
+  font-weight: 700;
+  font-size: 12.5px;
+  padding: 7px 16px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.saveBtn:hover { background: var(--grass-bright); }
+.saveBtn:disabled { opacity: 0.6; cursor: default; }
+
+.cancelBtn {
+  appearance: none;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--muted);
+  font-weight: 700;
+  font-size: 12.5px;
+  padding: 7px 16px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.cancelBtn:hover { color: var(--ink); }
+.cancelBtn:disabled { opacity: 0.6; cursor: default; }
+
+.saveErrBanner {
+  background: var(--danger-soft);
+  color: var(--danger);
+  border: 1px solid var(--danger);
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 12.5px;
+  margin-bottom: 14px;
+}
+
+.editInput, .editSelect, .editTextarea {
+  width: 100%;
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink);
+  border: 1.5px solid var(--line);
+  border-radius: 8px;
+  padding: 7px 10px;
+  background: #fff;
+}
+.editInput:focus, .editSelect:focus, .editTextarea:focus {
+  outline: none;
+  border-color: var(--grass);
+}
+
+.editTextarea {
+  min-height: 70px;
+  resize: vertical;
+  font-weight: 400;
+}
+
+.editAboutWrap { margin-bottom: 22px; }
+
+.fieldErr {
+  font-size: 11.5px;
+  color: var(--danger);
+  margin-top: 4px;
+}
+
+.dayChipGroup { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.dayChip {
+  appearance: none;
+  border: 1.5px solid var(--line);
+  background: #fff;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 5px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.dayChipActive {
+  border-color: var(--grass);
+  background: var(--grass-soft);
+  color: var(--green-800);
+}
+
+.editLocationSection {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 16px;
+  margin-bottom: 22px;
+}
+
+.editMapField { display: flex; flex-direction: column; gap: 10px; }
+
+.editMapBox {
+  width: 100%;
+  height: 260px;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+}
+
+.editMapConfirm {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--green-800);
+}
+
+.editMapEmpty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.bottomSaveRow {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  margin-top: 10px;
+}
+
+
+/* ---------------------------------------------------------------------- */
+/* Overview tab — top action bar (Edit team)                              */
+/* ---------------------------------------------------------------------- */
+
+.overviewTopBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: linear-gradient(120deg, var(--green-900), var(--green-700));
+  border-radius: 18px;
+  padding: 18px 22px;
+  margin-bottom: 22px;
+  box-shadow: 0 6px 20px rgba(14, 47, 36, 0.18);
+}
+
+.overviewTopBarText {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.overviewTopBarTitle {
+  color: #fff;
+  font-size: 15.5px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.overviewTopBarSub {
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.editTeamBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  appearance: none;
+  border: none;
+  background: var(--grass-bright);
+  color: var(--green-900);
+  font-family: inherit;
+  font-weight: 800;
+  font-size: 13.5px;
+  padding: 10px 20px;
+  border-radius: 999px;
+  cursor: pointer;
+  flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(63, 174, 127, 0.35);
+  transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
+}
+
+.editTeamBtn:hover {
+  background: #6fe8b4;
+  box-shadow: 0 6px 16px rgba(63, 174, 127, 0.45);
+  transform: translateY(-1px);
+}
+
+.editTeamBtn:active {
+  transform: translateY(0);
+  box-shadow: 0 3px 8px rgba(63, 174, 127, 0.35);
+}
+
+.editingBadge {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--green-700);
+  background: var(--grass-soft);
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+
+@media (max-width: 560px) {
+  .overviewTopBar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 14px;
+  }
+  .editTeamBtn,
+  .overviewTopBar .editActions {
+    width: 100%;
+    justify-content: center;
+  }
+  .overviewTopBar .editActions {
+    display: flex;
+  }
+  .overviewTopBar .editActions .cancelBtn,
+  .overviewTopBar .editActions .saveBtn {
+    flex: 1;
+    text-align: center;
+  }
+}
+
+/* ---------------------------------------------------------------------- */
+/* Overview tab — edit mode (fields, map, buttons)                        */
+/* ---------------------------------------------------------------------- */
+
+.sectionHeaderRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.sectionHeaderRow .sectionTitle { margin-bottom: 0; }
+
+.editActions { display: flex; gap: 8px; }
+
+.saveBtn {
+  appearance: none;
+  border: none;
+  background: var(--grass);
+  color: #fff;
+  font-weight: 700;
+  font-size: 12.5px;
+  padding: 9px 18px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+.saveBtn:hover { background: var(--grass-bright); }
+.saveBtn:disabled { opacity: 0.6; cursor: default; }
+
+.cancelBtn {
+  appearance: none;
+  border: 1.5px solid rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-weight: 700;
+  font-size: 12.5px;
+  padding: 9px 18px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.cancelBtn:hover { background: rgba(255, 255, 255, 0.16); }
+.cancelBtn:disabled { opacity: 0.6; cursor: default; }
+
+/* Cancel button also appears on the plain white bottomSaveRow — give it
+   a light-surface variant there instead of the translucent-on-dark one
+   above, since that row sits on the page background, not the green bar. */
+.bottomSaveRow .cancelBtn {
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--muted);
+}
+.bottomSaveRow .cancelBtn:hover { background: #f5f5f0; color: var(--ink); }
+
+.saveErrBanner {
+  background: var(--danger-soft);
+  color: var(--danger);
+  border: 1px solid var(--danger);
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 12.5px;
+  margin-bottom: 14px;
+}
+
+.editInput, .editSelect, .editTextarea {
+  width: 100%;
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink);
+  border: 1.5px solid var(--line);
+  border-radius: 8px;
+  padding: 7px 10px;
+  background: #fff;
+}
+.editInput:focus, .editSelect:focus, .editTextarea:focus {
+  outline: none;
+  border-color: var(--grass);
+}
+
+.editTextarea {
+  min-height: 70px;
+  resize: vertical;
+  font-weight: 400;
+}
+
+.editAboutWrap { margin-bottom: 22px; }
+
+.fieldErr {
+  font-size: 11.5px;
+  color: var(--danger);
+  margin-top: 4px;
+}
+
+.dayChipGroup { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.dayChip {
+  appearance: none;
+  border: 1.5px solid var(--line);
+  background: #fff;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 5px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.dayChipActive {
+  border-color: var(--grass);
+  background: var(--grass-soft);
+  color: var(--green-800);
+}
+
+.editLocationSection {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 16px;
+  margin-bottom: 22px;
+}
+
+.editMapField { display: flex; flex-direction: column; gap: 10px; }
+
+.editMapBox {
+  width: 100%;
+  height: 260px;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+}
+
+.editMapConfirm {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--green-800);
+}
+
+.editMapEmpty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.bottomSaveRow {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  margin-top: 10px;
 }

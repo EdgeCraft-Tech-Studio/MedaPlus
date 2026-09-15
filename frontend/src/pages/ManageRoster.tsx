@@ -185,25 +185,44 @@ async function handleApproveRequest(requestId: string) {
         </div>
 
         {canManage && (
-          <button className={styles.addBtn} onClick={() => setModalOpen(true)}>
+          <button className={styles.addBtn} onClick={() => setModalOpen(true)} data-tour="tour-add-player">
             <UserPlusIcon width={16} height={16} />
             Add players
           </button>
         )}
       </div>
 
+      {/* These three buttons are ALWAYS in the DOM together (subject only
+          to the role/visibility conditions below) — only the panel
+          content underneath swaps with `subTab`. That makes them the
+          right tour target: no sub-tab switching logic needed, and a
+          role that can't see a section never renders its button, so
+          TourGuide's "drop what's absent" behavior does the right
+          thing automatically. */}
       <div className={styles.subTabs}>
-        <button className={`${styles.subTab} ${subTab === "members" ? styles.subTabActive : ""}`} onClick={() => setSubTab("members")}>
+        <button
+          className={`${styles.subTab} ${subTab === "members" ? styles.subTabActive : ""}`}
+          onClick={() => setSubTab("members")}
+          data-tour="tour-active-members"
+        >
           Active members
         </button>
         {canManage && (
-          <button className={`${styles.subTab} ${subTab === "invitations" ? styles.subTabActive : ""}`} onClick={() => setSubTab("invitations")}>
+          <button
+            className={`${styles.subTab} ${subTab === "invitations" ? styles.subTabActive : ""}`}
+            onClick={() => setSubTab("invitations")}
+            data-tour="tour-invitations"
+          >
             Invitations
             {pendingInvites.length > 0 && <span className={styles.subTabCount}>{pendingInvites.length}</span>}
           </button>
         )}
         {canManage && team.visibility === "public" && (
-          <button className={`${styles.subTab} ${subTab === "requests" ? styles.subTabActive : ""}`} onClick={() => setSubTab("requests")}>
+          <button
+            className={`${styles.subTab} ${subTab === "requests" ? styles.subTabActive : ""}`}
+            onClick={() => setSubTab("requests")}
+            data-tour="tour-join-requests"
+          >
             Join requests
             {pendingRequests.length > 0 && <span className={styles.subTabCount}>{pendingRequests.length}</span>}
           </button>

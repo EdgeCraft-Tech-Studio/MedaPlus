@@ -6,6 +6,7 @@ import type { Pitch } from "../lib/pitches";
 import { listPitches } from "../lib/pitches";
 import styles from "./css/Dashboard.module.css";
 import LoadingBall from "./LoadingBall";
+import TourGuide from "../tours/TourGuide";
 
 type TabKey = "map" | "nearby" | "best";
 type SportType = "FOOTBALL" | "BASKETBALL";
@@ -679,6 +680,8 @@ export default function App() {
 
   return (
     <div>
+      <TourGuide page="app" waitForPage="appshell" />
+
       <div className={styles.page}>
         <div className={styles.shell}>
           <div className={styles.header}>
@@ -697,6 +700,7 @@ export default function App() {
                   key={key}
                   onClick={() => setTab(key)}
                   className={`${styles.tab} ${tab === key ? styles.tabActive : ""}`}
+                  data-tour={key === "nearby" ? "tour-nearby" : undefined}
                 >
                   <TabIcon className={styles.tabIcon} />
                   {label}

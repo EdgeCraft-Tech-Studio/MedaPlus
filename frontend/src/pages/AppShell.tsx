@@ -32,6 +32,7 @@ import TeamBookingListPopup from "./TeamBookingListPopup";
 import TeamBookingLiveDetailPopup from "./TeamBookingLiveDetailPopup";
 import BookedPitchSummaryPopup from "./BookedPitchSummaryPopup";
 import OpenSlotFormPopup from "./OpenSlotFormPopup";
+import TourGuide from "../tours/TourGuide";
 
 function DashboardIcon({ width = 20, height = 20 }: { width?: number; height?: number }) {
   return (
@@ -52,11 +53,19 @@ export function getDashboardPath(role?: UserRole | null): string | null {
   return null;
 }
 
-const BASE_NAV_ITEMS = [
+interface NavItem {
+  to: string;
+  label: string;
+  icon: (props: { width?: number; height?: number }) => ReactElement;
+  end?: boolean;
+  tourKey?: string;
+}
+
+const BASE_NAV_ITEMS: NavItem[] = [
   { to: "/home", label: "Home", icon: HomeIcon, end: true },
-  { to: "/teams", label: "My Teams", icon: UsersIcon },
-  { to: "/app", label: "pitchs", icon: FootballPitchIcon },
-  { to: "/discover", label: "Discover", icon: CompassIcon },
+  { to: "/teams", label: "My Teams", icon: UsersIcon, tourKey: "teams" },
+  { to: "/app", label: "pitchs", icon: FootballPitchIcon, tourKey: "pitches" },
+  { to: "/discover", label: "Discover", icon: CompassIcon, tourKey: "discover" },
 ];
 
 const CATEGORY_LABEL: Record<NotificationCategory, string> = {
@@ -278,6 +287,7 @@ export default function AppShell() {
   const [teamBookingListOpen, setTeamBookingListOpen] = useState(false);
   const [activeLiveDetailId, setActiveLiveDetailId] = useState<string | null>(null);
   const [teamUpdateNeedsDecision, setTeamUpdateNeedsDecision] = useState(false);
+  const [teamUpdateVisible, setTeamUpdateVisible] = useState(false);
 
   const [openSlotContext, setOpenSlotContext] = useState<OpenSlotContext | null>(null);
 
@@ -383,12 +393,18 @@ export default function AppShell() {
     return () => clearInterval(interval);
   }, []);
 
-  // ---------------- "Team Update" needs-decision badge ----------------
+    // ---------------- "Team Update" pill: visibility + attention state ----------------
+  // The pill only exists at all when the logged-in user currently
+  // owns at least one team AND that team has an active booking in
+  // progress. No team ownership, or nothing active right now →
+  // the button is not rendered — never shown empty/disabled.
   async function refreshTeamUpdateBadge() {
     try {
       const items = await getMyActiveTeamBookings();
+      setTeamUpdateVisible(items.length > 0);
       setTeamUpdateNeedsDecision(items.some((i) => i.status === "expired"));
     } catch {
+      setTeamUpdateVisible(false);
       setTeamUpdateNeedsDecision(false);
     }
   }
@@ -563,7 +579,7 @@ export default function AppShell() {
   const unreadChatCount = chatSummary?.total_unread ?? 0;
 
   const dashboardPath = getDashboardPath(user?.role as UserRole | undefined);
-  const NAV_ITEMS = dashboardPath
+  const NAV_ITEMS: NavItem[] = dashboardPath
     ? [{ to: dashboardPath, label: "Dashboard", icon: DashboardIcon, end: false }, ...BASE_NAV_ITEMS]
     : BASE_NAV_ITEMS;
 
@@ -610,6 +626,8 @@ export default function AppShell() {
 
   return (
     <div className={styles.shell}>
+      <TourGuide page="appshell" />
+
       <header className={styles.topbar}>
         <Link to="/home" className={styles.brand}>
           <span className={styles.brandMark}><BallIcon /></span>
@@ -625,6 +643,7 @@ export default function AppShell() {
                 to={item.to}
                 end={item.end}
                 className={({ isActive }) => `${styles.navLink} ${isActive ? styles.navLinkActive : ""}`}
+                data-tour={item.tourKey ? `tour-${item.tourKey}` : undefined}
               >
                 <Icon width={17} height={17} />
                 <span>{item.label}</span>
@@ -638,6 +657,7 @@ export default function AppShell() {
             className={styles.bellBtn}
             onClick={goToChat}
             aria-label={`Team chats${unreadChatCount ? `, ${unreadChatCount} unread` : ""}`}
+            data-tour="tour-chat"
           >
             <ChatBubbleIcon width={20} height={20} />
             {unreadChatCount > 0 && (
@@ -651,24 +671,27 @@ export default function AppShell() {
             onClick={() => setNotifDrawerOpen((v) => !v)}
             aria-label={`Notifications${unreadCount ? `, ${unreadCount} unread` : ""}`}
             aria-expanded={notifDrawerOpen}
+            data-tour="tour-notifications"
           >
             <BellIcon width={20} height={20} />
             {unreadCount > 0 && <span className={styles.bellBadge}>{unreadCount > 9 ? "9+" : unreadCount}</span>}
           </button>
 
-          <button
-            className={`${styles.teamUpdatePill} ${teamUpdateNeedsDecision ? styles.teamUpdatePillAlert : ""}`}
-            onClick={() => setTeamBookingListOpen(true)}
-            aria-label={teamUpdateNeedsDecision ? "Team booking needs your decision" : "Team bookings"}
-          >
-            <span className={styles.teamUpdateDot} />
-            <span className={styles.teamUpdateLabelFull}>
-              {teamUpdateNeedsDecision ? "Needs Decision" : "Team Update"}
-            </span>
-            <span className={styles.teamUpdateLabelShort}>
-              {teamUpdateNeedsDecision ? "Alert" : "Team"}
-            </span>
-          </button>
+                    {teamUpdateVisible && (
+            <button
+              className={`${styles.teamUpdatePill} ${teamUpdateNeedsDecision ? styles.teamUpdatePillAlert : ""}`}
+              onClick={() => setTeamBookingListOpen(true)}
+              aria-label={teamUpdateNeedsDecision ? "Booking needs a decision" : "Booking in progress"}
+            >
+              <span className={styles.teamUpdateDot} />
+              <span className={styles.teamUpdateLabelFull}>
+                {teamUpdateNeedsDecision ? "Action Needed" : "Booking Active"}
+              </span>
+              <span className={styles.teamUpdateLabelShort}>
+                {teamUpdateNeedsDecision ? "Action" : "Active"}
+              </span>
+            </button>
+          )}
 
           <Link to="/profile" className={styles.avatarLink} aria-label="Profile">
             <span className={styles.avatarCircle}>
@@ -699,6 +722,7 @@ export default function AppShell() {
               to={item.to}
               end={item.end}
               className={({ isActive }) => `${styles.bottomNavLink} ${isActive ? styles.bottomNavLinkActive : ""}`}
+              data-tour={item.tourKey ? `tour-${item.tourKey}` : undefined}
             >
               <Icon width={20} height={20} />
               <span>{item.label}</span>

@@ -8,6 +8,7 @@ import {
 } from "../lib/team";
 import { listMatches, type Match } from "../lib/match";
 import { listPitches, type Pitch } from "../lib/pitches";
+import TourGuide from "../tours/TourGuide";
 
 const SKILL_LABEL: Record<string, string> = {
   beginner: "Beginner",
@@ -377,16 +378,19 @@ export default function DiscoverPage() {
   const isTeams = mode === "teams";
 
   return (
-    <div className={styles.page}>
+        <div className={styles.page}>
+      <TourGuide page="discover" waitForPage="appshell" />
+
       <span className={styles.eyebrow}>Explore</span>
       <h1 className={styles.title}>{isTeams ? "Find a team" : "Find a match"}</h1>
 
       {/* ---------------- mode toggle ---------------- */}
       <div className={styles.modeToggle}>
-        <button
+                <button
           type="button"
           className={`${styles.modeBtn} ${isTeams ? styles.modeBtnTeamsOn : ""}`}
           onClick={() => setMode("teams")}
+          data-tour="tour-findteam"
         >
           <TeamsModeIcon width={16} height={16} />
           Find team
@@ -395,6 +399,7 @@ export default function DiscoverPage() {
           type="button"
           className={`${styles.modeBtn} ${!isTeams ? styles.modeBtnMatchOn : ""}`}
           onClick={() => setMode("matches")}
+          data-tour="tour-findmatch-mode"
         >
           <MatchModeIcon width={16} height={16} />
           Find match

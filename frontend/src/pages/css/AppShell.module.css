@@ -829,3 +829,14 @@
     box-shadow: 0 6px 20px rgba(236, 72, 153, 0.4);
   }
 }
+
+
+.teamUpdatePillAlert {
+  background: #fff4e5;
+  color: #b45309;
+  border: 1px solid #f3c98a;
+}
+
+.teamUpdatePillAlert .teamUpdateDot {
+  background: #d97706;
+}

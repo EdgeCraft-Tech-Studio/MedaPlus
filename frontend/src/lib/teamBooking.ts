@@ -226,3 +226,25 @@ export async function coverRemainingOpenSlotsAndStartPayment(
   const res = await api.post(`/bookings/team-request/${requestId}/cover-open-slots-and-pay/`);
   return res.data;
 }
+
+
+export interface TeamBookingForTeamItem {
+  id: string;
+  status: string;
+  created_at: string;
+}
+
+/**
+ * Returns EVERY active booking for a team, visible to any active member —
+ * not scoped to "pending on me" or "owner action needed" like the other
+ * booking endpoints. This is what makes a booking card visible to a
+ * member who already confirmed/paid and is just waiting, since none of
+ * the other endpoints surface that booking's id to them anymore.
+ *
+ * Requires a matching backend endpoint at
+ * GET /bookings/team-request/for-team/{team_id}/
+ */
+export async function getTeamBookingsForTeam(teamId: string): Promise<TeamBookingForTeamItem[]> {
+  const res = await api.get(`/bookings/team-request/for-team/${teamId}/`);
+  return res.data;
+}
