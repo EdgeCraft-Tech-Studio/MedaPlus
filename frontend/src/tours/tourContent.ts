@@ -146,7 +146,7 @@ export const tourContent: Record<string, TourStepContent[]> = {
     {
       target: '[data-tour="tour-invitations"]',
       title: "ግብዣዎች",
-      content: "የተላኩ ግብዣዎች እዚህ ይታያሉ፤ መሰረዝ፣ ማጥፋት ወይም ማስተካከል ይችላሉ።",
+      content: "Invitation እዚህ ያገኛሉ፤ መሰረዝ፣ ማጥፋት ወይም ማስተካከል ይችላሉ።",
       placement: "top",
     },
     {

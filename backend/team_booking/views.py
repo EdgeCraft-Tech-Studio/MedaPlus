@@ -30,6 +30,7 @@ from .services import (
     get_pending_owner_action,
     get_pending_payment_for_user,
     get_team_booking_live_detail,
+    get_team_bookings_for_team,
     open_slots_for_declined_members,
     pay_for_booking,
     resolve_confirm_summary,
@@ -371,3 +372,15 @@ class CoverOpenSlotsAndStartPaymentView(views.APIView):
         except ValueError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(result)
+
+
+class TeamBookingsForTeamView(views.APIView):
+    """GET /bookings/team-request/for-team/{team_id}/
+    Every booking relevant to this team's chat, visible to any
+    active member — not just the owner.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, team_id, *args, **kwargs):
+        bookings = get_team_bookings_for_team(team_id=team_id, user=request.user)
+        return Response(TeamBookingRequestListItemSerializer(bookings, many=True).data)

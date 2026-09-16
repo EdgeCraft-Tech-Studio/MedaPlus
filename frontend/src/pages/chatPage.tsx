@@ -23,15 +23,23 @@ import {
 import { getTeamDashboard } from "../lib/team";
 import {
   getTeamBookingLiveDetail,
-  getMyActiveTeamBookings,
   getPendingTeamBookingConfirmation,
   getPendingOwnerAction,
   getPendingPayment,
   getTeamBookingsForTeam,
   getBookedPitchSummary,
+  getMyConfirmationDetail,
+  getMyPaymentDetail,
+  confirmTeamBooking,
+  declineTeamBooking,
+  payForBooking,
   type TeamBookingMemberStatus,
   type BookedPitchSummary,
+  type ConfirmationDetail,
+  type PaymentDetail,
 } from "../lib/teamBooking";
+import TeamBookingConfirmPopup from "./TeamBookingConfirmPopup";
+import MemberPaymentPopup from "./MemberPaymentPopup";
 import BookedPitchSummaryPopup from "./BookedPitchSummaryPopup";
 
 function normalizedType(type: string) {
@@ -104,46 +112,17 @@ interface MergedBooking {
 }
 
 /**
- * Discovers every booking id relevant to THIS team from FIVE sources,
- * so the card shows for every team member — not just whichever role
- * (owner vs. member) a given endpoint happens to be scoped to:
- *
- *  1. getMyActiveTeamBookings()        — non-final statuses, caller's teams
- *  2. getPendingTeamBookingConfirmation() — member-facing "confirm?" prompt
- *  3. getPendingOwnerAction()          — owner-facing action prompt
- *  4. getPendingPayment()              — member-facing payment prompt
- *  5. getTeamBookingsForTeam(teamId)   — ALL active bookings for this team,
- *     visible to any active member regardless of whose "turn" it is.
- *     This is the one that makes the card visible to a member who
- *     already confirmed and is just waiting — sources 1-4 alone miss
- *     that case because none of them are "waiting" from that member's
- *     point of view anymore.
- *
- * Every discovered id is then hydrated through getTeamBookingLiveDetail,
- * the one endpoint with authoritative status/selections/member lists —
- * so displayed data always comes from one consistent source no matter
- * which of the five first revealed the id.
- *
- * Isolation: every candidate is matched against THIS team's id (or,
- * for sources that only expose team_name, a case-insensitive name
- * match) before being added.
+ * Discovers booking ids for THIS team from four sources so both the
+ * owner and every ordinary member see the same cards. The 4th source
+ * (getTeamBookingsForTeam) requires the backend endpoint you already
+ * have wired in lib/teamBooking.ts; if that endpoint 404s server-side
+ * it's caught and simply contributes nothing, the other three sources
+ * still work.
  */
 async function fetchTeamBookings(team: { id: string; name: string }): Promise<MergedBooking[]> {
   const candidateIds = new Set<string>();
   const createdAtById = new Map<string, string>();
   const teamNameLower = team.name.trim().toLowerCase();
-
-  try {
-    const active = await getMyActiveTeamBookings();
-    active.forEach((b) => {
-      if (b.team_id === team.id) {
-        candidateIds.add(b.id);
-        createdAtById.set(b.id, b.created_at);
-      }
-    });
-  } catch (err) {
-    console.error("Failed to load active team bookings list:", err);
-  }
 
   try {
     const pendingConfirm = await getPendingTeamBookingConfirmation();
@@ -213,22 +192,33 @@ async function fetchTeamBookings(team: { id: string; name: string }): Promise<Me
   return merged.filter((b): b is MergedBooking => b !== null);
 }
 
-/** Pinned = latest time slot hasn't fully passed yet. */
-function isBookingPinned(b: MergedBooking): boolean {
-  if (!b.selections.length) return false;
-  const maxEnd = Math.max(...b.selections.map((s) => new Date(s.end_iso).getTime()));
-  return maxEnd >= Date.now();
+/** Cancelled/unavailable/expired bookings are simply not shown at
+ * all — no card, no state, nothing. Only "in progress" (pending,
+ * awaiting_open_slots, payment_pending) and "booked" ever render. */
+function isVisibleBooking(b: MergedBooking): boolean {
+  return b.status === "pending" || b.status === "awaiting_open_slots" || b.status === "payment_pending" || b.status === "booked";
 }
 
-/** Only "booked" is green and only an explicit "cancelled" is red.
- * Everything else (pending, awaiting_open_slots, payment_pending,
- * unavailable, expired) reads as amber "in progress" — a single
- * member declining, or a confirmation window lapsing, no longer
- * looks alarming; only the owner actually cancelling does. */
-function bookingTone(status: MergedBooking["status"]): "green" | "amber" | "red" {
-  if (status === "booked") return "green";
-  if (status === "cancelled") return "red";
-  return "amber";
+/** Once booked, the card disappears entirely once its last selected
+ * time slot has fully passed — the pitch was used, nothing left to
+ * show. In-progress bookings have no such expiry; they stay until
+ * they resolve into booked (or get filtered out as cancelled). */
+function isPastBookedDate(b: MergedBooking): boolean {
+  if (b.status !== "booked" || !b.selections.length) return false;
+  const maxEnd = Math.max(...b.selections.map((s) => new Date(s.end_iso).getTime()));
+  return maxEnd < Date.now();
+}
+
+function bookingTone(status: MergedBooking["status"]): "green" | "amber" {
+  return status === "booked" ? "green" : "amber";
+}
+
+/** Pinned ONLY while in progress. The moment it becomes "booked" it
+ * stops being pinned and joins the normal timeline sorted by
+ * created_at, so newer messages/cards push it upward like anything
+ * else — it stays visible there until isPastBookedDate() removes it. */
+function isBookingPinned(b: MergedBooking): boolean {
+  return bookingTone(b.status) === "amber";
 }
 
 function bookingMemberList(b: MergedBooking): { label: string; members: TeamBookingMemberStatus[] } | null {
@@ -265,9 +255,6 @@ function IconCheck() {
 function IconClock() {
   return <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>;
 }
-function IconX() {
-  return <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M18 6 6 18M6 6l12 12" /></svg>;
-}
 
 function BookingCard({
   booking, expanded, onToggleExpand, onOpen,
@@ -276,17 +263,10 @@ function BookingCard({
   const memberInfo = bookingMemberList(booking);
 
   return (
-    <div
-      className={`${styles.bookingCard} ${styles[`bookingCard_${tone}`]}`}
-      onClick={onOpen}
-      role="button"
-      tabIndex={0}
-    >
+    <div className={`${styles.bookingCard} ${styles[`bookingCard_${tone}`]}`} onClick={onOpen} role="button" tabIndex={0}>
       <div className={styles.bookingCardTop}>
         <span className={`${styles.bookingCardIcon} ${styles[`bookingCardIcon_${tone}`]}`}>
-          {tone === "green" && <IconCheck />}
-          {tone === "amber" && <IconClock />}
-          {tone === "red" && <IconX />}
+          {tone === "green" ? <IconCheck /> : <IconClock />}
         </span>
         <span className={styles.bookingCardPitch}>{booking.pitch_name}</span>
         <span className={`${styles.bookingCardBadge} ${styles[`bookingCardBadge_${tone}`]}`}>
@@ -645,7 +625,11 @@ function ChatThread({ teamSlug, onBack, onOpenSearch, onMessagesChange, scrollTo
 
   const [bookings, setBookings] = useState<MergedBooking[]>([]);
   const [expandedBookings, setExpandedBookings] = useState<Record<string, boolean>>({});
-  const [viewedBookingSummary, setViewedBookingSummary] = useState<BookedPitchSummary | null>(null);
+
+  const [viewedConfirmation, setViewedConfirmation] = useState<ConfirmationDetail | null>(null);
+  const [viewedPayment, setViewedPayment] = useState<PaymentDetail | null>(null);
+  const [viewedBookedSummary, setViewedBookedSummary] = useState<BookedPitchSummary | null>(null);
+  const [paymentActionLoading, setPaymentActionLoading] = useState(false);
 
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
@@ -677,16 +661,53 @@ function ChatThread({ teamSlug, onBack, onOpenSearch, onMessagesChange, scrollTo
     setExpandedBookings((prev) => ({ ...prev, [id]: !prev[id] }));
   }
 
-  async function openBookingSummary(booking: MergedBooking) {
+  function refreshBookings() {
+    if (!teamId) return;
+    fetchTeamBookings({ id: teamId, name: teamName })
+      .then(setBookings)
+      .catch((err) => console.error("Failed to refresh bookings:", err));
+  }
+
+  async function openBooking(booking: MergedBooking) {
     try {
-      const summary = await getBookedPitchSummary(booking.id);
-      setViewedBookingSummary(summary);
+      if (booking.status === "booked") {
+        const summary = await getBookedPitchSummary(booking.id);
+        setViewedBookedSummary(summary);
+      } else if (booking.status === "payment_pending") {
+        const detail = await getMyPaymentDetail(booking.id);
+        setViewedPayment(detail);
+      } else {
+        const detail = await getMyConfirmationDetail(booking.id);
+        setViewedConfirmation(detail);
+      }
     } catch (err) {
-      console.error("Failed to load booking summary:", err);
+      console.error("Failed to load booking detail:", err);
     }
   }
 
-  // ---- load team info, messages, and THIS team's bookings on team switch ----
+  async function handleConfirmYes(requestId: string) {
+    await confirmTeamBooking(requestId);
+    setViewedConfirmation(null);
+    refreshBookings();
+  }
+
+  async function handleConfirmNo(requestId: string) {
+    await declineTeamBooking(requestId);
+    setViewedConfirmation(null);
+    refreshBookings();
+  }
+
+  async function handlePay(requestId: string) {
+    setPaymentActionLoading(true);
+    try {
+      await payForBooking(requestId);
+      setViewedPayment(null);
+      refreshBookings();
+    } finally {
+      setPaymentActionLoading(false);
+    }
+  }
+
   useEffect(() => {
     setTeamId(null);
     setTeamName(teamSlug);
@@ -695,7 +716,9 @@ function ChatThread({ teamSlug, onBack, onOpenSearch, onMessagesChange, scrollTo
     setMessages([]);
     setBookings([]);
     setExpandedBookings({});
-    setViewedBookingSummary(null);
+    setViewedConfirmation(null);
+    setViewedPayment(null);
+    setViewedBookedSummary(null);
     setDraft("");
     setEditingId(null);
     setOpenMenuId(null);
@@ -735,7 +758,6 @@ function ChatThread({ teamSlug, onBack, onOpenSearch, onMessagesChange, scrollTo
 
   useEffect(() => { onMessagesChange(messages); }, [messages, onMessagesChange]);
 
-  // Poll messages — guarded against overlapping in-flight requests.
   useEffect(() => {
     if (!teamSlug) return;
     const interval = setInterval(() => {
@@ -758,7 +780,6 @@ function ChatThread({ teamSlug, onBack, onOpenSearch, onMessagesChange, scrollTo
     return () => clearInterval(interval);
   }, [teamSlug]);
 
-  // Poll bookings — time-sensitive, so faster than the message poll.
   useEffect(() => {
     if (!teamId) return;
     const interval = setInterval(() => {
@@ -814,8 +835,14 @@ function ChatThread({ teamSlug, onBack, onOpenSearch, onMessagesChange, scrollTo
     }
   }, [teamSlug, messages, hasMoreOlder, loadingOlder]);
 
-  const pinnedBookings = useMemo(() => bookings.filter(isBookingPinned), [bookings]);
-  const expiredBookings = useMemo(() => bookings.filter((b) => !isBookingPinned(b)), [bookings]);
+  // Apply BOTH filters here: hide cancelled/unavailable/expired
+  // entirely, and hide "booked" bookings whose date has passed.
+  const visibleBookings = useMemo(
+    () => bookings.filter((b) => isVisibleBooking(b) && !isPastBookedDate(b)),
+    [bookings]
+  );
+  const pinnedBookings = useMemo(() => visibleBookings.filter(isBookingPinned), [visibleBookings]);
+  const timelineBookings = useMemo(() => visibleBookings.filter((b) => !isBookingPinned(b)), [visibleBookings]);
 
   const dateSections = useMemo(() => {
     type Entry =
@@ -824,7 +851,7 @@ function ChatThread({ teamSlug, onBack, onOpenSearch, onMessagesChange, scrollTo
 
     const entries: Entry[] = [
       ...messages.map((m) => ({ kind: "message" as const, msg: m, ts: new Date(m.created_at).getTime() })),
-      ...expiredBookings.map((b) => ({ kind: "booking" as const, booking: b, ts: new Date(b.created_at).getTime() })),
+      ...timelineBookings.map((b) => ({ kind: "booking" as const, booking: b, ts: new Date(b.created_at).getTime() })),
     ].sort((a, b) => a.ts - b.ts);
 
     type Group =
@@ -862,7 +889,7 @@ function ChatThread({ teamSlug, onBack, onOpenSearch, onMessagesChange, scrollTo
     }
 
     return sections;
-  }, [messages, expiredBookings]);
+  }, [messages, timelineBookings]);
 
   function startEdit(msg: ChatMessage) {
     setOpenMenuId(null);
@@ -1014,7 +1041,7 @@ function ChatThread({ teamSlug, onBack, onOpenSearch, onMessagesChange, scrollTo
                       booking={group.booking}
                       expanded={!!expandedBookings[group.booking.id]}
                       onToggleExpand={() => toggleBookingExpand(group.booking.id)}
-                      onOpen={() => openBookingSummary(group.booking)}
+                      onOpen={() => openBooking(group.booking)}
                     />
                   </div>
                 );
@@ -1108,7 +1135,7 @@ function ChatThread({ teamSlug, onBack, onOpenSearch, onMessagesChange, scrollTo
               booking={b}
               expanded={!!expandedBookings[b.id]}
               onToggleExpand={() => toggleBookingExpand(b.id)}
-              onOpen={() => openBookingSummary(b)}
+              onOpen={() => openBooking(b)}
             />
           ))}
         </div>
@@ -1222,10 +1249,61 @@ function ChatThread({ teamSlug, onBack, onOpenSearch, onMessagesChange, scrollTo
         </div>
       )}
 
-      {viewedBookingSummary && (
+      {viewedConfirmation && (
+        <TeamBookingConfirmPopup
+          confirmation={{
+            id: viewedConfirmation.id,
+            request_id: viewedConfirmation.request_id,
+            pitch_name: viewedConfirmation.pitch_name,
+            team_name: viewedConfirmation.team_name,
+            selections: viewedConfirmation.selections,
+            price_per_member: viewedConfirmation.price_per_member,
+            expires_at: viewedConfirmation.expires_at,
+          }}
+          onConfirmed={() => {}}
+          onDeclined={() => {}}
+          onConfirm={handleConfirmYes}
+          onDecline={handleConfirmNo}
+          onClose={() => setViewedConfirmation(null)}
+          readOnly={!viewedConfirmation.can_respond}
+          readOnlyStatusLabel={
+            viewedConfirmation.my_status === "confirmed"
+              ? "You already confirmed."
+              : viewedConfirmation.my_status === "declined"
+              ? "You already declined."
+              : "This confirmation window has closed."
+          }
+        />
+      )}
+
+      {viewedPayment && (
+        <MemberPaymentPopup
+          payment={{
+            id: viewedPayment.id,
+            request_id: viewedPayment.request_id,
+            pitch_name: viewedPayment.pitch_name,
+            team_name: viewedPayment.team_name,
+            amount: viewedPayment.amount,
+            payment_expires_at: viewedPayment.payment_expires_at,
+          }}
+          loading={paymentActionLoading}
+          onPay={handlePay}
+          onClose={() => setViewedPayment(null)}
+          readOnly={!viewedPayment.can_pay}
+          readOnlyStatusLabel={
+            viewedPayment.my_status === "paid" || viewedPayment.my_status === "covered_by_owner"
+              ? "You already paid."
+              : viewedPayment.my_status === "excluded"
+              ? "You were excluded from this round."
+              : "This payment window has closed."
+          }
+        />
+      )}
+
+      {viewedBookedSummary && (
         <BookedPitchSummaryPopup
-          summary={viewedBookingSummary}
-          onClose={() => setViewedBookingSummary(null)}
+          summary={viewedBookedSummary}
+          onClose={() => setViewedBookedSummary(null)}
         />
       )}
     </div>

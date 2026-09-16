@@ -961,14 +961,38 @@ def get_my_active_team_bookings(owner):
     )
 
 
+def get_team_bookings_for_team(*, team_id, user):
+    """Every booking relevant to this team's chat — in-progress ones
+    plus finished/booked ones. Visible to ANY active team member, not
+    just the owner. This is the one source that actually covers "in
+    progress, nobody's specifically waiting on me right now" — which
+    the other three discovery endpoints never cover for the owner
+    (auto-confirmed, auto-paid) or for a member who already responded.
+    Cancelled bookings are hard-deleted elsewhere in this file, so
+    they never need filtering here — they simply don't exist anymore.
+    """
+    membership = (
+        TeamMembership.objects.active().for_user(user).filter(team_id=team_id).first()
+    )
+    if not membership:
+        raise PermissionDenied("Only active team members can view this team's bookings.")
+
+    statuses = _ACTIVE_STATUSES + [TeamBookingRequestStatus.BOOKED]
+    return (
+        TeamBookingRequest.objects.filter(team_id=team_id, status__in=statuses)
+        .select_related("team")
+        .order_by("-created_at")
+    )
+
+
 def get_team_booking_live_detail(*, request_id, owner) -> TeamBookingRequest:
     booking_request = TeamBookingRequest.objects.select_related("team").get(id=request_id)
 
     membership = (
         TeamMembership.objects.active_for_team(booking_request.team).for_user(owner).first()
     )
-    if not membership or membership.role != MembershipRole.OWNER:
-        raise PermissionDenied("Only this team's current owner can view its booking status.")
+    if not membership:
+        raise PermissionDenied("Only active team members can view this booking's status.")
 
     if booking_request.status == TeamBookingRequestStatus.PENDING and booking_request.is_expired:
         booking_request.mark_expired()

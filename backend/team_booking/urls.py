@@ -18,6 +18,7 @@ from .views import (
     ResolvePaymentTimeoutView,
     TeamBookingRequestCreateView,
     TeamBookingRequestLiveDetailView,
+    TeamBookingsForTeamView,
 )
 
 urlpatterns = [
@@ -37,5 +38,6 @@ urlpatterns = [
     path("bookings/team-request/<uuid:request_id>/booked-summary/", BookedPitchSummaryView.as_view()),
     path("bookings/team-request/<uuid:request_id>/open-slot/", OpenSlotForDeclinedView.as_view()),
     path("bookings/team-request/<uuid:request_id>/acknowledge-completion/", AcknowledgeBookingCompletionView.as_view()),
-        path("bookings/team-request/<uuid:request_id>/cover-open-slots-and-pay/", CoverOpenSlotsAndStartPaymentView.as_view()),
+    path("bookings/team-request/<uuid:request_id>/cover-open-slots-and-pay/", CoverOpenSlotsAndStartPaymentView.as_view()),
+    path("bookings/team-request/for-team/<uuid:team_id>/", TeamBookingsForTeamView.as_view()),
 ]

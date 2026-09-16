@@ -157,41 +157,111 @@ def _build_next_7_days(pitch: Pitch):
 
 
 def _apply_already_booked_slots(request, pitch, actor):
-    """Parses the 'already_booked_slots' form field (a JSON string, since
-    this rides along with multipart form data) and marks each described
-    hour range as BOOKED with the given name/phone attached. Returns an
-    error Response if the payload is malformed or invalid, else None.
+    """Marks owner-entered pre-existing bookings as BOOKED.
 
-    Expected shape:
-      [{"date": "2026-09-05", "start_hour": 8, "end_hour": 10,
-        "name": "Abebe Kebede", "phone": "0911..."}, ...]
+    Accepts the wizard's shape:
+      [{"date": "2026-09-05", "name": "Abebe", "phone": "0911...",
+        "ranges": [{"start": "08:00", "end": "09:00"},
+                   {"start": "14:00", "end": "17:00"}]}]
+    and the older flat shape:
+      [{"date": "...", "start_hour": 8, "end_hour": 11, "name": "...", "phone": "..."}]
+
+    Every range is split into consecutive 1-hour Slots, because
+    _build_day_slots and the weekly grid both look slots up by exact
+    hour start. A 3-hour range therefore creates 3 BOOKED slots.
     """
-    raw = request.data.get("already_booked_slots", "")
+    raw = request.data.get("already_booked_slots") or request.data.get("initial_slots") or ""
     if not raw:
         return None
 
-    try:
-        items = json.loads(raw)
-    except (TypeError, ValueError):
-        return Response({"already_booked_slots": ["Invalid format."]}, status=400)
+    if isinstance(raw, (bytes, bytearray)):
+        raw = raw.decode("utf-8", "ignore")
 
+    if isinstance(raw, str):
+        try:
+            items = json.loads(raw)
+        except (TypeError, ValueError):
+            return Response({"already_booked_slots": ["Invalid format."]}, status=400)
+    else:
+        items = raw
+
+    if isinstance(items, dict):
+        items = [items]
     if not isinstance(items, list):
         return Response({"already_booked_slots": ["Expected a list."]}, status=400)
 
-    serializer = AlreadyBookedSlotSerializer(data=items, many=True)
-    if not serializer.is_valid():
-        return Response({"already_booked_slots": serializer.errors}, status=400)
+    def parse_hour(value):
+        """'14:00' -> 14, 14 -> 14. Returns None if unusable."""
+        if isinstance(value, bool):
+            return None
+        if isinstance(value, (int, float)):
+            h = int(value)
+        else:
+            text = str(value or "").strip()
+            if not text:
+                return None
+            try:
+                h = int(text.split(":")[0])
+            except ValueError:
+                return None
+        return h if 0 <= h <= 24 else None
 
     tz = timezone.get_current_timezone()
-    for item in serializer.validated_data:
-        start_naive = datetime.combine(item["date"], time(hour=item["start_hour"]))
-        if item["end_hour"] == 24:
-            end_naive = datetime.combine(item["date"] + timedelta(days=1), time(hour=0))
-        else:
-            end_naive = datetime.combine(item["date"], time(hour=item["end_hour"]))
+    planned = []   # (start_dt, end_dt, name, phone)
+    seen = set()
 
-        start_dt = timezone.make_aware(start_naive, tz)
-        end_dt = timezone.make_aware(end_naive, tz)
+    for item in items:
+        if not isinstance(item, dict):
+            return Response({"already_booked_slots": ["Each entry must be an object."]}, status=400)
+
+        try:
+            day = datetime.strptime(str(item.get("date", ""))[:10], "%Y-%m-%d").date()
+        except ValueError:
+            return Response({"already_booked_slots": ["Each entry needs a date as YYYY-MM-DD."]}, status=400)
+
+        name = (str(item.get("name") or "").strip() or "Pre-existing booking")[:120]
+        phone = str(item.get("phone") or "").strip()[:30]
+
+        ranges = item.get("ranges")
+        if not isinstance(ranges, list) or not ranges:
+            ranges = [{"start": item.get("start_hour", item.get("start")),
+                       "end": item.get("end_hour", item.get("end"))}]
+
+        for r in ranges:
+            if not isinstance(r, dict):
+                return Response({"already_booked_slots": ["Each time range must be an object."]}, status=400)
+            start_h = parse_hour(r.get("start"))
+            end_h = parse_hour(r.get("end"))
+            if start_h is None or end_h is None:
+                continue
+            if end_h <= start_h:
+                return Response(
+                    {"already_booked_slots": [f"On {day}, the end time must be after the start time."]},
+                    status=400,
+                )
+
+            for h in range(start_h, end_h):
+                start_naive = datetime.combine(day, time(hour=h % 24)) + timedelta(days=h // 24)
+                start_dt = timezone.make_aware(start_naive, tz)
+                end_dt = start_dt + timedelta(hours=1)
+                if start_dt in seen:
+                    return Response(
+                        {"already_booked_slots": [f"On {day}, {h:02d}:00 is listed twice."]},
+                        status=400,
+                    )
+                seen.add(start_dt)
+                planned.append((start_dt, end_dt, name, phone))
+
+    if not planned:
+        return None
+
+    price = pitch.hourly_price
+
+    for start_dt, end_dt, name, phone in planned:
+        existing = Slot.objects.filter(pitch=pitch, start_dt=start_dt).first()
+        # Never stomp a real in-app booking (BOOKED with no manual name).
+        if existing and existing.status == SlotStatus.BOOKED and not existing.manual_booked_name:
+            continue
 
         Slot.objects.update_or_create(
             pitch=pitch,
@@ -200,12 +270,12 @@ def _apply_already_booked_slots(request, pitch, actor):
                 "end_dt": end_dt,
                 "status": SlotStatus.BOOKED,
                 "updated_by": actor,
-                "manual_booked_name": item["name"],
-                "manual_booked_phone": item.get("phone", ""),
+                "manual_booked_name": name,
+                "manual_booked_phone": phone,
+                "manual_price": price,
             },
         )
     return None
-
 
 def _build_monthly_weeks(pitch: Pitch):
     today = timezone.localdate()
