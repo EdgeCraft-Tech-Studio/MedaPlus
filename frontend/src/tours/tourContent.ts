@@ -100,7 +100,7 @@ export const tourContent: Record<string, TourStepContent[]> = {
     {
       target: '[data-tour="tour-findmatch-mode"]',
       title: "ጨዋታ ያግኙ",
-      content: "ይህንን በመጫን ክፍት የሆኑ በቡድኖች የተከፈቱ ጨዋታዎችን ፈልገው መሳተፍ ይችላሉ።",
+      content: "ይህንን በመጫን ክፍት የሆኑ ጨዋታዎችን ፈልገው መሳተፍ ይችላሉ።",
       placement: "bottom",
     },
   ],
@@ -153,6 +153,62 @@ export const tourContent: Record<string, TourStepContent[]> = {
       target: '[data-tour="tour-join-requests"]',
       title: "የመቀላቀል ጥያቄዎች",
       content: "አባል ያልሆኑ ተጫዋቾች የላኩትን የመቀላቀል ጥያቄ እዚህ ማየት ይችላሉ።",
+      placement: "top",
+    },
+  ],
+
+
+
+    owner: [
+    {
+      target: '[data-tour="tour-today-bookings"]',
+      title: "ዛሬ የተያዙ ቦታዎች",
+      content: "ዛሬ የተያዙትን ሜዳዎች እዚህ ማየት ይችላሉ።",
+      placement: "bottom",
+    },
+    {
+      target: '[data-tour="tour-needs-attention"]',
+      title: "ትኩረት የሚሹ",
+      content: "መፍትሄ የሚያስፈልጋቸው ችግሮች እዚህ ማየት ይችላሉ።",
+      placement: "bottom",
+    },
+    {
+      target: '[data-tour="tour-top-earners"]',
+      title: "የሜዳዎች ደረጃ",
+      content: "በተደጋጋሚ የተያዙ እና ከፍተኛ ገቢ ያስገኙ ሜዳዎችዎ ደረጃ ማየት ይችላሉ።",
+      placement: "bottom",
+    },
+    {
+      target: '[data-tour="tour-my-pitches"]',
+      title: "የእኔ ሜዳዎች",
+      content: "ያስመዘገቧቸው ሜዳዎች ሁሉ ከዚህ በታች ተዘርዝረው ይታያሉ።",
+      placement: "top",
+    },
+  ],
+
+    bookingGrid: [
+    {
+      target: '[data-tour="tour-cal-ethiopian"]',
+      title: "የቀን መቁጠሪያ",
+      content: "ይህንን በመጫን ቀኑን በኢትዮጵያ ቀን መቁጠሪያ ማየት ይችላሉ።",
+      placement: "bottom",
+    },
+    {
+      target: '[data-tour="tour-cal-gregorian"]',
+      title: "የቀን መቁጠሪያ",
+      content: "ይህንን በመጫን ቀኑን በግሪጎሪያን ቀን መቁጠሪያ ማየት ይችላሉ።",
+      placement: "bottom",
+    },
+    {
+      target: '[data-tour="tour-cell-past"]',
+      title: "ጊዜ ያለፈበት",
+      content: "የጠቆረ ሳጥን ጊዜው ያለፈበት መሆኑን የሚያሳይ ነው ።",
+      placement: "top",
+    },
+    {
+      target: '[data-tour="tour-cell-free"]',
+      title: "ክፍት ሰዓት",
+      content: "አረንጓዴ ሳጥን በመጫን ሜዳውን መያዝ ይችላሉ።",
       placement: "top",
     },
   ],

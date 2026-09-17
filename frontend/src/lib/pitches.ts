@@ -352,7 +352,7 @@ export type GridCell = {
   email?: string | null;
   date?: string;
 };
-
+ 
 export type WeeklyGridResponse = {
   date_from: string;
   date_to: string;

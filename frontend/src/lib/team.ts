@@ -349,6 +349,36 @@ export async function createDirectInvitation(slug: string, invitedUserId: string
 }
 
 
+
+// ---------- Received invitation detail + accept/reject (player side) ----------
+
+export interface InvitationDetailPreview {
+  id: string;
+  invitation_type: "direct" | "link" | "code";
+  team: PublicTeam;
+  invited_by: RosterUser;
+  status: string;
+  is_expired: boolean;
+  is_exhausted: boolean;
+  is_redeemable: boolean;
+  expires_at: string | null;
+}
+
+export async function getMyInvitationDetail(invitationId: string): Promise<InvitationDetailPreview> {
+  const res = await api.get(`/invitations/${invitationId}/detail/`);
+  return res.data;
+}
+
+export async function acceptInvitationById(invitationId: string) {
+  const res = await api.post(`/invitations/${invitationId}/accept/`);
+  return res.data;
+}
+
+export async function declineInvitationById(invitationId: string) {
+  const res = await api.post(`/invitations/${invitationId}/decline/`);
+  return res.data;
+}
+
 // ---------- Team booking requests (notify members instead of instant booking) ----------
 
 export interface TeamBookingRequestPayload {

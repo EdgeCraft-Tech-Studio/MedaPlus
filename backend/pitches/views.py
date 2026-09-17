@@ -9,7 +9,7 @@ from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
-from accounts.models.user import UserRole
+from accounts.models.user import UserRole 
 from bookings.models import BookingStatus, Slot, SlotStatus
 from .models import Tenant, Pitch, PitchImage
 from .serializers import AlreadyBookedSlotSerializer, PitchSerializer, PitchCreateSerializer, PitchUpdateSerializer
@@ -757,10 +757,10 @@ def owner_pitch_detail_stats(request, pitch_id: str):
     all_bookings = Booking.objects.filter(pitch=pitch, status=BookingStatus.CONFIRMED)
 
     return Response({
-        "pitch": PitchSerializer(pitch, context={"request": request}).data,
+        "pitch": PitchSerializer(pitch, context={"request": request}).data, 
         "earnings_week": str(revenue_since(week_start_dt)),
         "earnings_month": str(revenue_since(month_start_dt)),
-        "earnings_year": str(revenue_since(year_start_dt)),
+        "earnings_year": str(revenue_since(year_start_dt)), 
         "bookings_1m": bookings_since(now - timedelta(days=30)),
         "bookings_3m": bookings_since(now - timedelta(days=90)),
         "bookings_6m": bookings_since(now - timedelta(days=180)),

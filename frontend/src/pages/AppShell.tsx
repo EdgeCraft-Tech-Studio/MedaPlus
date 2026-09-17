@@ -9,6 +9,7 @@ import {
 } from "./Icons";
 import { type AppNotification, type NotificationCategory } from "./types";
 import { getUnreadSummary, type ChatUnreadSummary } from "../lib/chat";
+import TeamInvitationPopup from "./TeamInvitationPopup";
 import { me } from "../lib/auth";
 import type { SessionUser } from "../lib/session";
 import {
@@ -92,6 +93,7 @@ const VIEWABLE_TYPES = new Set([
   "team_booking_request_received",
   "team_booking_payment_request",
   "team_booking_pitch_booked",
+  "team_invitation_received",
 ]);
 
 function mapDtoToAppNotification(dto: AppNotificationDTO): AppNotification {
@@ -284,6 +286,7 @@ export default function AppShell() {
   const [viewedPayment, setViewedPayment] = useState<PaymentDetail | null>(null);
   const [viewedBookedSummary, setViewedBookedSummary] = useState<BookedPitchSummary | null>(null);
 
+  const [viewedInvitationId, setViewedInvitationId] = useState<string | null>(null);
   const [teamBookingListOpen, setTeamBookingListOpen] = useState(false);
   const [activeLiveDetailId, setActiveLiveDetailId] = useState<string | null>(null);
   const [teamUpdateNeedsDecision, setTeamUpdateNeedsDecision] = useState(false);
@@ -505,7 +508,14 @@ export default function AppShell() {
   }
 
   // ---------------- notification "View" click routing ----------------
-  async function handleViewNotification(n: AppNotification) {
+   async function handleViewNotification(n: AppNotification) {
+    if (n.rawType === "team_invitation_received") {
+      const invitationId = n.data?.invitation_id;
+      if (!invitationId) return;
+      setViewedInvitationId(invitationId);
+      return;
+    }
+
     const requestId = n.data?.team_booking_request_id;
     if (!requestId) return;
 
@@ -602,6 +612,14 @@ export default function AppShell() {
     }
   }
 
+    async function handleBellClick() {
+    const opening = !notifDrawerOpen;
+    setNotifDrawerOpen((v) => !v);
+    if (opening && unreadCount > 0) {
+      await markAllRead();
+    }
+  }
+
   async function handleAction(notif: AppNotification, response?: "accept" | "decline") {
     setNotifications((list) => list.map((n) => (n.id === notif.id ? { ...n, read: true } : n)));
     setUnreadNotifCount((c) => Math.max(0, c - (notif.read ? 0 : 1)));
@@ -668,10 +686,9 @@ export default function AppShell() {
           <button
             ref={bellRef}
             className={styles.bellBtn}
-            onClick={() => setNotifDrawerOpen((v) => !v)}
+            onClick={handleBellClick}
             aria-label={`Notifications${unreadCount ? `, ${unreadCount} unread` : ""}`}
             aria-expanded={notifDrawerOpen}
-            data-tour="tour-notifications"
           >
             <BellIcon width={20} height={20} />
             {unreadCount > 0 && <span className={styles.bellBadge}>{unreadCount > 9 ? "9+" : unreadCount}</span>}
@@ -738,10 +755,7 @@ export default function AppShell() {
           <div className={styles.notifDrawer} role="dialog" aria-label="Notifications" aria-modal="true">
             <div className={styles.chatDrawerHead}>
               <span>Notifications</span>
-              <div className={styles.notifPanelHeadActions}>
-                {unreadCount > 0 && (
-                  <button className={styles.markAllBtn} onClick={markAllRead}>Mark all read</button>
-                )}
+                <div className={styles.notifPanelHeadActions}>
                 <button className={styles.closePanelBtn} onClick={() => setNotifDrawerOpen(false)} aria-label="Close">
                   <XIcon width={15} height={15} />
                 </button>
@@ -795,11 +809,40 @@ export default function AppShell() {
                           {n.action.label}
                         </button>
                       )}
-                      {VIEWABLE_TYPES.has(n.rawType || "") && n.data?.team_booking_request_id && (
-                        <button className={styles.notifViewBtn} onClick={() => handleViewNotification(n)}>
-                          View
-                        </button>
+                                              {n.rawType === "team_invitation_received" && n.data?.invitation_id && !n.data?.response && (
+                        <div className={styles.notifActions}>
+                          <button
+                            className={styles.notifDeclineBtn}
+                            onClick={() => setViewedInvitationId(n.data!.invitation_id)}
+                          >
+                            Reject
+                          </button>
+                          <button
+                            className={styles.notifAcceptBtn}
+                            onClick={() => handleViewNotification(n)}
+                          >
+                            View
+                          </button>
+                        </div>
                       )}
+                      {n.rawType === "team_invitation_received" && n.data?.response && (
+                        <div
+                          className={
+                            n.data.response === "accepted"
+                              ? styles.notifResolvedTagAccepted
+                              : styles.notifResolvedTagDeclined
+                          }
+                        >
+                          {n.data.response === "accepted" ? "You accepted" : "You rejected"}
+                        </div>
+                      )}
+                      {VIEWABLE_TYPES.has(n.rawType || "") &&
+                        n.rawType !== "team_invitation_received" &&
+                        n.data?.team_booking_request_id && (
+                          <button className={styles.notifViewBtn} onClick={() => handleViewNotification(n)}>
+                            View
+                          </button>
+                        )}
                     </div>
                   </div>
                 );
@@ -960,10 +1003,25 @@ export default function AppShell() {
         />
       )}
 
-      {viewedBookedSummary && (
+            {viewedBookedSummary && (
         <BookedPitchSummaryPopup
           summary={viewedBookedSummary}
           onClose={() => setViewedBookedSummary(null)}
+        />
+      )}
+
+      {viewedInvitationId && (
+        <TeamInvitationPopup
+          invitationId={viewedInvitationId}
+          onClose={() => setViewedInvitationId(null)}
+          onAccepted={() => {
+            setViewedInvitationId(null);
+            refreshNotifications();
+          }}
+          onDeclined={() => {
+            setViewedInvitationId(null);
+            refreshNotifications();
+          }}
         />
       )}
     </div>

@@ -1,0 +1,229 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 12, 16, 0.5);
+  backdrop-filter: blur(3px);
+  display: grid;
+  place-items: center;
+  z-index: 2100;
+  padding: 20px;
+}
+
+.card {
+  position: relative;
+  width: 100%;
+  max-width: 400px;
+  background: var(--surface, #fff);
+  border-radius: 22px;
+  padding: 30px 24px 24px;
+  box-shadow: 0 26px 60px rgba(10, 12, 16, 0.3);
+  font-family: var(--font, 'Inter', sans-serif);
+  color: var(--text, #111318);
+  text-align: center;
+}
+
+.closeBtn {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: none;
+  background: var(--surface-alt, #f4f5f6);
+  color: var(--text-muted, #686d76);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.closeBtn:hover {
+  background: #fdecec;
+  color: #dc2626;
+}
+.closeBtn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.loadingWrap {
+  padding: 50px 0;
+  display: grid;
+  place-items: center;
+}
+.spinnerLarge {
+  width: 34px;
+  height: 34px;
+  color: var(--accent, #0f7a52);
+  animation: spin 0.7s linear infinite;
+}
+.errorState {
+  padding: 40px 10px;
+  color: var(--text-muted, #686d76);
+  font-size: 13.5px;
+}
+
+.teamAvatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 18px;
+  overflow: hidden;
+  margin: 0 auto 14px;
+  background: var(--accent-soft, #e7f4ee);
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border, #e6e7ea);
+}
+.teamAvatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.teamAvatarFallback {
+  width: 28px;
+  height: 28px;
+  color: var(--accent, #0f7a52);
+}
+
+.title {
+  font-size: 19px;
+  font-weight: 800;
+  margin-bottom: 4px;
+}
+.subtitle {
+  font-size: 13px;
+  color: var(--text-muted, #686d76);
+  margin-bottom: 20px;
+  line-height: 1.4;
+}
+
+.detailCard {
+  background: var(--surface-alt, #f4f5f6);
+  border: 1px solid var(--border, #e6e7ea);
+  border-radius: 14px;
+  padding: 14px 16px;
+  text-align: left;
+  margin-bottom: 20px;
+  display: grid;
+  gap: 14px;
+}
+.detailRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.detailIcon {
+  width: 18px;
+  height: 18px;
+  color: var(--accent, #0f7a52);
+  flex-shrink: 0;
+}
+.detailLabel {
+  font-size: 11px;
+  color: var(--text-faint, #9a9ea5);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-weight: 600;
+}
+.detailValue {
+  font-size: 13.5px;
+  font-weight: 700;
+  margin-top: 1px;
+}
+
+.footerRow {
+  display: flex;
+  gap: 10px;
+}
+
+.rejectBtn {
+  flex: 1;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid #f2c6c6;
+  background: #fdecec;
+  color: #dc2626;
+  font-weight: 700;
+  font-size: 13.5px;
+  cursor: pointer;
+}
+.rejectBtn:hover:not(:disabled) {
+  background: #fbdada;
+}
+.rejectBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.acceptBtn {
+  flex: 1.3;
+  padding: 12px;
+  border-radius: 12px;
+  border: none;
+  background: linear-gradient(135deg, #0f7a52, #0c6544);
+  color: #fff;
+  font-weight: 800;
+  font-size: 13.5px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.acceptBtn:disabled {
+  background: var(--border-strong, #d7d9dd);
+  cursor: not-allowed;
+}
+
+.confirmDeclineBox {
+  text-align: left;
+}
+.confirmDeclineText {
+  font-size: 13px;
+  color: var(--text-muted, #686d76);
+  margin-bottom: 14px;
+}
+.rejectBtnGhost {
+  flex: 1;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border, #e6e7ea);
+  background: var(--surface, #fff);
+  color: var(--text-muted, #686d76);
+  font-weight: 700;
+  font-size: 13.5px;
+  cursor: pointer;
+}
+.rejectBtnFinal {
+  flex: 1.3;
+  padding: 12px;
+  border-radius: 12px;
+  border: none;
+  background: #dc2626;
+  color: #fff;
+  font-weight: 800;
+  font-size: 13.5px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.rejectBtnFinal:disabled {
+  background: var(--border-strong, #d7d9dd);
+  cursor: not-allowed;
+}
+
+.spinner {
+  width: 15px;
+  height: 15px;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 420px) {
+  .card {
+    padding: 26px 18px 20px;
+  }
+}

@@ -18,7 +18,7 @@ class PitchImageSerializer(serializers.ModelSerializer):
             return None
         request = self.context.get("request")
         if request:
-            return request.build_absolute_uri(obj.image.url)
+            return request.build_absolute_uri(obj.image.url) 
         return obj.image.url
 
 

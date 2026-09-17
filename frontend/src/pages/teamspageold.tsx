@@ -19,7 +19,7 @@ export default function TeamsPage() {
           <h1 className={styles.heroTitle}>Teams</h1>
         </div>
         <div className={styles.heroActions}>
-          <Link to="/discover/teams" className={styles.btnGhost}>
+          <Link to="/join" className={styles.btnGhost}>
             <SearchIcon width={15} height={15} />
             Find teams
           </Link>

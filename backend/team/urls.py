@@ -1,6 +1,6 @@
 from django.urls import path
 
-from team.views.invitation import InvitationByCodeView, JoinRequestViaCodeView
+from team.views.invitation import InvitationByCodeView, JoinRequestViaCodeView, MyInvitationDetailView
 
 from .views import (
     InvitationAcceptByIdView,
@@ -144,6 +144,11 @@ invitation_urlpatterns = [
         "invitations/<uuid:pk>/decline/",
         InvitationDeclineByIdView.as_view(),
         name="invitation-decline-by-id",
+    ),
+    path(
+        "invitations/<uuid:pk>/detail/",
+        MyInvitationDetailView.as_view(),
+        name="invitation-my-detail",
     ),
     path(
         "invitations/code/<str:code>/",

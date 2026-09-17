@@ -12,6 +12,7 @@ import AddButton from "../components/AddButton";
 import PitchWizardModal from "../components/PitchWizardModal";
 import ToastContainer, { showToast } from "./Toast";
 import styles from "./css/Owner.module.css";
+import TourGuide from "../tours/TourGuide";
 
 type IconName =
   | "clock"
@@ -481,6 +482,8 @@ export default function Owner() {
 
   return (
     <div>
+      <TourGuide page="owner" waitForPage="appshell" />
+
       <div className={styles.page}>
         <ToastContainer />
         <div className={styles.container}>
@@ -598,7 +601,7 @@ export default function Owner() {
 
           {/* ---------- Insight cards — sit below the hero, never overlapping it ---------- */}
           <div className={styles.insightRow}>
-            <div className={styles.insightCard}>
+            <div className={styles.insightCard} data-tour="tour-today-bookings">
               <div className={styles.insightHead}>
                 <div className={`${styles.insightIconWrap} ${styles.insightIconBlue}`}>
                   <Icon name="calendarCheck" size={16} />
@@ -624,7 +627,7 @@ export default function Owner() {
               )}
             </div>
 
-            <div className={styles.insightCard}>
+            <div className={styles.insightCard} data-tour="tour-needs-attention">
               <div className={styles.insightHead}>
                 <div className={`${styles.insightIconWrap} ${styles.insightIconRed}`}>
                   <Icon name="hourglass" size={16} />
@@ -649,7 +652,7 @@ export default function Owner() {
               )}
             </div>
 
-            <div className={styles.insightCard}>
+            <div className={styles.insightCard} data-tour="tour-top-earners">
               <div className={styles.insightHead}>
                 <div className={`${styles.insightIconWrap} ${styles.insightIconGold}`}>
                   <Icon name="trophy" size={16} />
@@ -832,7 +835,7 @@ export default function Owner() {
 
           <div className={styles.section}>
             <div className={styles.sectionHeader}>
-              <div className={styles.sectionTitleWrap}>
+              <div className={styles.sectionTitleWrap} data-tour="tour-my-pitches">
                 <span className={styles.sectionAccent} />
                 <h2 className={styles.sectionTitle}>My pitches</h2>
               </div>

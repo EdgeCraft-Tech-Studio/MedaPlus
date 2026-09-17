@@ -308,6 +308,25 @@ class InvitationDeclineByIdView(APIView):
 
 
 
+class MyInvitationDetailView(APIView):
+    """GET /invitations/{id}/detail/ — full preview for the popup a
+    player sees after clicking 'View' on a received DIRECT invitation
+    notification: team name, member count, location, so they can
+    decide before accepting. Scoped to invited_user=request.user so
+    a player can never preview an invitation addressed to someone
+    else, even by guessing a valid id.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk):
+        invitation = get_object_or_404(
+            TeamInvitation.objects.select_related("team", "invited_by"),
+            pk=pk,
+            invited_user=request.user,
+        )
+        return Response(InvitationPreviewSerializer(invitation).data)
+
 
 class JoinRequestViaCodeView(APIView):
     """POST /invitations/code/request/ — look up a team by its join

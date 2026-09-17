@@ -19,6 +19,10 @@ from ..models import (
 )
 from .exceptions import InsufficientPermissionError, InvitationNotRedeemableError
 from .membership_service import activate_membership, get_active_membership_or_raise
+from notification.choices import NotificationType
+from notification.services import notify
+
+from notification.models import Notification
 
 DEFAULT_INVITATION_TTL = timedelta(days=7)
 
@@ -37,6 +41,35 @@ def _require_management_permission(team, acting_user):
         raise InsufficientPermissionError("Only OWNER or ADMIN can send invitations.")
     return membership
 
+def _mark_invitation_notification_resolved(invitation: TeamInvitation, *, response: str) -> None:
+    """Once a DIRECT invitation is accepted/declined, stamp the
+    ORIGINAL 'X invited you to join' notification's `data` payload
+    with the outcome — deliberately NOT reusing is_read for this.
+    is_read only ever means 'the user opened the notification list
+    and saw this,' which can flip to True for reasons that have
+    nothing to do with resolving THIS invitation (e.g. the user
+    opens the bell and every unread notification — including a
+    brand-new, untouched invitation from a different team — gets
+    marked read at once). Using is_read as a proxy for 'responded'
+    was the bug: opening the drawer silently hid the Accept/Reject
+    buttons on every OTHER still-pending invitation too.
+
+    Instead we store an explicit `response` key directly on this
+    row's data. The frontend checks THIS field, never is_read, to
+    decide whether to show buttons or a resolved state.
+    """
+    notification = Notification.objects.filter(
+        recipient_id=invitation.invited_user_id,
+        notification_type=NotificationType.TEAM_INVITATION_RECEIVED,
+        data__invitation_id=str(invitation.id),
+    ).first()
+    if notification is None:
+        return
+    notification.data = {**notification.data, "response": response}
+    notification.save(update_fields=["data"])
+
+
+
 
 def create_direct_invitation(
     *, team: Team, invited_user, invited_by, expires_in: Optional[timedelta] = None
@@ -54,7 +87,7 @@ def create_direct_invitation(
 
         raise DuplicatePendingRequestError("User already has a pending invitation for this team.")
 
-    return TeamInvitation.objects.create(
+    invitation = TeamInvitation.objects.create(
         team=team,
         invitation_type=InvitationType.DIRECT,
         invited_user=invited_user,
@@ -63,6 +96,20 @@ def create_direct_invitation(
         expires_at=timezone.now() + (expires_in or DEFAULT_INVITATION_TTL),
     )
 
+    inviter_name = f"{invited_by.first_name} {invited_by.last_name}".strip() or invited_by.username
+    notify(
+        recipient=invited_user,
+        notification_type=NotificationType.TEAM_INVITATION_RECEIVED,
+        title=f"{team.name} invited you to join",
+        body=f"{inviter_name} invited you to join {team.name}.",
+        data={
+            "invitation_id": str(invitation.id),
+            "team_id": str(team.id),
+            "team_slug": team.slug,
+        },
+    )
+
+    return invitation
 
 def create_link_invitation(
     *,
@@ -164,6 +211,7 @@ def accept_invitation(*, invitation: TeamInvitation, accepting_user) -> TeamInvi
         locked_invitation.save(update_fields=["redemption_count"])
     else:
         locked_invitation.mark_accepted()
+        _mark_invitation_notification_resolved(locked_invitation, response="accepted")
 
     locked_invitation.refresh_from_db()
     return locked_invitation
@@ -179,6 +227,7 @@ def decline_invitation(*, invitation: TeamInvitation, declining_user) -> TeamInv
     if not invitation.is_pending:
         raise InvitationNotRedeemableError("Invitation is not pending.")
     invitation.mark_declined()
+    _mark_invitation_notification_resolved(invitation, response="declined")
     return invitation
 
 

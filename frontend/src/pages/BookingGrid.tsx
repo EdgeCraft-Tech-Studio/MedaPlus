@@ -14,6 +14,7 @@ import {
   formatEthiopianHourLabel,
 } from "../lib/ethiopianCalendar";
 import styles from "./css/BookingGrid.module.css";
+import TourGuide from "../tours/TourGuide";
 
 type CalendarType = "ethiopian" | "gregorian";
 type DateGroupKey = "from" | "to";
@@ -225,7 +226,7 @@ export default function BookingGrid({ pitch }: { pitch: Pitch }) {
     return { date_from: toIsoDateLocal(monday), date_to: toIsoDateLocal(sunday) };
   }, [fromDate, toDate]);
 
-  async function load() {
+  async function load() { 
     setLoading(true);
     try {
       const res = await getPitchWeeklyGrid(pitch.id, {
@@ -359,18 +360,25 @@ export default function BookingGrid({ pitch }: { pitch: Pitch }) {
 
   return (
     <div className={styles.wrap}>
+      {/* ready=!!data: the grid's cells (the tour's actual targets) don't
+          exist until the first load finishes, so the tour waits for that
+          instead of racing the initial fetch. */}
+      <TourGuide page="bookingGrid" waitForPage="appshell" ready={!!data} />
+
       <div className={styles.sectionLabel}>Booking grid</div>
 
       <div className={styles.calendarToggle}>
         <button
           className={`${styles.calToggleBtn} ${calendarType === "ethiopian" ? styles.calToggleBtnActive : ""}`}
           onClick={() => handleCalendarTypeChange("ethiopian")}
+          data-tour="tour-cal-ethiopian"
         >
           የኢትዮጵያ ቀን መቁጠሪያ
         </button>
         <button
           className={`${styles.calToggleBtn} ${calendarType === "gregorian" ? styles.calToggleBtnActive : ""}`}
           onClick={() => handleCalendarTypeChange("gregorian")}
+          data-tour="tour-cal-gregorian"
         >
           Gregorian
         </button>
@@ -480,7 +488,7 @@ export default function BookingGrid({ pitch }: { pitch: Pitch }) {
             {data?.hours.map((h, rowIdx) => (
               <tr key={h.start_hour} className={rowIdx % 2 === 0 ? styles.rowEven : styles.rowOdd}>
                 <th className={styles.timeLabel}>{hourRowLabel(h)}</th>
-                                {data.days.map((day) => {
+                                {data.days.map((day, dayIdx) => {
                   const key = `${day.date}_${h.start_hour}`;
                   const cell = data.cells[key];
                   const booked = cell?.status === "booked";
@@ -490,11 +498,26 @@ export default function BookingGrid({ pitch }: { pitch: Pitch }) {
                     : past
                     ? styles.gridCellPast
                     : styles.gridCellFree;
+
+                  // Tour anchors: 2nd row (rowIdx 1), 3rd column (dayIdx 2)
+                  // explains a passed/unbookable slot; 2nd row, 6th column
+                  // (dayIdx 5) explains a free/bookable slot. Position-based
+                  // on purpose — the grid is always 14 rows x 7 columns and
+                  // "today" always falls early in the visible week, so these
+                  // two cells are reliably past/free respectively.
+                  const tourTarget =
+                    rowIdx === 1 && dayIdx === 2
+                      ? "tour-cell-past"
+                      : rowIdx === 1 && dayIdx === 5
+                      ? "tour-cell-free"
+                      : undefined;
+
                   return (
                     <td
                       key={key}
                       className={`${styles.gridCell} ${cellClass}`}
                       onClick={(e) => onCellClick(e, day, h, cell)}
+                      data-tour={tourTarget}
                     >
                       {booked ? (
                         <span className={styles.cellName} title={cell?.name}>{cell?.name}</span>
@@ -571,3 +594,4 @@ export default function BookingGrid({ pitch }: { pitch: Pitch }) {
     </div>
   );
 }
+  
