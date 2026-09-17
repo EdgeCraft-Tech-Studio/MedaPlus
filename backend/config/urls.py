@@ -32,7 +32,7 @@ urlpatterns = [
         LoginView.as_view(),
         name='auth-login',
     ),
-
+ 
     
     path('api/auth/me/', MeView.as_view(), name='auth_me'),                       # already existed, now correct
     path('api/auth/me/photo/', UpdatePhotoView.as_view(), name='auth-me-photo'),

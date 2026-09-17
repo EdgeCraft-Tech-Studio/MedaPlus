@@ -30,6 +30,7 @@ class Slot(models.Model):
     manual_booked_name = models.CharField(max_length=120, blank=True, default="")
     manual_booked_phone = models.CharField(max_length=30, blank=True, default="")
     manual_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)  # NEW
+    manual_close_reason = models.CharField(max_length=255, blank=True, default="")  # NEW: owner-entered reason when a free slot is closed (SlotStatus.BLOCKED)
    
     held_until = models.DateTimeField(null=True, blank=True)
 

@@ -1,5 +1,6 @@
 from datetime import datetime, time, timedelta
 import json
+import re
 from django.contrib.auth import get_user_model
 from django.db.models.aggregates import Sum
 from django.utils import timezone 
@@ -40,6 +41,25 @@ def _monday_of(d):
     return d - timedelta(days=d.weekday())
 
 
+
+def _normalize_ethiopian_phone(raw: str):
+    """Accepts 09XXXXXXXX, 07XXXXXXXX, +2519XXXXXXXX, +2517XXXXXXXX,
+    2519XXXXXXXX, 2517XXXXXXXX. Returns the canonical stored form
+    ('+2519XXXXXXXX' / '+2517XXXXXXXX') or None if invalid."""
+    text = (raw or "").strip().replace(" ", "")
+    if re.match(r"^09\d{8}$", text):
+        return "+251" + text[1:]
+    if re.match(r"^07\d{8}$", text):
+        return "+251" + text[1:]
+    if re.match(r"^\+2519\d{8}$", text):
+        return text
+    if re.match(r"^\+2517\d{8}$", text):
+        return text
+    if re.match(r"^2519\d{8}$", text):
+        return "+" + text
+    if re.match(r"^2517\d{8}$", text):
+        return "+" + text
+    return None
 
 
 
@@ -1098,6 +1118,27 @@ def owner_pitch_weekly_grid(request, pitch_id: str):
             "date": local_start.date().isoformat(),
         }
 
+    closed_qs = Slot.objects.filter(
+        pitch=pitch, status=SlotStatus.BLOCKED,
+        start_dt__gte=range_start_dt, start_dt__lt=range_end_dt,
+    )
+    for s in closed_qs:
+        local_start = timezone.localtime(s.start_dt)
+        key = f"{local_start.date().isoformat()}_{local_start.hour}"
+        if key in cells:
+            continue
+        cells[key] = {
+            "status": "closed",
+            "kind": "closed",
+            "name": "Closed",
+            "amount": None,
+            "time_label": f"{local_start.strftime('%I:%M %p')} - {timezone.localtime(s.end_dt).strftime('%I:%M %p')}",
+            "phone": None,
+            "email": None,
+            "date": local_start.date().isoformat(),
+            "reason": s.manual_close_reason or "",
+        }
+
     return Response({
         "date_from": date_from.isoformat(),
         "date_to": date_to.isoformat(),
@@ -1105,7 +1146,6 @@ def owner_pitch_weekly_grid(request, pitch_id: str):
         "hours": hours,
         "cells": cells,
     })
-
 
 
 @api_view(["POST"])
@@ -1124,11 +1164,21 @@ def owner_grid_book_slot(request, pitch_id: str):
     date_str = request.data.get("date")
     start_hour = request.data.get("start_hour")
     name = (request.data.get("name") or "").strip()
-    phone = (request.data.get("phone") or "").strip()
+    phone_raw = (request.data.get("phone") or "").strip()
     price = request.data.get("price")
 
     if not date_str or start_hour is None or not name:
         return Response({"detail": "date, start_hour and name are required."}, status=400)
+
+    if not phone_raw:
+        return Response({"detail": "Phone number is required."}, status=400)
+
+    normalized_phone = _normalize_ethiopian_phone(phone_raw)
+    if not normalized_phone:
+        return Response(
+            {"detail": "Enter a valid phone number: 09xxxxxxxx, 07xxxxxxxx, +2519xxxxxxxx or +2517xxxxxxxx."},
+            status=400,
+        )
 
     try:
         day = datetime.strptime(date_str, "%Y-%m-%d").date()
@@ -1166,7 +1216,7 @@ def owner_grid_book_slot(request, pitch_id: str):
     slot.status = SlotStatus.BOOKED
     slot.updated_by = request.user
     slot.manual_booked_name = name
-    slot.manual_booked_phone = phone
+    slot.manual_booked_phone = normalized_phone
     slot.manual_price = price_dec
     slot.save()
 
@@ -1178,8 +1228,72 @@ def owner_grid_book_slot(request, pitch_id: str):
             "name": name,
             "amount": str(price_dec) if price_dec is not None else None,
             "time_label": f"{timezone.localtime(start_dt).strftime('%I:%M %p')} - {timezone.localtime(end_dt).strftime('%I:%M %p')}",
-            "phone": phone or None,
+            "phone": normalized_phone,
             "email": None,
             "date": day.isoformat(),
+        },
+    }, status=201)
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def owner_grid_close_slot(request, pitch_id: str):
+    """Lets a pitch owner (or admin) close a single free grid cell so
+    players can no longer book it — e.g. pitch maintenance, private use.
+    A reason is mandatory. Same ownership rule as owner_grid_book_slot."""
+    pitch = get_object_or_404(Pitch, id=pitch_id)
+
+    if not _can_edit_pitch(request.user, pitch):
+        return Response({"detail": "You can only manage bookings on your own pitch."}, status=403)
+
+    date_str = request.data.get("date")
+    start_hour = request.data.get("start_hour")
+    reason = (request.data.get("reason") or "").strip()
+
+    if not date_str or start_hour is None or not reason:
+        return Response({"detail": "date, start_hour and reason are required."}, status=400)
+
+    try:
+        day = datetime.strptime(date_str, "%Y-%m-%d").date()
+        start_hour = int(start_hour)
+    except (ValueError, TypeError):
+        return Response({"detail": "Invalid date or start_hour."}, status=400)
+
+    if day < timezone.localdate():
+        return Response({"detail": "You can't close a date in the past."}, status=400)
+
+    if not (pitch.opening_time.hour <= start_hour < pitch.closing_time.hour):
+        return Response({"detail": "That hour is outside the pitch's open hours."}, status=400)
+
+    tz = timezone.get_current_timezone()
+    start_dt = timezone.make_aware(datetime.combine(day, time(hour=start_hour)), tz)
+    end_dt = start_dt + timedelta(hours=1)
+
+    if start_dt <= timezone.localtime():
+        return Response({"detail": "That time has already passed."}, status=400)
+
+    slot, _ = Slot.objects.get_or_create(
+        pitch=pitch, start_dt=start_dt, end_dt=end_dt,
+        defaults={"status": SlotStatus.AVAILABLE},
+    )
+    if slot.status != SlotStatus.AVAILABLE:
+        return Response({"detail": "That slot is no longer free."}, status=409)
+
+    slot.status = SlotStatus.BLOCKED
+    slot.updated_by = request.user
+    slot.manual_close_reason = reason[:255]
+    slot.save()
+
+    return Response({
+        "ok": True,
+        "cell": {
+            "status": "closed",
+            "kind": "closed",
+            "name": "Closed",
+            "amount": None,
+            "time_label": f"{timezone.localtime(start_dt).strftime('%I:%M %p')} - {timezone.localtime(end_dt).strftime('%I:%M %p')}",
+            "phone": None,
+            "email": None,
+            "date": day.isoformat(),
+            "reason": slot.manual_close_reason,
         },
     }, status=201)

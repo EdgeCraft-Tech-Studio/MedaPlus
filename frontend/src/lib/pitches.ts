@@ -343,14 +343,15 @@ export type GridDay = { date: string; weekday: string; weekday_short: string; di
 export type GridHour = { start_hour: number; end_hour: number; label: string };
 
 export type GridCell = {
-  status: "booked" | "free";
-  kind?: "individual" | "manual" | "team";
+  status: "booked" | "free" | "closed";
+  kind?: "individual" | "manual" | "team" | "closed";
   name?: string;
   amount?: string | null;
   time_label?: string;
   phone?: string | null;
   email?: string | null;
   date?: string;
+  reason?: string | null;
 };
  
 export type WeeklyGridResponse = {
@@ -371,8 +372,16 @@ export async function getPitchWeeklyGrid(
 
 export async function bookGridSlot(
   pitchId: string,
-  payload: { date: string; start_hour: number; name: string; phone?: string; price?: string }
+  payload: { date: string; start_hour: number; name: string; phone: string; price?: string }
 ) {
   const res = await api.post(`/pitches/${pitchId}/weekly-grid/book/`, payload);
+  return res.data as { ok: boolean; cell: GridCell };
+}
+
+export async function closeGridSlot(
+  pitchId: string,
+  payload: { date: string; start_hour: number; reason: string }
+) {
+  const res = await api.post(`/pitches/${pitchId}/weekly-grid/close/`, payload);
   return res.data as { ok: boolean; cell: GridCell };
 }

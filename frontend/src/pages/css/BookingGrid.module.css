@@ -477,6 +477,32 @@
   background: var(--color-surface-alt);
 }
 
+.closeSlotBtn {
+  width: 100%;
+  margin-top: 10px;
+  padding: 9px 14px;
+  border: none;
+  border-radius: 8px;
+  background: #dc2626;
+  color: #fff;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+}
+.closeSlotBtn:hover:not(:disabled) {
+  background: #b91c1c;
+}
+.closeSlotBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.popupErrorText {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #dc2626;
+}
+
 .clockWrapDisabled select {
   cursor: not-allowed;
 }

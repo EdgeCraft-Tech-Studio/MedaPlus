@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Pitch } from "../lib/pitches";
-import { getPitchWeeklyGrid, bookGridSlot } from "../lib/pitches";
+import { getPitchWeeklyGrid, bookGridSlot, closeGridSlot } from "../lib/pitches";
 import type { GridCell, GridHour } from "../lib/pitches";
 import {
   gregorianToEthiopian,
@@ -19,6 +19,7 @@ import TourGuide from "../tours/TourGuide";
 type CalendarType = "ethiopian" | "gregorian";
 type DateGroupKey = "from" | "to";
 type Nullable<T> = T | "";
+type PopupTab = "book" | "close";
 
 function formatBirr(value: string | number | undefined | null) {
   const num = Number(value) || 0;
@@ -48,6 +49,21 @@ function addDays(d: Date, n: number) {
   const copy = new Date(d);
   copy.setDate(copy.getDate() + n);
   return copy;
+}
+
+/** Validates + normalizes an Ethiopian phone number to the canonical
+ * stored form ("+2519XXXXXXXX" / "+2517XXXXXXXX"). Accepts:
+ * 09XXXXXXXX, 07XXXXXXXX, +2519XXXXXXXX, +2517XXXXXXXX,
+ * 2519XXXXXXXX, 2517XXXXXXXX. Returns null if invalid. */
+function normalizeEthiopianPhone(raw: string): string | null {
+  const text = raw.trim().replace(/\s+/g, "");
+  if (/^09\d{8}$/.test(text)) return "+251" + text.slice(1);
+  if (/^07\d{8}$/.test(text)) return "+251" + text.slice(1);
+  if (/^\+2519\d{8}$/.test(text)) return text;
+  if (/^\+2517\d{8}$/.test(text)) return text;
+  if (/^2519\d{8}$/.test(text)) return "+" + text;
+  if (/^2517\d{8}$/.test(text)) return "+" + text;
+  return null;
 }
 
 const GREGORIAN_MONTH_NAMES = [
@@ -158,7 +174,10 @@ export default function BookingGrid({ pitch }: { pitch: Pitch }) {
   const [data, setData] = useState<{ date_from: string; date_to: string; days: { date: string; weekday: string; weekday_short: string; display_date: string }[]; hours: GridHour[]; cells: Record<string, GridCell> } | null>(null);
   const [loading, setLoading] = useState(true);
   const [popup, setPopup] = useState<PopupState>(null);
+  const [popupTab, setPopupTab] = useState<PopupTab>("book");
   const [bookForm, setBookForm] = useState({ name: "", phone: "", price: "" });
+  const [bookPhoneError, setBookPhoneError] = useState("");
+  const [closeForm, setCloseForm] = useState({ reason: "" });
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -226,7 +245,7 @@ export default function BookingGrid({ pitch }: { pitch: Pitch }) {
     return { date_from: toIsoDateLocal(monday), date_to: toIsoDateLocal(sunday) };
   }, [fromDate, toDate]);
 
-  async function load() { 
+  async function load() {
     setLoading(true);
     try {
       const res = await getPitchWeeklyGrid(pitch.id, {
@@ -301,7 +320,8 @@ export default function BookingGrid({ pitch }: { pitch: Pitch }) {
 
   function onCellClick(e: React.MouseEvent, day: { date: string }, hour: GridHour, cell: GridCell | undefined) {
     const { x, y } = popupAnchor(e);
-    if (cell && cell.status === "booked") {
+    // Booked or closed cells: show the read-only info popup.
+    if (cell && (cell.status === "booked" || cell.status === "closed")) {
       setPopup({ kind: "info", cell, x, y });
       return;
     }
@@ -309,19 +329,50 @@ export default function BookingGrid({ pitch }: { pitch: Pitch }) {
       return; // past + free -> not bookable, do nothing
     }
     setBookForm({ name: "", phone: "", price: "" });
+    setBookPhoneError("");
+    setCloseForm({ reason: "" });
+    setPopupTab("book");
     setPopup({ kind: "book", date: day.date, start_hour: hour.start_hour, label: hour.label, x, y });
   }
 
   async function submitBooking() {
     if (popup?.kind !== "book" || !bookForm.name.trim()) return;
+
+    const normalizedPhone = normalizeEthiopianPhone(bookForm.phone);
+    if (!normalizedPhone) {
+      setBookPhoneError("Enter a valid phone: 09xxxxxxxx, 07xxxxxxxx, +2519xxxxxxxx or +2517xxxxxxxx.");
+      return;
+    }
+    setBookPhoneError("");
+
     setSaving(true);
     try {
       const res = await bookGridSlot(pitch.id, {
         date: popup.date,
         start_hour: popup.start_hour,
         name: bookForm.name.trim(),
-        phone: bookForm.phone.trim() || undefined,
+        phone: normalizedPhone,
         price: bookForm.price.trim() || undefined,
+      });
+      const key = `${popup.date}_${popup.start_hour}`;
+      setData((prev) => (prev ? { ...prev, cells: { ...prev.cells, [key]: res.cell } } : prev));
+      setPopup(null);
+    } catch {
+      // keep the popup open so the owner can retry
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function submitClose() {
+    if (popup?.kind !== "book" || !closeForm.reason.trim()) return;
+
+    setSaving(true);
+    try {
+      const res = await closeGridSlot(pitch.id, {
+        date: popup.date,
+        start_hour: popup.start_hour,
+        reason: closeForm.reason.trim(),
       });
       const key = `${popup.date}_${popup.start_hour}`;
       setData((prev) => (prev ? { ...prev, cells: { ...prev.cells, [key]: res.cell } } : prev));
@@ -492,9 +543,12 @@ export default function BookingGrid({ pitch }: { pitch: Pitch }) {
                   const key = `${day.date}_${h.start_hour}`;
                   const cell = data.cells[key];
                   const booked = cell?.status === "booked";
-                  const past = !booked && isPastSlot(day.date, h.start_hour);
+                  const closed = cell?.status === "closed";
+                  const past = !booked && !closed && isPastSlot(day.date, h.start_hour);
                   const cellClass = booked
                     ? styles.gridCellBooked
+                    : closed
+                    ? styles.gridCellPast
                     : past
                     ? styles.gridCellPast
                     : styles.gridCellFree;
@@ -521,6 +575,8 @@ export default function BookingGrid({ pitch }: { pitch: Pitch }) {
                     >
                       {booked ? (
                         <span className={styles.cellName} title={cell?.name}>{cell?.name}</span>
+                      ) : closed ? (
+                        <span className={styles.cellName} title={cell?.reason || "Closed"}>Closed</span>
                       ) : past ? (
                         <span className={styles.cellPastDot} />
                       ) : (
@@ -535,63 +591,129 @@ export default function BookingGrid({ pitch }: { pitch: Pitch }) {
         </table>
       </div>
 
-      {/* ---------- info popup ---------- */}
+      {/* ---------- info popup (booked or closed cell) ---------- */}
       {popup?.kind === "info" && (
         <>
           <div className={styles.popupBackdrop} onClick={() => setPopup(null)} />
           <div className={styles.popupCard} style={{ left: popup.x, top: popup.y }}>
             <div className={styles.popupArrow} />
             <div className={styles.popupHead}>
-              <span className={`${styles.popupTag} ${popup.cell.kind === "manual" ? styles.popupTagManual : styles.popupTagIndividual}`}>
-                {popup.cell.kind === "team" ? "Team booking" : popup.cell.kind === "manual" ? "Entered by owner" : "Booked in-app"}
+              <span className={`${styles.popupTag} ${popup.cell.kind === "manual" || popup.cell.kind === "closed" ? styles.popupTagManual : styles.popupTagIndividual}`}>
+                {popup.cell.kind === "team"
+                  ? "Team booking"
+                  : popup.cell.kind === "closed"
+                  ? "Closed by owner"
+                  : popup.cell.kind === "manual"
+                  ? "Entered by owner"
+                  : "Booked in-app"}
               </span>
             </div>
-            <div className={styles.popupName}>{popup.cell.name}</div>
+            <div className={styles.popupName}>
+              {popup.cell.kind === "closed" ? "Closed" : popup.cell.name}
+            </div>
             <div className={styles.popupRow}><span>Time</span><b>{popup.cell.time_label}</b></div>
-            {popup.cell.amount && <div className={styles.popupRow}><span>Paid</span><b>{formatBirr(popup.cell.amount)}</b></div>}
-            {popup.cell.phone && <div className={styles.popupRow}><span>Phone</span><b>{popup.cell.phone}</b></div>}
-            {popup.cell.email && <div className={styles.popupRow}><span>Email</span><b>{popup.cell.email}</b></div>}
+
+            {popup.cell.kind === "closed" ? (
+              <div className={styles.popupRow}><span>Reason</span><b>{popup.cell.reason || "—"}</b></div>
+            ) : (
+              <>
+                {popup.cell.amount && <div className={styles.popupRow}><span>Paid</span><b>{formatBirr(popup.cell.amount)}</b></div>}
+                {popup.cell.phone && <div className={styles.popupRow}><span>Phone</span><b>{popup.cell.phone}</b></div>}
+                {popup.cell.email && <div className={styles.popupRow}><span>Email</span><b>{popup.cell.email}</b></div>}
+              </>
+            )}
           </div>
         </>
       )}
 
-      {/* ---------- booking form popup ---------- */}
+      {/* ---------- free-cell popup: Book / Close tabs ---------- */}
       {popup?.kind === "book" && (
         <>
           <div className={styles.popupBackdrop} onClick={() => setPopup(null)} />
           <div className={styles.popupCard} style={{ left: popup.x, top: popup.y }}>
             <div className={styles.popupArrow} />
+
+            <div className={styles.calendarToggle} style={{ marginBottom: 10 }}>
+              <button
+                type="button"
+                className={`${styles.calToggleBtn} ${popupTab === "book" ? styles.calToggleBtnActive : ""}`}
+                onClick={() => setPopupTab("book")}
+              >
+                Book
+              </button>
+              <button
+                type="button"
+                className={`${styles.calToggleBtn} ${popupTab === "close" ? styles.calToggleBtnActive : ""}`}
+                onClick={() => setPopupTab("close")}
+              >
+                Close
+              </button>
+            </div>
+
             <div className={styles.popupHead}>
               <span className={styles.popupTagFree}>Free — {popup.label}</span>
             </div>
-            <div className={styles.bookFormGrid}>
-              <input
-                className={styles.bookInput}
-                placeholder="Name *"
-                value={bookForm.name}
-                onChange={(e) => setBookForm((f) => ({ ...f, name: e.target.value }))}
-                autoFocus
-              />
-              <input
-                className={styles.bookInput}
-                placeholder="Phone"
-                value={bookForm.phone}
-                onChange={(e) => setBookForm((f) => ({ ...f, phone: e.target.value }))}
-              />
-              <input
-                className={styles.bookInput}
-                placeholder="Price (Br)"
-                value={bookForm.price}
-                onChange={(e) => setBookForm((f) => ({ ...f, price: e.target.value }))}
-              />
-            </div>
-            <button className={styles.bookBtn} disabled={!bookForm.name.trim() || saving} onClick={submitBooking}>
-              {saving ? "Booking…" : "Book"}
-            </button>
+
+            {popupTab === "book" ? (
+              <>
+                <div className={styles.bookFormGrid}>
+                  <input
+                    className={styles.bookInput}
+                    placeholder="Name *"
+                    value={bookForm.name}
+                    onChange={(e) => setBookForm((f) => ({ ...f, name: e.target.value }))}
+                    autoFocus
+                  />
+                  <input
+                    className={styles.bookInput}
+                    placeholder="Phone (09xxxxxxxx) *"
+                    value={bookForm.phone}
+                    onChange={(e) => {
+                      setBookForm((f) => ({ ...f, phone: e.target.value }));
+                      if (bookPhoneError) setBookPhoneError("");
+                    }}
+                  />
+                  <input
+                    className={styles.bookInput}
+                    placeholder="Price (Br)"
+                    value={bookForm.price}
+                    onChange={(e) => setBookForm((f) => ({ ...f, price: e.target.value }))}
+                  />
+                </div>
+                {bookPhoneError && (
+                  <div className={styles.popupErrorText}>{bookPhoneError}</div>
+                )}
+                <button
+                  className={styles.bookBtn}
+                  disabled={!bookForm.name.trim() || !bookForm.phone.trim() || saving}
+                  onClick={submitBooking}
+                >
+                  {saving ? "Booking…" : "Book"}
+                </button>
+              </>
+            ) : (
+              <>
+                <div className={styles.bookFormGrid}>
+                  <input
+                    className={styles.bookInput}
+                    placeholder="Reason *"
+                    value={closeForm.reason}
+                    onChange={(e) => setCloseForm({ reason: e.target.value })}
+                    autoFocus
+                  />
+                </div>
+                <button
+                  className={styles.closeSlotBtn}
+                  disabled={!closeForm.reason.trim() || saving}
+                  onClick={submitClose}
+                >
+                  {saving ? "Closing…" : "Close"}
+                </button>
+              </>
+            )}
           </div>
         </>
       )}
     </div>
   );
 }
-  

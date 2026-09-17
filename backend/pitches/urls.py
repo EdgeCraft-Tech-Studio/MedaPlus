@@ -4,6 +4,7 @@ from .views import (
     owner_pitch_booking_history,
     owner_pitch_weekly_grid,       # NEW
     owner_grid_book_slot,          # NEW
+    owner_grid_close_slot,         # NEW
     pitches_list_create,
     admin_pending_pitches,
     admin_approve_pitch,
@@ -21,7 +22,8 @@ urlpatterns = [
     path("pitches/", pitches_list_create),
     path("pitches/<str:pitch_id>/owner-stats/", owner_pitch_detail_stats),
     path("pitches/<str:pitch_id>/booking-history/", owner_pitch_booking_history),
-    path("pitches/<str:pitch_id>/weekly-grid/book/", owner_grid_book_slot),   # NEW, must precede weekly-grid/
+    path("pitches/<str:pitch_id>/weekly-grid/book/", owner_grid_book_slot),    # NEW, must precede weekly-grid/
+    path("pitches/<str:pitch_id>/weekly-grid/close/", owner_grid_close_slot),  # NEW, must precede weekly-grid/
     path("pitches/<str:pitch_id>/weekly-grid/", owner_pitch_weekly_grid),      # NEW
     path("pitches/<str:pitch_id>/", pitch_detail),   # keep this LAST — it's a catch-all on pitch_id
     path("admin/stats/", admin_platform_stats),
