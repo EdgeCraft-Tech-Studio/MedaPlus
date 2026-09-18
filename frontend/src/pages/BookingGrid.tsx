@@ -17,7 +17,6 @@ import styles from "./css/BookingGrid.module.css";
 import TourGuide from "../tours/TourGuide";
 
 type CalendarType = "ethiopian" | "gregorian";
-type DateGroupKey = "from" | "to";
 type Nullable<T> = T | "";
 type PopupTab = "book" | "close";
 

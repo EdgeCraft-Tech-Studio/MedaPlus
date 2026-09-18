@@ -3,7 +3,7 @@
 
 export type EthiopianDate = { year: number; month: number; day: number };
 
-const JD_EPOCH_OFFSET_AMETE_MIHRET = 1723856;
+
 const ETHIOPIAN_EPOCH_JDN = 1724221;
 
 function gregorianToJDN(year: number, month: number, day: number): number {

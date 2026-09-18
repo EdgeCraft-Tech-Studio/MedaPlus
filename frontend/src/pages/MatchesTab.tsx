@@ -435,7 +435,7 @@ function MatchFormModal({
 }
 
 function CancelMatchDialog({
-  match, onConfirm, onDismiss, cancelling,
+   onConfirm, onDismiss, cancelling,
 }: {
   match: Match;
   onConfirm: () => void;

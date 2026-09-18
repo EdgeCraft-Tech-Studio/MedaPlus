@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import type { OwnerPitchDetailStats, BookingHistoryEntry } from "../lib/pitches";
-import { getOwnerPitchStats, getPitchBookingHistory, updatePitch } from "../lib/pitches";
+import type { OwnerPitchDetailStats } from "../lib/pitches";
+import { getOwnerPitchStats, updatePitch } from "../lib/pitches";
 import PitchWizardModal from "../components/PitchWizardModal";
 import styles from "./css/OwnerPitchDetail.module.css";
 import BookingGrid from "./BookingGrid";
@@ -51,173 +51,11 @@ function sportLabel(sport: string) {
 
 /* ---------- booking detail popup ---------- */
 
-function BookingDetailModal({ entry, onClose }: { entry: BookingHistoryEntry; onClose: () => void }) {
-  const b = entry.booked_by;
-  const displayName = b.name || "Unknown";
 
-  return (
-    <div className={styles.modalOverlay} onClick={onClose}>
-      <div className={styles.bookingModal} onClick={(e) => e.stopPropagation()}>
-        <div className={styles.modalHead}>
-          <h3 className={styles.modalTitle}>Booking details</h3>
-          <button className={styles.modalCloseBtn} onClick={onClose} aria-label="Close">
-            <Icon name="x" size={16} />
-          </button>
-        </div>
-
-        <div className={styles.bookingModalBody}>
-          <div className={styles.bookerCard}>
-            <span className={styles.bookerAvatar}><Icon name="user" size={20} /></span>
-            <div>
-              <div className={styles.bookerName}>{displayName}</div>
-              <span className={`${styles.bookerTypeTag} ${b.type === "manual" ? styles.bookerTypeManual : styles.bookerTypeIndividual}`}>
-                {b.type === "manual" ? "Entered by owner" : "Booked in-app"}
-              </span>
-            </div>
-          </div>
-
-          <div className={styles.bookerFactRow}>
-            <Icon name="mail" size={14} />
-            {b.email || "No email"}
-          </div>
-          <div className={styles.bookerFactRow}>
-            <Icon name="phone" size={14} />
-            {b.phone || "No phone on file"}
-          </div>
-
-          <div className={styles.bookingDivider} />
-
-          <div className={styles.bookerFactRow}>
-            <Icon name="clock" size={14} />
-            {entry.time_label}
-          </div>
-          {entry.booking_type && (
-            <div className={styles.bookerFactRow}>
-              <Icon name="tag" size={14} />
-              {entry.booking_type.charAt(0) + entry.booking_type.slice(1).toLowerCase()} booking
-            </div>
-          )}
-          {entry.total_price && (
-            <div className={styles.bookerFactRow}>
-              <Icon name="cash" size={14} />
-              {formatBirr(entry.total_price)}
-            </div>
-          )}
-          {entry.notes && (
-            <div className={styles.bookingNotes}>
-              <b>Notes:</b> {entry.notes}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 /* ---------- booking history table ---------- */
 
-function BookingHistorySection({ pitchId }: { pitchId: string }) {
-  const [entries, setEntries] = useState<BookingHistoryEntry[]>([]);
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [totalCount, setTotalCount] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [selected, setSelected] = useState<BookingHistoryEntry | null>(null);
 
-  async function load(p: number) {
-    try {
-      setLoading(true);
-      const res = await getPitchBookingHistory(pitchId, p);
-      setEntries(res.results);
-      setPage(res.page);
-      setTotalPages(res.total_pages);
-      setTotalCount(res.total_count);
-    } catch {
-      setEntries([]);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    load(1);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pitchId]);
-
-  const pageNumbers = Array.from({ length: totalPages }, (_, i) => i + 1);
-
-  return (
-    <>
-      <div className={styles.sectionLabel}>
-        Booking history {totalCount > 0 && <span className={styles.sectionLabelCount}>({totalCount})</span>}
-      </div>
-
-      <div className={styles.historyTableWrap}>
-        <table className={styles.historyTable}>
-          <thead>
-            <tr>
-              <th>Date &amp; time</th>
-              <th>Booked by</th>
-              <th>Type</th>
-              <th>Price</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr><td colSpan={4} className={styles.historyEmptyCell}>Loading...</td></tr>
-            ) : entries.length === 0 ? (
-              <tr><td colSpan={4} className={styles.historyEmptyCell}>No bookings yet.</td></tr>
-            ) : (
-              entries.map((e) => (
-                <tr key={e.id} className={styles.historyRow} onClick={() => setSelected(e)}>
-                  <td>{e.time_label}</td>
-                  <td>
-                    <span className={styles.historyBookerName}>{e.booked_by.name || "Unknown"}</span>
-                    {e.booked_by.type === "manual" && <span className={styles.manualTag}>Manual</span>}
-                  </td>
-                  <td>{e.booking_type ? e.booking_type.charAt(0) + e.booking_type.slice(1).toLowerCase() : "—"}</td>
-                  <td>{e.total_price ? formatBirr(e.total_price) : "—"}</td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {totalPages > 1 && (
-        <div className={styles.pagination}>
-          <button
-            className={styles.pageArrowBtn}
-            onClick={() => load(page - 1)}
-            disabled={page <= 1}
-            aria-label="Previous page"
-          >
-            <Icon name="chevronLeft" size={14} />
-          </button>
-          {pageNumbers.map((n) => (
-            <button
-              key={n}
-              className={`${styles.pageNumBtn} ${n === page ? styles.pageNumBtnActive : ""}`}
-              onClick={() => load(n)}
-            >
-              {n}
-            </button>
-          ))}
-          <button
-            className={styles.pageArrowBtn}
-            onClick={() => load(page + 1)}
-            disabled={page >= totalPages}
-            aria-label="Next page"
-          >
-            <Icon name="chevronRight" size={14} />
-          </button>
-        </div>
-      )}
-
-      {selected && <BookingDetailModal entry={selected} onClose={() => setSelected(null)} />}
-    </>
-  );
-}
 
 /* ---------- main page ---------- */
 
