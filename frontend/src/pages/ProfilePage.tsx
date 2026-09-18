@@ -458,9 +458,6 @@ export default function ProfilePage() {
   const [showPhoneForm, setShowPhoneForm] = useState(false);
 
   const [loggingOut, setLoggingOut] = useState(false);
-
-  const [playerMode, setPlayerMode] = useState(false);
-
   useEffect(() => {
     async function load() {
       try {
@@ -565,14 +562,6 @@ export default function ProfilePage() {
       setPasswordError(firstError);
     } finally {
       setSavingPassword(false);
-    }
-  }
-
-  function handleTogglePlayerMode() {
-    const next = !playerMode;
-    setPlayerMode(next);
-    if (next) {
-      // TODO: handle the activate player mode
     }
   }
 
@@ -748,26 +737,8 @@ export default function ProfilePage() {
         )}
       </div>
 
-      {/* ---------- Player Mode ---------- */}
-      <div className={styles.sectionTitle}>Player Mode</div>
-      <div className={styles.card}>
-        <button
-          type="button"
-          className={`${styles.row} ${styles.rowBtn}`}
-          onClick={handleTogglePlayerMode}
-        >
-          <span className={styles.rowLabel}>Activate player mode</span>
-          <span
-            className={`${styles.toggle} ${playerMode ? styles.toggleOn : ""}`}
-            role="switch"
-            aria-checked={playerMode}
-          >
-            <span className={styles.toggleCircle} />
-          </span>
-        </button>
-      </div>
-
       {/* ---------- Account ---------- */}
+            {/* ---------- Account ---------- */}
       <div className={styles.sectionTitle}>Account</div>
       <div className={styles.card}>
         <button
@@ -788,6 +759,6 @@ export default function ProfilePage() {
           {!loggingOut && <ChevronRightIcon width={15} height={15} />}
         </button>
       </div>
-    </div> 
+    </div>
   );
 }

@@ -24,8 +24,8 @@ from .models import (
 )
 
 REQUEST_LIFETIME_MINUTES = 30
-PAYMENT_LIFETIME_MINUTES = 1
-PAYMENT_REMINDER_MINUTES = 1
+PAYMENT_LIFETIME_MINUTES = 10
+PAYMENT_REMINDER_MINUTES = 5
 
 
 def _format_selection_summary(selections: list) -> str:

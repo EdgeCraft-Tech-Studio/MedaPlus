@@ -23,7 +23,7 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      # These two override whatever is in backend/.env so the container
+      # These override whatever is in backend/.env so the container
       # always talks to the other containers by their service name.
       DB_HOST: db
       REDIS_HOST: redis
@@ -35,6 +35,34 @@ services:
       - media_data:/app/media
     expose:
       - "8000"
+
+  celery:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    environment:
+      DB_HOST: db
+      REDIS_HOST: redis
+    depends_on:
+      - db
+      - redis
+    command: celery -A config worker --loglevel=info
+
+  celery-beat:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    environment:
+      DB_HOST: db
+      REDIS_HOST: redis
+    depends_on:
+      - db
+      - redis
+    command: celery -A config beat --loglevel=info
 
   frontend:
     build:
