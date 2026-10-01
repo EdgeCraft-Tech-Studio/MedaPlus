@@ -117,6 +117,7 @@ urlpatterns = [
     path("api/", include("match.urls")),
     path("api/", include("team_booking.urls")),
     path("api/", include("notification.urls")),
+    path("api/", include("payment.urls")),
     # path("api/", include("bookings.urls")),
 
     # path("api/admin/owners/", admin_list_owners),

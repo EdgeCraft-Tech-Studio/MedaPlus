@@ -124,7 +124,7 @@ export async function createBooking(payload: {
   const res = await api.post("/bookings/", payload); 
   return res.data;
 }
-
+ 
 export async function listPendingPitches() {
   const res = await api.get("/admin/pitches/pending/");
   return res.data.pending_pitches as Pitch[];

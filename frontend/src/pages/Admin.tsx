@@ -7,6 +7,7 @@ import PitchLocationModal from "../components/PitchLocationModal";
 import LoadingBall from "../pages/LoadingBall";
 import styles from "./css/Admin.module.css";
 import ToastContainer, { showToast } from "../pages/Toast";
+import OwnerPaymentConfigModal from "../components/OwnerPaymentConfigModal";
 
 import {
   approveOwner,
@@ -384,10 +385,12 @@ function AllOwnerRow({
   owner,
   stat,
   onDelete,
+  onManagePayment,
 }: {
   owner: OwnerRow;
   stat: AdminOwnerStat | undefined;
   onDelete: () => void;
+  onManagePayment: () => void;
 }) {
   return (
     <div className={styles.ownerListRow}>
@@ -414,6 +417,9 @@ function AllOwnerRow({
         <Icon name="cash" size={13} />
         {formatBirr(stat?.revenue)}
       </div>
+      <button type="button" className={styles.deleteIconBtn} onClick={onManagePayment} title="Payment setup" style={{ color: "#123522" }}>
+        <Icon name="cash" size={14} />
+      </button>
       <button type="button" className={styles.deleteIconBtn} onClick={onDelete} title="Delete owner">
         <Icon name="trash" size={14} />
       </button>
@@ -553,6 +559,7 @@ export default function Admin() {
 
   // ✅ NEW: state for the custom confirm modal
   const [confirmState, setConfirmState] = useState<ConfirmState>(null);
+    const [paymentConfigOwner, setPaymentConfigOwner] = useState<{ id: string; name: string } | null>(null);
 
   const activeFilterCount =
     (search.trim() ? 1 : 0) +
@@ -616,7 +623,7 @@ export default function Admin() {
 
   async function onApprovePitch(id: string) {
     setMsg("");
-    try {
+    try { 
       const res = await approvePitch(id);
       setMsg(res?.ok ? "Pitch approved." : "Could not approve pitch.");
       showToast("Pitch approved.", "create");
@@ -804,6 +811,13 @@ export default function Admin() {
 
           {/* ✅ NEW: custom confirm modal, replaces window.confirm */}
           <ConfirmModal state={confirmState} onClose={() => setConfirmState(null)} />
+            {paymentConfigOwner && (
+            <OwnerPaymentConfigModal
+              ownerId={paymentConfigOwner.id}
+              ownerName={paymentConfigOwner.name}
+              onClose={() => setPaymentConfigOwner(null)}
+            />
+          )}
 
           <hr className={styles.divider} />
 
@@ -878,6 +892,7 @@ export default function Admin() {
                       owner={o}
                       stat={ownerStatById.get(o.id)}
                       onDelete={() => onDeleteOwnerAccount(o.id, o.username)}
+                      onManagePayment={() => setPaymentConfigOwner({ id: o.id, name: o.full_name || o.username })}
                     />
                   ))}
                 </div>

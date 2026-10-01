@@ -891,7 +891,7 @@ export default function AppShell() {
       )}
 
       {!pendingBookingConfirmation && !pendingOwnerAction && pendingPayment && (
-        <MemberPaymentPopup payment={pendingPayment} loading={paymentLoading} onPay={handlePay} />
+        <MemberPaymentPopup payment={pendingPayment} />
       )}
 
       {/* ---------------- Anytime team-bookings drawer flow ---------------- */}
@@ -976,7 +976,7 @@ export default function AppShell() {
         />
       )}
 
-      {viewedPayment && (
+            {viewedPayment && (
         <MemberPaymentPopup
           payment={{
             id: viewedPayment.id,
@@ -985,11 +985,6 @@ export default function AppShell() {
             team_name: viewedPayment.team_name,
             amount: viewedPayment.amount,
             payment_expires_at: viewedPayment.payment_expires_at,
-          }}
-          loading={paymentLoading}
-          onPay={async (id) => {
-            await handlePay(id);
-            setViewedPayment(null);
           }}
           onClose={() => setViewedPayment(null)}
           readOnly={!viewedPayment.can_pay}

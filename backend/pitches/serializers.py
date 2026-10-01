@@ -26,7 +26,7 @@ class PitchSerializer(serializers.ModelSerializer):
     id = serializers.SerializerMethodField()
     tenant_id = serializers.SerializerMethodField()
     tenant_name = serializers.SerializerMethodField()
-    opening_time_label = serializers.SerializerMethodField()
+    opening_time_label = serializers.SerializerMethodField() 
     closing_time_label = serializers.SerializerMethodField()
     cover_image_url = serializers.SerializerMethodField()
     image_urls = serializers.SerializerMethodField()

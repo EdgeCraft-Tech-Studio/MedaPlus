@@ -27,6 +27,10 @@ ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "localhost").split(",")
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
+VERIFY_ET_API_KEY = "VERIFY_BANK_ET_4VGAjNvNCf4nCRYYLetLuN6W7N8Vk25xKb6G8HFBkLr-yEM_pDD7N6dXwr1e_iob"
+VERIFY_ET_BASE_URL = os.getenv("VERIFY_ET_BASE_URL", "https://verify.et")
+
+
 # Application definition
 
 INSTALLED_APPS = [
@@ -50,6 +54,7 @@ INSTALLED_APPS = [
     "match",
     "team_booking",
     "notification",
+    "payment"
 ]
 
 MIDDLEWARE = [
@@ -150,6 +155,8 @@ REST_FRAMEWORK = {
         "code_redeem": "10/min",
         "join_request_create": "50/day",
         "chat_message_send": "60/min",
+        "payment_submit": "30/hour",
+        "receipt_extraction": "20/hour",
     },
 }
 

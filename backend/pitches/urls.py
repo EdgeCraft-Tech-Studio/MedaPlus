@@ -27,7 +27,7 @@ urlpatterns = [
     path("pitches/<str:pitch_id>/weekly-grid/", owner_pitch_weekly_grid),      # NEW
     path("pitches/<str:pitch_id>/", pitch_detail),   # keep this LAST — it's a catch-all on pitch_id
     path("admin/stats/", admin_platform_stats),
-    path("admin/pitches/pending/", admin_pending_pitches),
+    path("admin/pitches/pending/", admin_pending_pitches), 
     path("admin/pitches/<str:pitch_id>/approve/", admin_approve_pitch),
     path("admin/pitches/<str:pitch_id>/delete/", admin_delete_pitch),
     path("admin/owners/<str:owner_id>/delete/", admin_delete_owner),

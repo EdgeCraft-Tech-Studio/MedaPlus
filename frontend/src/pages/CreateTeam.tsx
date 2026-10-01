@@ -406,7 +406,7 @@ export default function CreateTeam() {
         });
         setErrors(flat);
       } else {
-        setSubmitErr("Couldn't create the team. Please try again.");
+        setSubmitErr("Ops this team name exist!");
       }
     } finally {
       setLoading(false);

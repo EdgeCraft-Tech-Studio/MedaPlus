@@ -587,7 +587,7 @@ def pitch_detail(request, pitch_id: str):
             "pitch": PitchSerializer(pitch, context={"request": request}).data,
             "message": "Pitch updated successfully.",
         }
-    )
+    )  
 
 
 @api_view(["GET"])
