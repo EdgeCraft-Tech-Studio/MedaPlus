@@ -147,7 +147,7 @@ export default function OwnerPaymentConfigModal({ ownerId, ownerName, onClose }:
             Eligible
           </button>
           <button className={`${styles.tabBtn} ${tab === "accounts" ? styles.tabBtnActive : ""}`} onClick={() => setTab("accounts")}>
-            Bank Accounts
+            Bank Accounts/ Wallet
           </button>
           <div className={styles.tabSlider} style={{ transform: tab === "accounts" ? "translateX(100%)" : "translateX(0)" }} />
         </div>

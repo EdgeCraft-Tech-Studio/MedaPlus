@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import styles from "./css/MemberPaymentPopup.module.css";
 import {
   getTeamBookingPaymentInfo, extractReceiptData, submitTeamBookingPayment, pollPaymentTransaction,
-  type PaymentInfo, type OwnerBankAccount, type PaymentTransaction,
+  type PaymentInfo, type OwnerBankAccount,
 } from "../lib/payment";
 import PaymentLogo from "../components/PaymentLogo";
 
@@ -36,6 +36,7 @@ const REFERENCE_LABELS: Record<string, { label: string; placeholder: string }> =
 const DEFAULT_REF = { label: "Transaction Reference", placeholder: "Reference number" };
 
 const REJECTION_MESSAGES: Record<string, string> = {
+  sender_identity_mismatch: "The account number on this payment doesn't match yours. Make sure you're uploading your OWN payment, not someone else's.",
   no_result_from_provider: "We couldn't find a matching transaction. Double-check the reference and try again.",
   not_verified: "This transaction couldn't be verified. Please check the details and try again.",
   currency_mismatch: "This transaction wasn't in ETB.",
@@ -102,6 +103,7 @@ export default function MemberPaymentPopup({ payment, onClose, readOnly = false,
   const [scanning, setScanning] = useState(false);
   const [referenceNumber, setReferenceNumber] = useState("");
   const [refAutoFilled, setRefAutoFilled] = useState(false);
+  const [refNeedsManual, setRefNeedsManual] = useState(false);
   const [accountSuffix, setAccountSuffix] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [error, setError] = useState("");
@@ -134,18 +136,28 @@ export default function MemberPaymentPopup({ payment, onClose, readOnly = false,
     setError("");
     setScanning(true);
     setRefAutoFilled(false);
+    setRefNeedsManual(false);
     try {
       const result = await extractReceiptData(file, selectedAccount?.bank);
       if (result.suggested_reference_number) {
         setReferenceNumber(result.suggested_reference_number);
         setRefAutoFilled(true);
+      } else {
+        // OCR ran fine but found nothing confident — never guess,
+        // just ask the payer to confirm it themselves.
+        setRefNeedsManual(true);
       }
       if (!selectedAccount && result.suggested_bank && info) {
         const match = info.bank_accounts.find((a) => a.bank === result.suggested_bank);
         if (match) setSelectedAccount(match);
       }
-    } catch {
-      // OCR is best-effort — user can still type the reference manually
+    } catch (err: any) {
+      setRefNeedsManual(true);
+      if (err?.response?.status === 429) {
+        setError("You've tried this too many times — please wait a minute before uploading again.");
+      } else {
+        setError("We couldn't scan this image automatically. Please type the transaction number below.");
+      }
     } finally {
       setScanning(false);
     }
@@ -211,6 +223,16 @@ export default function MemberPaymentPopup({ payment, onClose, readOnly = false,
         {!readOnly && step !== "verified" && <div className={styles.countdown}>{countdown}</div>}
         {onClose && (readOnly || step === "verified" || step === "rejected" || step === "needs_review") && (
           <button className={styles.readOnlyClose} onClick={onClose} aria-label="Close"><CloseIcon /></button>
+        )}
+
+        {error && (
+          <div className={styles.topErrorBanner}>
+            <span className={styles.noNoBadge}><NoGestureIcon className={styles.noNoIcon} /></span>
+            <span className={styles.topErrorText}>{error}</span>
+            <button className={styles.topErrorClose} onClick={() => setError("")} aria-label="Dismiss">
+              <CloseIcon />
+            </button>
+          </div>
         )}
 
         <div className={styles.titleRow}>
@@ -299,11 +321,21 @@ export default function MemberPaymentPopup({ payment, onClose, readOnly = false,
                         {refAutoFilled && !scanning && <span className={styles.ocrTag}><CheckCircleIcon className={styles.ocrTagIcon} /> Auto-detected</span>}
                       </span>
                       <input
-                        type="text" className={styles.input}
+                        type="text"
+                        className={`${styles.input} ${refNeedsManual && !referenceNumber ? styles.inputNeedsAttention : ""}`}
                         value={referenceNumber}
-                        onChange={(e) => { setReferenceNumber(e.target.value.toUpperCase()); setRefAutoFilled(false); }}
+                        onChange={(e) => {
+                          setReferenceNumber(e.target.value.toUpperCase());
+                          setRefAutoFilled(false);
+                          setRefNeedsManual(false);
+                        }}
                         placeholder={refMeta.placeholder}
                       />
+                      {refNeedsManual && !referenceNumber && (
+                        <span className={styles.manualHint}>
+                          We couldn't read this automatically — please type it in from your screenshot.
+                        </span>
+                      )}
                     </label>
 
                     {selectedAccount.requirements.requires_account_suffix && (
@@ -332,12 +364,7 @@ export default function MemberPaymentPopup({ payment, onClose, readOnly = false,
                   </>
                 )}
 
-                {error && (
-                  <div className={styles.errorBanner}>
-                    <span className={styles.noNoBadge}><NoGestureIcon className={styles.noNoIcon} /></span>
-                    <span>{error}</span>
-                  </div>
-                )}
+                {/* moved out of normal flow — rendered at the TOP of the card, see below */}
 
                 <button className={styles.payBtn} onClick={handleSubmit} disabled={!selectedAccount}>
                   Submit Payment

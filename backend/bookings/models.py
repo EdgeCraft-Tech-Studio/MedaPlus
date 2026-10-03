@@ -101,3 +101,4 @@ class Booking(models.Model):
 
     def __str__(self):
         return f"{self.pitch.name} | {self.player.username} | {self.start_dt} ({self.status})"
+ 

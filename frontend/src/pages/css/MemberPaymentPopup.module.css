@@ -68,3 +68,21 @@
 
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (max-width: 400px) { .card { padding: 26px 16px 18px; } }
+
+.topErrorBanner {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 10px 10px 12px;
+  border-radius: 14px;
+  background: #fdecec; border: 1.5px solid #f3b4b4;
+  color: #b91c1c; font-size: 12.5px; line-height: 1.4;
+  margin-bottom: 16px;
+  animation: errorSlideIn 0.28s cubic-bezier(0.16,1,0.3,1);
+}
+@keyframes errorSlideIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: none; } }
+.topErrorText { flex: 1; }
+.topErrorClose { width: 24px; height: 24px; border-radius: 50%; border: none; background: transparent; color: #b91c1c; display: grid; place-items: center; cursor: pointer; flex-shrink: 0; }
+.topErrorClose:hover { background: rgba(185,28,28,0.1); }
+.topErrorClose svg { width: 12px; height: 12px; }
+
+.inputNeedsAttention { border-color: #dc2626 !important; background: #fff8f8; }
+.manualHint { font-size: 11px; color: #b91c1c; margin-top: 2px; }

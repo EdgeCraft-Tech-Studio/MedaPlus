@@ -129,10 +129,7 @@ class SubmitManualBankPaymentSerializer(serializers.Serializer):
 
     def validate(self, attrs):
         bank = attrs["bank"]
-        if bank == SupportedBank.ZEMEN:
-            raise serializers.ValidationError(
-                {"bank": "This bank is not supported for direct verification yet."}
-            )
+        
 
         if bank in SUFFIX_REQUIRED_BANKS:
             length = SUFFIX_REQUIRED_BANKS[bank]

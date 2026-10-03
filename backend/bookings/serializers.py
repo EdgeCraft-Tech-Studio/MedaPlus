@@ -15,3 +15,4 @@ class BookingCreateSerializer(serializers.Serializer):
     manual_cash = serializers.BooleanField(required=False, default=False)
     booked_for_name = serializers.CharField(required=False, allow_blank=True, default="")
     booked_for_phone = serializers.CharField(required=False, allow_blank=True, default="")
+ 

@@ -51,6 +51,56 @@ def _call_verify_et(*, payload: dict, idempotency_key: str) -> requests.Response
     )
 
 
+def _response_get(result_item: dict, *candidate_keys: str) -> str:
+    """verify.et's JSON key casing isn't fully pinned down from the
+    docs alone — try every reasonable variant of a field name rather
+    than assuming one exact key.
+    """
+    for key in candidate_keys:
+        if key in result_item and result_item[key] not in (None, ""):
+            return str(result_item[key])
+    return ""
+
+
+def _check_sender_identity(transaction, result_item: dict) -> str:
+    """Returns an empty string if the identity check passes (or isn't
+    applicable), or a rejection reason string if it fails.
+
+    This is what stops Player B from submitting Player A's real
+    screenshot as their own payment: verify.et independently reports
+    the real sender's account suffix in its response — this compares
+    that against what the submitting payer actually typed in, which
+    they'd only know if the account receiving/sending the money is
+    genuinely theirs.
+    """
+    if transaction.bank not in SUFFIX_REQUIRED_BANKS:
+        return ""  # wallets (phone-based) checked separately below
+
+    if not transaction.account_suffix:
+        return "sender_identity_mismatch"
+
+    suffix_len = SUFFIX_REQUIRED_BANKS[transaction.bank]
+    reported = _response_get(
+        result_item, "accountSuffix", "account_suffix",
+        "senderAccountLast4", "sender_account_last4",
+    )
+    if not reported:
+        # verify.et didn't give us anything to check against — don't
+        # silently pass; this bank is supposed to return this field.
+        return "sender_identity_mismatch"
+
+    # "Account Suffix" from CBE in your sample is 8 digits even
+    # though the submitted suffix field is also 8 digits for CBE —
+    # compare the LAST N digits of whichever is longer, since some
+    # banks may return the suffix embedded in a longer account string.
+    reported_tail = re.sub(r"\D", "", reported)[-suffix_len:]
+    submitted_tail = re.sub(r"\D", "", transaction.account_suffix)[-suffix_len:]
+
+    if reported_tail != submitted_tail:
+        return "sender_identity_mismatch"
+    return ""
+
+
 def _poll_verify_et(*, request_id: str) -> requests.Response:
     return requests.get(
         f"{VERIFY_ET_BASE_URL}/api/verify/{request_id}",
@@ -157,6 +207,10 @@ def _apply_verification_result(
     if abs((txn_time - reference_date).total_seconds()) > 36 * 3600:
         return _reject(transaction, "transaction_date_mismatch")
 
+    identity_failure = _check_sender_identity(transaction, result_item or {})
+    if identity_failure:
+        return _reject(transaction, identity_failure)
+
     transaction.verified_amount = amount_dec
     transaction.verified_transaction_at = txn_time
     transaction.status = PaymentStatus.VERIFIED
@@ -197,7 +251,6 @@ def _sync_team_booking_payment(transaction: PaymentTransaction) -> None:
     """
     if not transaction.team_booking_payment_id or transaction.status != PaymentStatus.VERIFIED:
         return
-    from team_booking.services import mark_payment_verified_from_gateway
 
     mark_payment_verified_from_gateway(team_booking_payment_id=transaction.team_booking_payment_id)
 
@@ -238,13 +291,19 @@ def submit_manual_bank_payment(
     booking=None,
     team_booking_payment=None,
 ) -> PaymentTransaction:
-    if bank == SupportedBank.ZEMEN:
-        raise PaymentValidationError("This bank is not supported for direct verification.")
-
+    
     reference_number = (reference_number or "").strip().upper()
     if not reference_number:
         raise PaymentValidationError("reference_number is required.")
 
+    if bank == SupportedBank.ZEMEN:
+        raise PaymentValidationError(
+            "Zemen Bank can't be verified automatically yet — ask the pitch owner for another bank/wallet."
+        )
+
+    reference_number = (reference_number or "").strip().upper()
+    if not reference_number:
+        raise PaymentValidationError("reference_number is required.")
     
     # Tie the typed reference number to what's actually IN the
     # uploaded image. Without this, any unrelated image plus a
@@ -371,20 +430,33 @@ def submit_manual_bank_payment(
         logger.exception("verify.et unreachable for transaction %s", transaction_row.id)
         raise PaymentProviderError(str(exc))
 
-    if response.status_code not in (200, 202):
-        return _reject(transaction_row, f"provider_error_{response.status_code}")
+    try:
+        if response.status_code not in (200, 202):
+            return _reject(transaction_row, f"provider_error_{response.status_code}")
 
-    body = response.json()
-    transaction_row.verify_request_id = body.get("requestId", "")
-    transaction_row.verify_response = body
-    transaction_row.save(update_fields=["verify_request_id", "verify_response", "updated_at"])
+        body = response.json()
+        transaction_row.verify_request_id = body.get("requestId", "")
+        transaction_row.verify_response = body
+        transaction_row.save(update_fields=["verify_request_id", "verify_response", "updated_at"])
 
-    if response.status_code == 202:
-        return transaction_row
+        if response.status_code == 202:
+            return transaction_row
 
-    data = body.get("data") or []
-    result_item = data[0] if data else None
-    return _apply_verification_result(transaction=transaction_row, result_item=result_item)
+        data = body.get("data") or []
+        result_item = data[0] if data else None
+        return _apply_verification_result(transaction=transaction_row, result_item=result_item)
+    except Exception:
+        # ANY unexpected failure here — a malformed response, a bug
+        # on our side, anything — must never leave this row stuck at
+        # PROCESSING forever. That would permanently block the payer
+        # from ever retrying, even though their money may genuinely
+        # have gone through. Reverting to PENDING always allows a
+        # clean retry.
+        transaction_row.status = PaymentStatus.PENDING
+        transaction_row.rejection_reason = "internal_error"
+        transaction_row.save(update_fields=["status", "rejection_reason", "updated_at"])
+        logger.exception("Unexpected error finishing verification for transaction %s", transaction_row.id)
+        raise PaymentProviderError("Something went wrong while verifying this payment. Please try again.")
 
 
 
