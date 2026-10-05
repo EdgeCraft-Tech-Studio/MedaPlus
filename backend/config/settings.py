@@ -156,7 +156,7 @@ REST_FRAMEWORK = {
         "join_request_create": "50/day",
         "chat_message_send": "60/min",
         "payment_submit": "30/hour",
-        "receipt_extraction": "200/hour",
+        "receipt_extraction": "20/hour",
     },
 }
 
