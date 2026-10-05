@@ -1,8 +1,7 @@
 import random
 import string
 from decimal import Decimal
-from xml.dom import ValidationErr
-
+from rest_framework.exceptions import NotFound, ValidationError as ValidationErr
 from amqp import NotFound
 from django.contrib.auth import views
 from django.shortcuts import get_object_or_404

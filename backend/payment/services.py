@@ -397,6 +397,7 @@ def submit_manual_bank_payment(
         transaction_row = PaymentTransaction.objects.create(
             booking=booking,
             team_booking_payment=team_booking_payment,
+            solo_booking_hold=solo_booking_hold,
             payer=payer,
             pitch_owner=pitch_owner,
             amount_expected=amount_expected,
