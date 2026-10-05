@@ -6,18 +6,22 @@ import {
 } from "../lib/payment";
 import PaymentLogo from "../components/PaymentLogo";
 
+import { getSoloBookingPaymentInfo, submitSoloBookingPayment } from "../lib/payment";
+
 interface PendingPaymentLike {
   id: string;
-  request_id: string;
+  request_id?: string;
   pitch_name: string;
-  team_name: string;
+  team_name?: string;
   amount: string;
   payment_expires_at: string;
 }
 
 interface Props {
   payment: PendingPaymentLike;
+  kind?: "team" | "solo"; // defaults to "team" to preserve existing call sites
   onClose?: () => void;
+  onPaid?: () => void;
   readOnly?: boolean;
   readOnlyStatusLabel?: string;
 }
@@ -93,7 +97,7 @@ function NoGestureIcon(props: React.SVGProps<SVGSVGElement>) {
 
 type Step = "loading" | "no_config" | "gateway_unavailable" | "form" | "submitting" | "polling" | "verified" | "rejected" | "needs_review" | "timeout";
 
-export default function MemberPaymentPopup({ payment, onClose, readOnly = false, readOnlyStatusLabel }: Props) {
+export default function MemberPaymentPopup({ payment, kind = "team", onClose, onPaid, readOnly = false, readOnlyStatusLabel }: Props) {
   const countdown = useCountdown(payment.payment_expires_at);
   const [step, setStep] = useState<Step>(readOnly ? "form" : "loading");
   const [info, setInfo] = useState<PaymentInfo | null>(null);
@@ -105,6 +109,7 @@ export default function MemberPaymentPopup({ payment, onClose, readOnly = false,
   const [refAutoFilled, setRefAutoFilled] = useState(false);
   const [refNeedsManual, setRefNeedsManual] = useState(false);
   const [accountSuffix, setAccountSuffix] = useState("");
+  const [suffixInvalid, setSuffixInvalid] = useState(false);
   const [phoneNumber, setPhoneNumber] = useState("");
   const [error, setError] = useState("");
   const [rejectionReason, setRejectionReason] = useState("");
@@ -113,7 +118,7 @@ export default function MemberPaymentPopup({ payment, onClose, readOnly = false,
   useEffect(() => {
     if (readOnly) return;
     let cancelled = false;
-    getTeamBookingPaymentInfo(payment.id)
+    (kind === "solo" ? getSoloBookingPaymentInfo(payment.id) : getTeamBookingPaymentInfo(payment.id))
       .then((data) => {
         if (cancelled) return;
         setInfo(data);
@@ -170,7 +175,7 @@ export default function MemberPaymentPopup({ payment, onClose, readOnly = false,
       attempts += 1;
       try {
         const txn = await pollPaymentTransaction(transactionId);
-        if (txn.status === "verified") { clearInterval(pollTimer.current!); setStep("verified"); }
+        if (txn.status === "verified") { clearInterval(pollTimer.current!); setStep("verified"); onPaid?.(); }
         else if (txn.status === "rejected") { clearInterval(pollTimer.current!); setRejectionReason(txn.rejection_reason); setStep("rejected"); }
         else if (txn.status === "needs_review") { clearInterval(pollTimer.current!); setStep("needs_review"); }
         else if (attempts > 20) { clearInterval(pollTimer.current!); setStep("timeout"); }
@@ -185,9 +190,11 @@ export default function MemberPaymentPopup({ payment, onClose, readOnly = false,
     }
     const req = selectedAccount.requirements;
     if (req.requires_account_suffix && accountSuffix.length !== req.account_suffix_length) {
+      setSuffixInvalid(true);
       setError(`Enter exactly ${req.account_suffix_length} digits for the account suffix.`);
       return;
     }
+    setSuffixInvalid(false);
     if (req.requires_phone_number && !phoneNumber.trim()) {
       setError("Enter the phone number you paid from.");
       return;
@@ -196,14 +203,15 @@ export default function MemberPaymentPopup({ payment, onClose, readOnly = false,
     setError("");
     setStep("submitting");
     try {
-      const txn = await submitTeamBookingPayment(payment.id, {
+      const submitFn = kind === "solo" ? submitSoloBookingPayment : submitTeamBookingPayment;
+      const txn = await submitFn(payment.id, {
         bank: selectedAccount.bank,
         screenshot: screenshotFile,
         reference_number: referenceNumber.trim(),
         account_suffix: accountSuffix,
         phone_number: phoneNumber,
       });
-      if (txn.status === "verified") setStep("verified");
+      if (txn.status === "verified") { setStep("verified"); onPaid?.(); }
       else if (txn.status === "rejected") { setRejectionReason(txn.rejection_reason); setStep("rejected"); }
       else if (txn.status === "needs_review") setStep("needs_review");
       else startPolling(txn.id);
@@ -238,7 +246,9 @@ export default function MemberPaymentPopup({ payment, onClose, readOnly = false,
         <div className={styles.titleRow}>
           <div className={styles.title}>Pay for {payment.pitch_name}</div>
         </div>
-        <div className={styles.subtitle}>{payment.team_name} — your share: <b className={styles.amountHighlight}>{payment.amount} Br</b></div>
+        <div className={styles.subtitle}>
+          {payment.team_name || "Individual booking"} — {kind === "solo" ? "total" : "your share"}: <b className={styles.amountHighlight}>{payment.amount} Br</b>
+        </div>
 
         {readOnly ? (
           <div className={styles.readOnlyBanner}>{readOnlyStatusLabel || "This payment window has closed."}</div>
@@ -342,12 +352,19 @@ export default function MemberPaymentPopup({ payment, onClose, readOnly = false,
                       <label className={styles.field}>
                         <span className={styles.fieldLabel}>Last {selectedAccount.requirements.account_suffix_length} digits of your account</span>
                         <input
-                          type="text" className={styles.input} inputMode="numeric"
+                          type="text"
+                          className={`${styles.input} ${suffixInvalid ? styles.inputNeedsAttention : ""}`}
+                          inputMode="numeric"
                           maxLength={selectedAccount.requirements.account_suffix_length || undefined}
                           value={accountSuffix}
-                          onChange={(e) => setAccountSuffix(e.target.value.replace(/\D/g, ""))}
+                          onChange={(e) => { setAccountSuffix(e.target.value.replace(/\D/g, "")); setSuffixInvalid(false); }}
                           placeholder={selectedAccount.requirements.account_suffix_help}
                         />
+                        {suffixInvalid && (
+                          <span className={styles.manualHint}>
+                            እባክዎ የ{selectedAccount.requirements.label} አካውንት ቁጥሮን የመጨረሻዎቹን {selectedAccount.requirements.account_suffix_length} ቁጥሮች ያስገቡ
+                          </span>
+                        )}
                       </label>
                     )}
 

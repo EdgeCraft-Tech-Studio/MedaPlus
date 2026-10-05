@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import styles from "./css/BookingTeamModal.module.css";
 import type { MyTeam } from "../lib/team";
 
@@ -140,6 +140,14 @@ export default function BookingTeamModal(props: BookingTeamModalProps) {
 
   const isOpen = step !== "closed";
 
+  // Which option on the "choice" step was just clicked (shows the spinner).
+  const [pendingChoice, setPendingChoice] = useState<"individual" | "team" | null>(null);
+
+  // Reset whenever the step changes (moving to team-select, closing, reopening…).
+  useEffect(() => {
+    setPendingChoice(null);
+  }, [step]);
+
   useEffect(() => {
     if (!isOpen) return;
     function onKeyDown(e: KeyboardEvent) {
@@ -152,6 +160,23 @@ export default function BookingTeamModal(props: BookingTeamModalProps) {
       document.body.style.overflow = "";
     };
   }, [isOpen, onClose]);
+
+  function handleChoice(kind: "individual" | "team") {
+    if (pendingChoice) return;
+    setPendingChoice(kind);
+
+    const handler = kind === "individual" ? onChooseIndividual : onChooseTeam;
+    const result = handler() as unknown;
+
+    // If the parent handler is async, stop the spinner when it settles
+    // (success or failure). If it's sync, the step change resets it.
+    if (result && typeof (result as Promise<unknown>).then === "function") {
+      (result as Promise<unknown>).then(
+        () => setPendingChoice(null),
+        () => setPendingChoice(null)
+      );
+    }
+  }
 
   if (!isOpen) return null;
 
@@ -183,20 +208,40 @@ export default function BookingTeamModal(props: BookingTeamModalProps) {
             </div>
 
             <div className={styles.optionGrid}>
-              <button className={styles.optionCard} onClick={onChooseIndividual}>
+              <button
+                className={`${styles.optionCard} ${
+                  pendingChoice === "individual" ? styles.optionCardBusy : ""
+                }`}
+                onClick={() => handleChoice("individual")}
+                disabled={pendingChoice !== null}
+                aria-busy={pendingChoice === "individual"}
+              >
                 <div className={`${styles.optionIconWrap} ${styles.optionIconIndividual}`}>
                   <UserIcon />
                 </div>
                 <div className={styles.optionTitle}>Individual</div>
                 <div className={styles.optionDesc}>I'll pay for it myself</div>
+                {pendingChoice === "individual" && (
+                  <SpinnerIcon className={styles.optionSpinner} aria-label="Loading" />
+                )}
               </button>
 
-              <button className={styles.optionCard} onClick={onChooseTeam}>
+              <button
+                className={`${styles.optionCard} ${
+                  pendingChoice === "team" ? styles.optionCardBusy : ""
+                }`}
+                onClick={() => handleChoice("team")}
+                disabled={pendingChoice !== null}
+                aria-busy={pendingChoice === "team"}
+              >
                 <div className={`${styles.optionIconWrap} ${styles.optionIconTeam}`}>
                   <UsersIcon />
                 </div>
                 <div className={styles.optionTitle}>Team</div>
                 <div className={styles.optionDesc}>Split it with my team</div>
+                {pendingChoice === "team" && (
+                  <SpinnerIcon className={styles.optionSpinner} aria-label="Loading" />
+                )}
               </button>
             </div>
 

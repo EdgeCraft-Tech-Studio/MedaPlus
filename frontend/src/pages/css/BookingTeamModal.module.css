@@ -129,6 +129,7 @@
 }
 
 .optionCard {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -140,17 +141,45 @@
   cursor: pointer;
   text-align: left;
   font-family: inherit;
-  transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+  transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
 }
 
-.optionCard:hover {
+.optionCard:hover:not(:disabled) {
   border-color: var(--accent, #0f7a52);
   transform: translateY(-2px);
   box-shadow: var(--shadow-md, 0 6px 20px rgba(17, 19, 24, 0.08));
 }
 
-.optionCard:active {
+.optionCard:active:not(:disabled) {
   transform: translateY(0) scale(0.98);
+}
+
+/* The other option while one is loading: dimmed + not clickable */
+.optionCard:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* The clicked option: stays fully visible, content hidden, spinner centered */
+.optionCardBusy:disabled {
+  opacity: 1;
+  cursor: progress;
+  border-color: var(--accent, #0f7a52);
+}
+
+.optionCardBusy > :not(.optionSpinner) {
+  visibility: hidden; /* keeps the card size so nothing jumps */
+}
+
+.optionSpinner {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 28px;
+  height: 28px;
+  margin: -14px 0 0 -14px;
+  color: var(--accent, #0f7a52);
+  animation: spin 0.7s linear infinite;
 }
 
 .optionIconWrap {

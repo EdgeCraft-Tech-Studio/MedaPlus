@@ -1,6 +1,5 @@
-// AppShell.tsx
-import { useEffect, useRef, useState, useLayoutEffect, type ReactElement } from "react";
-import { NavLink, Outlet, Link, useNavigate } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { NavLink, Outlet, Link, useNavigate, useLocation } from "react-router-dom";
 import styles from "./css/AppShell.module.css";
 import {
   BallIcon, HomeIcon, UsersIcon, CompassIcon,
@@ -9,14 +8,16 @@ import {
 } from "./Icons";
 import { type AppNotification, type NotificationCategory } from "./types";
 import { getUnreadSummary, type ChatUnreadSummary } from "../lib/chat";
-import TeamInvitationPopup from "./TeamInvitationPopup";
 import { me } from "../lib/auth";
+import { getStoredPlayerMode, subscribePlayerMode } from "../lib/session";
 import type { SessionUser } from "../lib/session";
+import { getPendingSoloBooking } from "../lib/pitches";
 import {
   acknowledgeBookingCompletion,
-  confirmTeamBooking, coverRemainingOpenSlotsAndStartPayment, declineTeamBooking, getBookedPitchSummary, getMyActiveTeamBookings,
+  confirmTeamBooking, coverRemainingOpenSlotsAndStartPayment, declineTeamBooking,
+  getBookedPitchSummary, getMyActiveTeamBookings,
   getMyConfirmationDetail, getMyPaymentDetail, getPendingOwnerAction, getPendingPayment,
-  getPendingTeamBookingConfirmation, payForBooking, resolveConfirmSummary, resolvePaymentTimeout,
+  getPendingTeamBookingConfirmation, resolveConfirmSummary, resolvePaymentTimeout,
   type BookedPitchSummary, type ConfirmationDetail, type ConfirmSummaryAction, type PaymentDetail,
   type PaymentTimeoutAction, type PendingOwnerAction, type PendingPayment,
   type PendingTeamBookingConfirmation, type TeamBookingLiveDetail,
@@ -33,7 +34,7 @@ import TeamBookingListPopup from "./TeamBookingListPopup";
 import TeamBookingLiveDetailPopup from "./TeamBookingLiveDetailPopup";
 import BookedPitchSummaryPopup from "./BookedPitchSummaryPopup";
 import OpenSlotFormPopup from "./OpenSlotFormPopup";
-import TourGuide from "../tours/TourGuide";
+import TeamInvitationPopup from "./TeamInvitationPopup";
 
 function DashboardIcon({ width = 20, height = 20 }: { width?: number; height?: number }) {
   return (
@@ -54,32 +55,20 @@ export function getDashboardPath(role?: UserRole | null): string | null {
   return null;
 }
 
-interface NavItem {
-  to: string;
-  label: string;
-  icon: (props: { width?: number; height?: number }) => ReactElement;
-  end?: boolean;
-  tourKey?: string;
-}
-
-const BASE_NAV_ITEMS: NavItem[] = [
+const BASE_NAV_ITEMS = [
   { to: "/home", label: "Home", icon: HomeIcon, end: true },
-  { to: "/teams", label: "My Teams", icon: UsersIcon, tourKey: "teams" },
-  { to: "/app", label: "pitchs", icon: FootballPitchIcon, tourKey: "pitches" },
-  { to: "/discover", label: "Discover", icon: CompassIcon, tourKey: "discover" },
+  { to: "/teams", label: "My Teams", icon: UsersIcon },
+  { to: "/app", label: "pitchs", icon: FootballPitchIcon },
+  { to: "/discover", label: "Discover", icon: CompassIcon },
 ];
+
+// Paths an OWNER with player-mode OFF must never reach, even by
+// typing the URL directly. Checked with startsWith so nested routes
+// (/teams/:slug, /discover/matches/:id, etc.) are covered too.
+const OWNER_RESTRICTED_PREFIXES = ["/home", "/teams", "/app", "/discover", "/chat"];
 
 const CATEGORY_LABEL: Record<NotificationCategory, string> = {
   team: "Team", match: "Match", booking: "Booking", tournament: "Tournament",
-};
-
-// Colors for the category chip — pulled from the CSS custom properties
-// defined in AppShell.module.css so JS and CSS stay in sync.
-const CATEGORY_COLORS: Record<NotificationCategory, { color: string; bg: string }> = {
-  team: { color: "var(--c-team)", bg: "var(--c-team-soft)" },
-  match: { color: "var(--c-match)", bg: "var(--c-match-soft)" },
-  booking: { color: "var(--c-pitch)", bg: "var(--c-pitch-soft)" },
-  tournament: { color: "var(--c-tournament)", bg: "var(--c-tournament-soft)" },
 };
 
 const CHAT_POLL_INTERVAL_MS = 20000;
@@ -117,10 +106,21 @@ function mapDtoToAppNotification(dto: AppNotificationDTO): AppNotification {
   };
 }
 
+function timeAgoColor(read: boolean) {
+  return read ? "var(--muted)" : "var(--grass)";
+}
+
+function notifAccentColor(n: AppNotification): string {
+  const title = n.title.toLowerCase();
+  if (title.includes("confirmed") || title.includes("paid") || title.includes("booked")) return "#0f7a52";
+  if (title.includes("can't") || title.includes("unavailable") || title.includes("declined")) return "#dc2626";
+  return timeAgoColor(n.read);
+}
+
 function notifBgColor(n: AppNotification): string {
   const title = n.title.toLowerCase();
   if (title.includes("confirmed") || title.includes("paid") || title.includes("booked")) return "#eefaf3";
-  if (title.includes("can't") || title.includes("unavailable") || title.includes("declined") || title.includes("cancel")) return "#fdf0f0";
+  if (title.includes("can't") || title.includes("unavailable") || title.includes("declined")) return "#fdf0f0";
   return "transparent";
 }
 
@@ -145,116 +145,6 @@ function ChatBubbleIcon({ width = 20, height = 20 }: { width?: number; height?: 
   );
 }
 
-/* ---------------- Notification-meaning icons ---------------- */
-/* Small, flat, currentColor-only glyphs — no fills, no background shapes. */
-
-function CheckCircleIcon({ width = 18, height = 18 }: { width?: number; height?: number }) {
-  return (
-    <svg width={width} height={height} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.7" />
-      <path d="M8 12.5l2.5 2.5L16 9.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function XCircleIcon({ width = 18, height = 18 }: { width?: number; height?: number }) {
-  return (
-    <svg width={width} height={height} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.7" />
-      <path d="M9.3 9.3l5.4 5.4M14.7 9.3l-5.4 5.4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function CreditCardIcon({ width = 18, height = 18 }: { width?: number; height?: number }) {
-  return (
-    <svg width={width} height={height} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect x="3" y="5.5" width="18" height="13" rx="2" stroke="currentColor" strokeWidth="1.7" />
-      <path d="M3 9.5h18" stroke="currentColor" strokeWidth="1.7" />
-      <path d="M6.5 14.5h4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function CalendarIcon({ width = 18, height = 18 }: { width?: number; height?: number }) {
-  return (
-    <svg width={width} height={height} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect x="3.5" y="5" width="17" height="15.5" rx="2" stroke="currentColor" strokeWidth="1.7" />
-      <path d="M3.5 9.5h17" stroke="currentColor" strokeWidth="1.7" />
-      <path d="M8 3v4M16 3v4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function TrophyIcon({ width = 18, height = 18 }: { width?: number; height?: number }) {
-  return (
-    <svg width={width} height={height} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M7 4h10v4a5 5 0 0 1-10 0V4Z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
-      <path d="M7 5.5H4.5A1.5 1.5 0 0 0 3 7v.5A3.5 3.5 0 0 0 6.5 11H7M17 5.5h2.5A1.5 1.5 0 0 1 21 7v.5A3.5 3.5 0 0 1 17.5 11H17" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-      <path d="M12 13v3M9 20h6M10 20v-2.2M14 20v-2.2" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-type IconComp = (props: { width?: number; height?: number }) => ReactElement;
-
-/* Picks an icon + color that reflect what the notification is actually
-   about — status first (cancelled/declined, confirmed/paid/booked,
-   payment due), then falls back to its category. No randomness, no
-   position-based cycling. */
-function getNotifIconMeta(n: AppNotification): { Icon: IconComp; color: string } {
-  const title = n.title.toLowerCase();
-
-  if (title.includes("cancel") || title.includes("declined") || title.includes("can't") || title.includes("unavailable")) {
-    return { Icon: XCircleIcon, color: "#dc2626" };
-  }
-  if (title.includes("confirmed") || title.includes("paid") || title.includes("booked")) {
-    return { Icon: CheckCircleIcon, color: "#0f7a52" };
-  }
-  if ((n.rawType || "").includes("payment")) {
-    return { Icon: CreditCardIcon, color: "#c9942a" };
-  }
-  switch (n.category) {
-    case "team": return { Icon: UsersIcon, color: "#2f5d8a" };
-    case "match": return { Icon: FootballPitchIcon, color: "#b3352f" };
-    case "booking": return { Icon: CalendarIcon, color: "#2f8a5e" };
-    case "tournament": return { Icon: TrophyIcon, color: "#c9942a" };
-    default: return { Icon: BellIcon, color: "#6b7a72" };
-  }
-}
-
-/* Message body with a "Read more" toggle that only appears when the
-   text is actually clipped by the 3-line clamp — measured against the
-   real rendered height, not guessed from character count. */
-function NotifMessage({ text }: { text: string }) {
-  const [expanded, setExpanded] = useState(false);
-  const [isTruncated, setIsTruncated] = useState(false);
-  const ref = useRef<HTMLParagraphElement>(null);
-
-  useLayoutEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    if (!expanded) {
-      setIsTruncated(el.scrollHeight > el.clientHeight + 1);
-    }
-  }, [text, expanded]);
-
-  return (
-    <>
-      <p ref={ref} className={`${styles.notifMsg} ${expanded ? styles.notifMsgExpanded : ""}`}>
-        {text}
-      </p>
-      {(isTruncated || expanded) && (
-        <div className={styles.notifReadMoreRow}>
-          <button className={styles.notifReadMore} onClick={() => setExpanded((v) => !v)}>
-            {expanded ? "Show less" : "Read more"}
-          </button>
-        </div>
-      )}
-    </>
-  );
-}
-
 interface OpenSlotContext {
   requestId: string;
   pitchName: string;
@@ -263,30 +153,69 @@ interface OpenSlotContext {
   pricePerSlot: number;
 }
 
+interface SoloPendingPayment {
+  id: string;
+  pitch_name: string;
+  amount: string;
+  payment_expires_at: string;
+}
+
+function isPathRestrictedForOwner(pathname: string): boolean {
+  // Carve-out: /app is restricted (player pitch-browsing), but an
+  // owner must still reach their own /app/owner/... pages — e.g.
+  // editing a specific pitch at /app/owner/pitches/:id.
+  if (pathname === "/app/owner" || pathname.startsWith("/app/owner/")) return false;
+  return OWNER_RESTRICTED_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + "/"));
+}
+
+function OwnerBlockedPage() {
+  return (
+    <div
+      style={{
+        minHeight: "60vh", display: "flex", flexDirection: "column",
+        alignItems: "center", justifyContent: "center", gap: 10, textAlign: "center", padding: 24,
+      }}
+    >
+      <div style={{ fontSize: 20, fontWeight: 800 }}>Page not found</div>
+      <div style={{ fontSize: 13.5, color: "var(--muted, #686d76)", maxWidth: 360 }}>
+        This page isn't available on your account.
+      </div>
+    </div>
+  );
+}
+
 export default function AppShell() {
   const nav = useNavigate();
+  const location = useLocation();
 
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [unreadNotifCount, setUnreadNotifCount] = useState(0);
   const [notifDrawerOpen, setNotifDrawerOpen] = useState(false);
+  const [notificationsLoading, setNotificationsLoading] = useState(true);
   const bellRef = useRef<HTMLButtonElement>(null);
 
   const [chatSummary, setChatSummary] = useState<ChatUnreadSummary | null>(null);
   const [user, setUser] = useState<SessionUser | null>(null);
+  const [userLoaded, setUserLoaded] = useState(false);
+
+  // Player Mode (OWNER only) — persisted in localStorage, set together
+  // with `user` so there is never a frame with the wrong nav.
+  const [playerModeActive, setPlayerModeActive] = useState(false);
 
   const [pendingBookingConfirmation, setPendingBookingConfirmation] =
     useState<PendingTeamBookingConfirmation | null>(null);
   const [pendingOwnerAction, setPendingOwnerAction] = useState<PendingOwnerAction | null>(null);
   const [ownerActionLoading, setOwnerActionLoading] = useState(false);
   const [pendingPayment, setPendingPayment] = useState<PendingPayment | null>(null);
-  const [paymentLoading, setPaymentLoading] = useState(false);
+  const [pendingSoloPayment, setPendingSoloPayment] = useState<SoloPendingPayment | null>(null);
   const [unavailablePitchId, setUnavailablePitchId] = useState<string | null>(null);
 
   const [viewedConfirmation, setViewedConfirmation] = useState<ConfirmationDetail | null>(null);
   const [viewedPayment, setViewedPayment] = useState<PaymentDetail | null>(null);
   const [viewedBookedSummary, setViewedBookedSummary] = useState<BookedPitchSummary | null>(null);
-
   const [viewedInvitationId, setViewedInvitationId] = useState<string | null>(null);
+  const [viewNotificationLoading, setViewNotificationLoading] = useState(false);
+
   const [teamBookingListOpen, setTeamBookingListOpen] = useState(false);
   const [activeLiveDetailId, setActiveLiveDetailId] = useState<string | null>(null);
   const [teamUpdateNeedsDecision, setTeamUpdateNeedsDecision] = useState(false);
@@ -301,14 +230,27 @@ export default function AppShell() {
   useEffect(() => {
     async function loadUser() {
       try {
-        setUser(await me());
+        const u = await me();
+        setUser(u);
+        setPlayerModeActive(getStoredPlayerMode(u.id));
       } catch (err) {
-        console.error("Failed to load user for topbar avatar:", err);
+        console.error("Failed to load user for topbar:", err);
         setUser(null);
+      } finally {
+        setUserLoaded(true);
       }
     }
     loadUser();
   }, []);
+
+  // ---------------- player mode sync (Profile toggle / other tabs) ----------------
+  useEffect(() => {
+    if (!user?.id) return;
+    const userId = user.id;
+    return subscribePlayerMode(() => {
+      setPlayerModeActive(getStoredPlayerMode(userId));
+    });
+  }, [user?.id]);
 
   // ---------------- chat unread ----------------
   async function refreshChatSummary() {
@@ -337,6 +279,8 @@ export default function AppShell() {
       setUnreadNotifCount(unread.unread_count);
     } catch (err) {
       console.error("Failed to load notifications:", err, (err as any)?.response?.data);
+    } finally {
+      setNotificationsLoading(false);
     }
   }
 
@@ -368,7 +312,7 @@ export default function AppShell() {
       const action = await getPendingOwnerAction();
       if (action?.type === "pitch_unavailable" && action.pitch_id) {
         setUnavailablePitchId(action.pitch_id);
-        await acknowledgeBookingCompletion(action.request_id); // one-time, don't loop
+        await acknowledgeBookingCompletion(action.request_id);
         setPendingOwnerAction(null);
         return;
       }
@@ -396,11 +340,7 @@ export default function AppShell() {
     return () => clearInterval(interval);
   }, []);
 
-    // ---------------- "Team Update" pill: visibility + attention state ----------------
-  // The pill only exists at all when the logged-in user currently
-  // owns at least one team AND that team has an active booking in
-  // progress. No team ownership, or nothing active right now →
-  // the button is not rendered — never shown empty/disabled.
+  // ---------------- "Team Update" pill: visibility + attention state ----------------
   async function refreshTeamUpdateBadge() {
     try {
       const items = await getMyActiveTeamBookings();
@@ -418,7 +358,7 @@ export default function AppShell() {
     return () => clearInterval(interval);
   }, []);
 
-  // ---------------- mandatory member payment popup ----------------
+  // ---------------- mandatory member payment popup (team) ----------------
   async function refreshPendingPayment() {
     try {
       const payment = await getPendingPayment();
@@ -434,15 +374,29 @@ export default function AppShell() {
     return () => clearInterval(interval);
   }, []);
 
+  // ---------------- mandatory member payment popup (solo) ----------------
+  async function refreshPendingSoloPayment() {
+    try {
+      const payment = await getPendingSoloBooking();
+      setPendingSoloPayment(payment);
+    } catch (err) {
+      console.error("Failed to check pending solo payment:", err);
+    }
+  }
+
+  useEffect(() => {
+    refreshPendingSoloPayment();
+    const interval = setInterval(refreshPendingSoloPayment, PENDING_PAYMENT_POLL_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, []);
+
   // ---------------- owner action resolution handlers ----------------
   async function handleResolveSummary(requestId: string, action: ConfirmSummaryAction) {
     setOwnerActionLoading(true);
     try {
       const result = await resolveConfirmSummary(requestId, action);
       setPendingOwnerAction(null);
-      if (result.unavailable && result.pitch_id) {
-        setUnavailablePitchId(result.pitch_id);
-      }
+      if (result.unavailable && result.pitch_id) setUnavailablePitchId(result.pitch_id);
       if (result.cancelled) {
         setActiveLiveDetailId(null);
         setTeamBookingListOpen(false);
@@ -462,9 +416,7 @@ export default function AppShell() {
     try {
       const result = await resolvePaymentTimeout(requestId, action);
       setPendingOwnerAction(null);
-      if (result.unavailable && result.pitch_id) {
-        setUnavailablePitchId(result.pitch_id);
-      }
+      if (result.unavailable && result.pitch_id) setUnavailablePitchId(result.pitch_id);
       if (result.cancelled) {
         setActiveLiveDetailId(null);
         setTeamBookingListOpen(false);
@@ -476,20 +428,6 @@ export default function AppShell() {
       console.error("Failed to resolve payment timeout:", err);
     } finally {
       setOwnerActionLoading(false);
-    }
-  }
-
-  async function handlePay(requestId: string) {
-    setPaymentLoading(true);
-    try {
-      await payForBooking(requestId);
-      setPendingPayment(null);
-      refreshPendingPayment();
-      refreshNotifications();
-    } catch (err) {
-      console.error("Failed to pay:", err);
-    } finally {
-      setPaymentLoading(false);
     }
   }
 
@@ -508,7 +446,7 @@ export default function AppShell() {
   }
 
   // ---------------- notification "View" click routing ----------------
-   async function handleViewNotification(n: AppNotification) {
+  async function handleViewNotification(n: AppNotification) {
     if (n.rawType === "team_invitation_received") {
       const invitationId = n.data?.invitation_id;
       if (!invitationId) return;
@@ -519,29 +457,23 @@ export default function AppShell() {
     const requestId = n.data?.team_booking_request_id;
     if (!requestId) return;
 
-    setNotifDrawerOpen(false);
-
-    if (n.rawType === "team_booking_request_received") {
-      try {
+    setViewNotificationLoading(true);
+    try {
+      if (n.rawType === "team_booking_request_received") {
         const detail = await getMyConfirmationDetail(requestId);
         setViewedConfirmation(detail);
-      } catch (err) {
-        console.error("Failed to load confirmation detail:", err);
-      }
-    } else if (n.rawType === "team_booking_payment_request") {
-      try {
+      } else if (n.rawType === "team_booking_payment_request") {
         const detail = await getMyPaymentDetail(requestId);
         setViewedPayment(detail);
-      } catch (err) {
-        console.error("Failed to load payment detail:", err);
-      }
-    } else if (n.rawType === "team_booking_pitch_booked") {
-      try {
+      } else if (n.rawType === "team_booking_pitch_booked") {
         const summary = await getBookedPitchSummary(requestId);
         setViewedBookedSummary(summary);
-      } catch (err) {
-        console.error("Failed to load booked pitch summary:", err);
       }
+      setNotifDrawerOpen(false);
+    } catch (err) {
+      console.error("Failed to load notification detail:", err);
+    } finally {
+      setViewNotificationLoading(false);
     }
   }
 
@@ -571,9 +503,7 @@ export default function AppShell() {
     setOwnerActionLoading(true);
     try {
       const result = await coverRemainingOpenSlotsAndStartPayment(requestId);
-      if (result.unavailable && result.pitch_id) {
-        setUnavailablePitchId(result.pitch_id);
-      }
+      if (result.unavailable && result.pitch_id) setUnavailablePitchId(result.pitch_id);
       setActiveLiveDetailId(null);
       setTeamBookingListOpen(false);
       refreshPendingOwnerAction();
@@ -588,9 +518,18 @@ export default function AppShell() {
   const unreadCount = unreadNotifCount;
   const unreadChatCount = chatSummary?.total_unread ?? 0;
 
-  const dashboardPath = getDashboardPath(user?.role as UserRole | undefined);
-  const NAV_ITEMS: NavItem[] = dashboardPath
-    ? [{ to: dashboardPath, label: "Dashboard", icon: DashboardIcon, end: false }, ...BASE_NAV_ITEMS]
+  const role = user?.role as UserRole | undefined;
+  const dashboardPath = getDashboardPath(role);
+  const isOwner = role === "OWNER";
+  // OWNER only: Player Mode OFF => dashboard-only nav, no chat icon.
+  // PLAYER / ADMIN are never affected by this flag.
+  const ownerPlayerModeOff = isOwner && !playerModeActive;
+  const canSeePlayerNav = user ? (role !== "OWNER" || playerModeActive) : false;
+
+  const NAV_ITEMS = dashboardPath
+    ? canSeePlayerNav
+      ? [{ to: dashboardPath, label: "Dashboard", icon: DashboardIcon, end: false }, ...BASE_NAV_ITEMS]
+      : [{ to: dashboardPath, label: "Dashboard", icon: DashboardIcon, end: false }]
     : BASE_NAV_ITEMS;
 
   useEffect(() => {
@@ -612,7 +551,7 @@ export default function AppShell() {
     }
   }
 
-    async function handleBellClick() {
+  async function handleBellClick() {
     const opening = !notifDrawerOpen;
     setNotifDrawerOpen((v) => !v);
     if (opening && unreadCount > 0) {
@@ -642,17 +581,138 @@ export default function AppShell() {
     nav("/chat");
   }
 
+  const routeBlockedForOwner = ownerPlayerModeOff && isPathRestrictedForOwner(location.pathname);
+
   return (
     <div className={styles.shell}>
-      <TourGuide page="appshell" />
-
       <header className={styles.topbar}>
-        <Link to="/home" className={styles.brand}>
-          <span className={styles.brandMark}><BallIcon /></span>
-          <span className={styles.brandName}>MedaPlus</span>
-        </Link>
+        {!userLoaded ? (
+          // Nothing role-dependent renders until we actually know the
+          // role — this is what guarantees zero frames of the wrong
+          // UI, not just a fast swap after the fact.
+          <Link to="/" className={styles.brand} aria-label="MedaPlus">
+            <span className={styles.brandMark}><BallIcon /></span>
+            <span className={styles.brandName}>MedaPlus</span>
+          </Link>
+        ) : ownerPlayerModeOff ? (
+          <>
+            <Link to={dashboardPath || "/owner/"} className={styles.brand}>
+              <span className={styles.brandMark}><BallIcon /></span>
+              <span className={styles.brandName}>MedaPlus</span>
+            </Link>
+            <div className={styles.topbarActions}>
+              <button
+                ref={bellRef}
+                className={styles.bellBtn}
+                onClick={handleBellClick}
+                aria-label={`Notifications${unreadCount ? `, ${unreadCount} unread` : ""}`}
+                aria-expanded={notifDrawerOpen}
+              >
+                <BellIcon width={20} height={20} />
+                {unreadCount > 0 && <span className={styles.bellBadge}>{unreadCount > 9 ? "9+" : unreadCount}</span>}
+              </button>
+              <Link to="/profile" className={styles.avatarLink} aria-label="Profile">
+                <span className={styles.avatarCircle}>
+                  {user?.profile_photo_url ? (
+                    <img
+                      src={user.profile_photo_url}
+                      alt=""
+                      style={{ width: "100%", height: "100%", borderRadius: "inherit", objectFit: "cover" }}
+                    />
+                  ) : (
+                    avatarFallback(user)
+                  )}
+                </span>
+              </Link>
+            </div>
+          </>
+        ) : (
+          <>
+            <Link to="/home" className={styles.brand}>
+              <span className={styles.brandMark}><BallIcon /></span>
+              <span className={styles.brandName}>MedaPlus</span>
+            </Link>
 
-        <nav className={styles.desktopNav} aria-label="Main navigation">
+            <nav className={styles.desktopNav} aria-label="Main navigation">
+              {NAV_ITEMS.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    end={item.end}
+                    className={({ isActive }) => `${styles.navLink} ${isActive ? styles.navLinkActive : ""}`}
+                  >
+                    <Icon width={17} height={17} />
+                    <span>{item.label}</span>
+                  </NavLink>
+                );
+              })}
+            </nav>
+
+            <div className={styles.topbarActions}>
+              <button
+                className={styles.bellBtn}
+                onClick={goToChat}
+                aria-label={`Team chats${unreadChatCount ? `, ${unreadChatCount} unread` : ""}`}
+              >
+                <ChatBubbleIcon width={20} height={20} />
+                {unreadChatCount > 0 && (
+                  <span className={styles.bellBadge}>{unreadChatCount > 9 ? "9+" : unreadChatCount}</span>
+                )}
+              </button>
+
+              <button
+                ref={bellRef}
+                className={styles.bellBtn}
+                onClick={handleBellClick}
+                aria-label={`Notifications${unreadCount ? `, ${unreadCount} unread` : ""}`}
+                aria-expanded={notifDrawerOpen}
+              >
+                <BellIcon width={20} height={20} />
+                {unreadCount > 0 && <span className={styles.bellBadge}>{unreadCount > 9 ? "9+" : unreadCount}</span>}
+              </button>
+
+              {teamUpdateVisible && (
+                <button
+                  className={`${styles.teamUpdatePill} ${teamUpdateNeedsDecision ? styles.teamUpdatePillAlert : ""}`}
+                  onClick={() => setTeamBookingListOpen(true)}
+                  aria-label={teamUpdateNeedsDecision ? "Booking needs a decision" : "Booking in progress"}
+                >
+                  <span className={styles.teamUpdateDot} />
+                  <span className={styles.teamUpdateLabelFull}>
+                    {teamUpdateNeedsDecision ? "Action Needed" : "Booking Active"}
+                  </span>
+                  <span className={styles.teamUpdateLabelShort}>
+                    {teamUpdateNeedsDecision ? "Action" : "Active"}
+                  </span>
+                </button>
+              )}
+
+              <Link to="/profile" className={styles.avatarLink} aria-label="Profile">
+                <span className={styles.avatarCircle}>
+                  {user?.profile_photo_url ? (
+                    <img
+                      src={user.profile_photo_url}
+                      alt=""
+                      style={{ width: "100%", height: "100%", borderRadius: "inherit", objectFit: "cover" }}
+                    />
+                  ) : (
+                    avatarFallback(user)
+                  )}
+                </span>
+              </Link>
+            </div>
+          </>
+        )}
+      </header>
+
+      <main className={styles.content}>
+        {routeBlockedForOwner ? <OwnerBlockedPage /> : <Outlet />}
+      </main>
+
+      {userLoaded && !ownerPlayerModeOff && (
+        <nav className={styles.bottomNav} aria-label="Main navigation">
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
             return (
@@ -660,93 +720,15 @@ export default function AppShell() {
                 key={item.to}
                 to={item.to}
                 end={item.end}
-                className={({ isActive }) => `${styles.navLink} ${isActive ? styles.navLinkActive : ""}`}
-                data-tour={item.tourKey ? `tour-${item.tourKey}` : undefined}
+                className={({ isActive }) => `${styles.bottomNavLink} ${isActive ? styles.bottomNavLinkActive : ""}`}
               >
-                <Icon width={17} height={17} />
+                <Icon width={20} height={20} />
                 <span>{item.label}</span>
               </NavLink>
             );
           })}
         </nav>
-
-        <div className={styles.topbarActions}>
-          <button
-            className={styles.bellBtn}
-            onClick={goToChat}
-            aria-label={`Team chats${unreadChatCount ? `, ${unreadChatCount} unread` : ""}`}
-            data-tour="tour-chat"
-          >
-            <ChatBubbleIcon width={20} height={20} />
-            {unreadChatCount > 0 && (
-              <span className={styles.bellBadge}>{unreadChatCount > 9 ? "9+" : unreadChatCount}</span>
-            )}
-          </button>
-
-          <button
-            ref={bellRef}
-            className={styles.bellBtn}
-            onClick={handleBellClick}
-            aria-label={`Notifications${unreadCount ? `, ${unreadCount} unread` : ""}`}
-            aria-expanded={notifDrawerOpen}
-          >
-            <BellIcon width={20} height={20} />
-            {unreadCount > 0 && <span className={styles.bellBadge}>{unreadCount > 9 ? "9+" : unreadCount}</span>}
-          </button>
-
-                    {teamUpdateVisible && (
-            <button
-              className={`${styles.teamUpdatePill} ${teamUpdateNeedsDecision ? styles.teamUpdatePillAlert : ""}`}
-              onClick={() => setTeamBookingListOpen(true)}
-              aria-label={teamUpdateNeedsDecision ? "Booking needs a decision" : "Booking in progress"}
-            >
-              <span className={styles.teamUpdateDot} />
-              <span className={styles.teamUpdateLabelFull}>
-                {teamUpdateNeedsDecision ? "Action Needed" : "Booking Active"}
-              </span>
-              <span className={styles.teamUpdateLabelShort}>
-                {teamUpdateNeedsDecision ? "Action" : "Active"}
-              </span>
-            </button>
-          )}
-
-          <Link to="/profile" className={styles.avatarLink} aria-label="Profile">
-            <span className={styles.avatarCircle}>
-              {user?.profile_photo_url ? (
-                <img
-                  src={user.profile_photo_url}
-                  alt=""
-                  style={{ width: "100%", height: "100%", borderRadius: "inherit", objectFit: "cover" }}
-                />
-              ) : (
-                avatarFallback(user)
-              )}
-            </span>
-          </Link>
-        </div>
-      </header>
-
-      <main className={styles.content}>
-        <Outlet />
-      </main>
-
-      <nav className={styles.bottomNav} aria-label="Main navigation">
-        {NAV_ITEMS.map((item) => {
-          const Icon = item.icon;
-          return (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.end}
-              className={({ isActive }) => `${styles.bottomNavLink} ${isActive ? styles.bottomNavLinkActive : ""}`}
-              data-tour={item.tourKey ? `tour-${item.tourKey}` : undefined}
-            >
-              <Icon width={20} height={20} />
-              <span>{item.label}</span>
-            </NavLink>
-          );
-        })}
-      </nav>
+      )}
 
       {/* Notification drawer */}
       {notifDrawerOpen && (
@@ -755,7 +737,7 @@ export default function AppShell() {
           <div className={styles.notifDrawer} role="dialog" aria-label="Notifications" aria-modal="true">
             <div className={styles.chatDrawerHead}>
               <span>Notifications</span>
-                <div className={styles.notifPanelHeadActions}>
+              <div className={styles.notifPanelHeadActions}>
                 <button className={styles.closePanelBtn} onClick={() => setNotifDrawerOpen(false)} aria-label="Close">
                   <XIcon width={15} height={15} />
                 </button>
@@ -763,40 +745,40 @@ export default function AppShell() {
             </div>
 
             <div className={styles.notifList}>
-              {notifications.length === 0 && (
+              {notificationsLoading ? (
+                <div style={{ display: "grid", gap: 8, padding: "4px 2px" }}>
+                  {[0, 1, 2, 3].map((i) => (
+                    <div
+                      key={i}
+                      style={{
+                        height: 66, borderRadius: 12,
+                        background: "linear-gradient(90deg, var(--surface-alt, #f4f5f6) 25%, #e8e9ea 37%, var(--surface-alt, #f4f5f6) 63%)",
+                        backgroundSize: "400% 100%",
+                        animation: "shimmerNotif 1.4s ease infinite",
+                      }}
+                    />
+                  ))}
+                </div>
+              ) : notifications.length === 0 ? (
                 <div className={styles.notifEmpty}>
                   <InboxEmptyIcon width={30} height={30} />
                   <span>You're all caught up</span>
                 </div>
-              )}
-
-              {notifications.map((n) => {
-                const { Icon, color } = getNotifIconMeta(n);
-                return (
+              ) : (
+                notifications.map((n) => (
                   <div
                     key={n.id}
                     className={`${styles.notifItem} ${!n.read ? styles.notifItemUnread : ""}`}
                     style={{ backgroundColor: notifBgColor(n) }}
                   >
-                    <span className={styles.notifIconWrap} style={{ color }}>
-                      <Icon width={18} height={18} />
-                    </span>
+                    <span className={styles.notifDot} style={{ background: notifAccentColor(n) }} />
                     <div className={styles.notifBody}>
                       <div className={styles.notifTopRow}>
-                        <span
-                          className={styles.notifTag}
-                          style={{
-                            color: CATEGORY_COLORS[n.category].color,
-                            background: CATEGORY_COLORS[n.category].bg,
-                          }}
-                        >
-                          {CATEGORY_LABEL[n.category]}
-                        </span>
+                        <span className={styles.notifTag}>{CATEGORY_LABEL[n.category]}</span>
                         <span className={styles.notifTime}>{n.time}</span>
                       </div>
                       <div className={styles.notifTitle}>{n.title}</div>
-
-                      <NotifMessage text={n.message} />
+                      <div className={styles.notifMsg}>{n.message}</div>
 
                       {n.action?.kind === "accept_decline" && (
                         <div className={styles.notifActions}>
@@ -809,7 +791,7 @@ export default function AppShell() {
                           {n.action.label}
                         </button>
                       )}
-                                              {n.rawType === "team_invitation_received" && n.data?.invitation_id && !n.data?.response && (
+                      {n.rawType === "team_invitation_received" && n.data?.invitation_id && !n.data?.response && (
                         <div className={styles.notifActions}>
                           <button
                             className={styles.notifDeclineBtn}
@@ -845,11 +827,17 @@ export default function AppShell() {
                         )}
                     </div>
                   </div>
-                );
-              })}
+                ))
+              )}
             </div>
           </div>
         </>
+      )}
+
+      {viewNotificationLoading && (
+        <div className={styles.viewLoadingOverlay}>
+          <div className={styles.viewLoadingSpinner} />
+        </div>
       )}
 
       {/* ---------------- Mandatory / dismissible popups ---------------- */}
@@ -892,6 +880,17 @@ export default function AppShell() {
 
       {!pendingBookingConfirmation && !pendingOwnerAction && pendingPayment && (
         <MemberPaymentPopup payment={pendingPayment} />
+      )}
+
+      {!pendingBookingConfirmation && !pendingOwnerAction && !pendingPayment && pendingSoloPayment && (
+        <MemberPaymentPopup
+          payment={pendingSoloPayment}
+          kind="solo"
+          onPaid={() => {
+            setPendingSoloPayment(null);
+            refreshPendingSoloPayment();
+          }}
+        />
       )}
 
       {/* ---------------- Anytime team-bookings drawer flow ---------------- */}
@@ -976,7 +975,7 @@ export default function AppShell() {
         />
       )}
 
-            {viewedPayment && (
+      {viewedPayment && (
         <MemberPaymentPopup
           payment={{
             id: viewedPayment.id,
@@ -998,7 +997,7 @@ export default function AppShell() {
         />
       )}
 
-            {viewedBookedSummary && (
+      {viewedBookedSummary && (
         <BookedPitchSummaryPopup
           summary={viewedBookedSummary}
           onClose={() => setViewedBookedSummary(null)}

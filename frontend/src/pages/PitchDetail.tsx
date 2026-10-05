@@ -16,6 +16,8 @@ import ToastContainer from "./Toast";
 import { getMyTeams, requestTeamBooking, type MyTeam } from "../lib/team";
 import type { BookingStep } from "./BookingTeamModal";
 import BookingTeamModal from "./BookingTeamModal";
+import { createSoloBookingHold } from "../lib/pitches";
+import MemberPaymentPopup from "./MemberPaymentPopup";
 
 type BookingMode = "daily" | "weekly" | "monthly";
 type SelectedMap = Record<string, AvailabilitySlot>;
@@ -178,6 +180,8 @@ export default function PitchDetail() {
 const [bookingStep, setBookingStep] = useState<BookingStep>("closed");
 const [selectedTeam, setSelectedTeam] = useState<MyTeam | null>(null);
 const [teamBookingLoading, setTeamBookingLoading] = useState(false);
+const [soloPayment, setSoloPayment] = useState<{ id: string; pitch_name: string; amount: string; payment_expires_at: string } | null>(null);
+const [soloHoldLoading, setSoloHoldLoading] = useState(false);
 
   // ---------- days scroller: overflow + scroll-affordance state ----------
   const daysScrollRef = useRef<HTMLDivElement>(null);
@@ -451,23 +455,45 @@ const [teamBookingLoading, setTeamBookingLoading] = useState(false);
 
 
 
-  function handleBookClick() {
+  async function startSoloPaymentFlow() {
+  if (!pitch || !pitchId || selectedList.length === 0) return;
+  const bookingType = mode === "daily" ? "HOURLY" : mode === "weekly" ? "WEEKLY" : "MONTHLY";
+
+  setSoloHoldLoading(true);
+  try {
+    const hold = await createSoloBookingHold({
+      pitch_id: pitchId,
+      booking_type: bookingType,
+      selections: selectedList.map((s) => ({ start_iso: s.start_iso, end_iso: s.end_iso })),
+      notes,
+    });
+    setSoloPayment(hold);
+    setBookingStep("closed");
+  } catch (e: any) {
+    showToast(e?.response?.data?.detail || "Couldn't start payment — this slot may have just been taken.", "delete");
+  } finally {
+    setSoloHoldLoading(false);
+  }
+}
+
+function handleBookClick() {
   if (selectedList.length === 0) return;
 
-  // Pitch owner/admin doing a manual cash booking — unchanged, instant.
+  // Pitch owner/admin doing a manual cash booking — unchanged, instant, no payment integration.
   if (isManager) {
     handleBook();
     return;
   }
 
-  // Regular player who owns at least one team — offer the choice.
+  // Regular player who owns at least one team — offer the choice first.
   if (ownedTeams.length > 0) {
     setBookingStep("choice");
     return;
   }
 
-  // No teams owned — book individually, as before.
-  handleBook();
+  // No teams owned — skip "How are you booking?" entirely, go
+  // straight to payment, matching "directly payment if he have no team."
+  startSoloPaymentFlow();
 }
 
 function closeBookingModal() {
@@ -476,8 +502,7 @@ function closeBookingModal() {
 }
 
 function chooseIndividualBooking() {
-  setBookingStep("closed");
-  handleBook();
+  startSoloPaymentFlow();
 }
 
 function chooseTeamBooking() {
@@ -941,6 +966,25 @@ async function handleConfirmTeamBooking() {
         onBack={backToChoiceStep}
         onBackToTeams={backToTeamSelectStep}
       />
+            {soloPayment && (
+        <MemberPaymentPopup
+          payment={soloPayment}
+          kind="solo"
+          onClose={() => setSoloPayment(null)}
+          onPaid={async () => {
+            showToast("Booking confirmed!", "create");
+            setSelected({});
+            setNotes("");
+            if (pitchId) {
+              const refreshed = await getPitchDetail(pitchId);
+              setPitch(refreshed.pitch);
+              setDays(refreshed.daily_weekly_days);
+              setMonthlyWeeks(refreshed.monthly_weeks);
+              setExistingBookings(refreshed.existing_bookings || []);
+            }
+          }}
+        />
+      )}
     </div>
     </div>
   );

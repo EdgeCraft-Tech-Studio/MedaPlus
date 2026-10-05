@@ -6,6 +6,7 @@ import {
   me, logout, updateProfile, updateProfilePhoto, updateEmail,
   changePassword, requestPhoneChange, confirmPhoneChange,
 } from "../lib/auth";
+import { getStoredPlayerMode, setStoredPlayerMode } from "../lib/session";
 import type { SessionUser } from "../lib/session";
 
 const DASH = "–";
@@ -458,11 +459,16 @@ export default function ProfilePage() {
   const [showPhoneForm, setShowPhoneForm] = useState(false);
 
   const [loggingOut, setLoggingOut] = useState(false);
+
+  const [playerMode, setPlayerMode] = useState(false);
+
   useEffect(() => {
     async function load() {
       try {
         const u = await me();
         setUser(u);
+        // Restore the saved Player Mode state for this user.
+        setPlayerMode(getStoredPlayerMode(u.id));
       } catch (err) {
         console.error("Failed to load profile:", err);
         setLoadError(true);
@@ -565,7 +571,15 @@ export default function ProfilePage() {
     }
   }
 
-    async function handleLogout() {
+  function handleTogglePlayerMode() {
+    if (!user || user.role !== "OWNER") return;
+    const next = !playerMode;
+    setPlayerMode(next);
+    // Persist + notify AppShell so the nav updates instantly.
+    setStoredPlayerMode(user.id, next);
+  }
+
+  async function handleLogout() {
     setLoggingOut(true);
     try {
       await logout();
@@ -593,6 +607,8 @@ export default function ProfilePage() {
   const initials = user.full_name
     ? user.full_name.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase()
     : DASH;
+
+  const isOwner = user.role === "OWNER";
 
   return (
     <div className={styles.page}>
@@ -737,8 +753,30 @@ export default function ProfilePage() {
         )}
       </div>
 
+      {/* ---------- Player Mode (pitch owners only) ---------- */}
+      {isOwner && (
+        <>
+          <div className={styles.sectionTitle}>Player Mode</div>
+          <div className={styles.card}>
+            <button
+              type="button"
+              className={`${styles.row} ${styles.rowBtn}`}
+              onClick={handleTogglePlayerMode}
+            >
+              <span className={styles.rowLabel}>Activate player mode</span>
+              <span
+                className={`${styles.toggle} ${playerMode ? styles.toggleOn : ""}`}
+                role="switch"
+                aria-checked={playerMode}
+              >
+                <span className={styles.toggleCircle} />
+              </span>
+            </button>
+          </div>
+        </>
+      )}
+
       {/* ---------- Account ---------- */}
-            {/* ---------- Account ---------- */}
       <div className={styles.sectionTitle}>Account</div>
       <div className={styles.card}>
         <button

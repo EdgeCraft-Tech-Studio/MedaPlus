@@ -385,3 +385,17 @@ export async function closeGridSlot(
   const res = await api.post(`/pitches/${pitchId}/weekly-grid/close/`, payload);
   return res.data as { ok: boolean; cell: GridCell };
 }
+
+
+export async function createSoloBookingHold(payload: {
+  pitch_id: string; booking_type: string; selections: { start_iso: string; end_iso: string }[]; notes?: string;
+}) {
+  const res = await api.post("/bookings/solo/", payload);
+  return res.data as { id: string; pitch_name: string; amount: string; payment_expires_at: string };
+}
+
+
+export async function getPendingSoloBooking() {
+  const res = await api.get("/bookings/solo/pending/");
+  return res.data as { id: string; pitch_name: string; amount: string; payment_expires_at: string } | null;
+}

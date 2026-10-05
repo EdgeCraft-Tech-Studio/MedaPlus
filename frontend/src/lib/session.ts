@@ -1,5 +1,3 @@
-
-
 export interface SessionUser {
   id: string;
   username: string;     
@@ -103,4 +101,57 @@ export function isRefreshTokenExpired(): boolean {
 export function isAuthenticated(): boolean {
   const session = getSession();
   return !!session && !isRefreshTokenExpired();
+}
+
+/* ---------------------------------------------------------------------- */
+/* Player Mode (OWNER only) — persisted per user in localStorage.          */
+/* Stored per user id so two owners on the same browser don't share state. */
+/* ---------------------------------------------------------------------- */
+
+const PLAYER_MODE_KEY_PREFIX = "medaplus.player_mode.";
+const PLAYER_MODE_EVENT = "medaplus:player-mode-changed";
+
+function playerModeKey(userId: string): string {
+  return PLAYER_MODE_KEY_PREFIX + userId;
+}
+
+/** Read the saved Player Mode state for a user (defaults to OFF). */
+export function getStoredPlayerMode(userId: string | null | undefined): boolean {
+  if (!isBrowser() || !userId) return false;
+  try {
+    return localStorage.getItem(playerModeKey(userId)) === "1";
+  } catch {
+    return false;
+  }
+}
+
+/** Save Player Mode and notify listeners in this tab (AppShell, etc). */
+export function setStoredPlayerMode(userId: string, value: boolean): void {
+  if (!isBrowser()) return;
+  try {
+    localStorage.setItem(playerModeKey(userId), value ? "1" : "0");
+  } catch (err) {
+    console.error("Failed to persist player mode:", err);
+  }
+  window.dispatchEvent(new CustomEvent(PLAYER_MODE_EVENT, { detail: { userId, value } }));
+}
+
+/**
+ * Subscribe to Player Mode changes — fires for changes in this tab
+ * (custom event) and in other tabs (native `storage` event).
+ * Returns an unsubscribe function.
+ */
+export function subscribePlayerMode(listener: () => void): () => void {
+  if (!isBrowser()) return () => {};
+
+  function onStorage(e: StorageEvent) {
+    if (e.key && e.key.startsWith(PLAYER_MODE_KEY_PREFIX)) listener();
+  }
+
+  window.addEventListener(PLAYER_MODE_EVENT, listener);
+  window.addEventListener("storage", onStorage);
+  return () => {
+    window.removeEventListener(PLAYER_MODE_EVENT, listener);
+    window.removeEventListener("storage", onStorage);
+  };
 }

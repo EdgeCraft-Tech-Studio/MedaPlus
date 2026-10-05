@@ -100,3 +100,22 @@ export async function pollPaymentTransaction(transactionId: string): Promise<Pay
   const res = await api.post(`/payment/transactions/${transactionId}/poll/`);
   return res.data;
 }
+
+
+export async function getSoloBookingPaymentInfo(holdId: string): Promise<PaymentInfo> {
+  const res = await api.get(`/payment/solo-bookings/${holdId}/payment-info/`);
+  return res.data;
+}
+
+export async function submitSoloBookingPayment(holdId: string, payload: {
+  bank: string; screenshot: File; reference_number: string; account_suffix?: string; phone_number?: string;
+}): Promise<PaymentTransaction> {
+  const form = new FormData();
+  form.append("bank", payload.bank);
+  form.append("screenshot", payload.screenshot);
+  form.append("reference_number", payload.reference_number);
+  if (payload.account_suffix) form.append("account_suffix", payload.account_suffix);
+  if (payload.phone_number) form.append("phone_number", payload.phone_number);
+  const res = await api.post(`/payment/solo-bookings/${holdId}/pay/`, form, { headers: { "Content-Type": "multipart/form-data" } });
+  return res.data;
+}
