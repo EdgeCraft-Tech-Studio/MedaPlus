@@ -157,6 +157,13 @@ class PaymentTransaction(models.Model):
         null=True,
         blank=True,
     )
+    solo_booking_hold = models.ForeignKey(
+        "bookings.SoloBookingHold",
+        on_delete=models.CASCADE,
+        related_name="payment_transactions",
+        null=True,
+        blank=True,
+    )
     payer = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="payment_transactions"
     )
@@ -244,10 +251,16 @@ class PaymentTransaction(models.Model):
             ),
             models.CheckConstraint(
                 condition=(
-                    models.Q(booking__isnull=False, team_booking_payment__isnull=True)
-                    | models.Q(booking__isnull=True, team_booking_payment__isnull=False)
+                    models.Q(booking__isnull=False, team_booking_payment__isnull=True, solo_booking_hold__isnull=True)
+                    | models.Q(booking__isnull=True, team_booking_payment__isnull=False, solo_booking_hold__isnull=True)
+                    | models.Q(booking__isnull=True, team_booking_payment__isnull=True, solo_booking_hold__isnull=False)
                 ),
                 name="payment_target_exactly_one",
+            ),
+            models.UniqueConstraint(
+                fields=["solo_booking_hold"],
+                condition=models.Q(status=PaymentStatus.VERIFIED, solo_booking_hold__isnull=False),
+                name="uniq_verified_payment_per_solo_hold",
             ),
         ]
         indexes = [
@@ -263,8 +276,8 @@ class PaymentTransaction(models.Model):
     
     @property
     def reference_date(self):
-        """The date the underlying booking action happened — used for
-        the same-day fraud check in services.py. Works for either
-        payment target.
-        """
-        return self.booking.created_at if self.booking_id else self.team_booking_payment.created_at
+        if self.booking_id:
+            return self.booking.created_at
+        if self.team_booking_payment_id:
+            return self.team_booking_payment.created_at
+        return self.solo_booking_hold.created_at

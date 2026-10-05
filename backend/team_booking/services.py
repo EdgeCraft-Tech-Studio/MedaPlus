@@ -24,8 +24,8 @@ from .models import (
 )
 
 REQUEST_LIFETIME_MINUTES = 30
-PAYMENT_LIFETIME_MINUTES = 10
-PAYMENT_REMINDER_MINUTES = 5
+PAYMENT_LIFETIME_MINUTES = 3
+PAYMENT_REMINDER_MINUTES = 2
 
 
 def _format_selection_summary(selections: list) -> str:
@@ -558,40 +558,21 @@ def resolve_payment_timeout(*, request_id, owner, action: str) -> dict:
         )
 
         for payment in paid_payments:
-            new_payment = TeamBookingPayment.objects.create(
+            TeamBookingPayment.objects.create(
                 request=booking_request, payer=payment.payer, is_owner=payment.is_owner,
                 amount=top_up, round=new_round,
             )
-
-            if payment.is_owner:
-                # The owner triggered this action themselves — auto-pay
-                # their new top-up row immediately, the same way
-                # resolve_confirm_summary already does via
-                # _mark_owner_paid_and_maybe_finalize. Without this,
-                # the owner would sit in PENDING and get funneled into
-                # their OWN mandatory MemberPaymentPopup, which is
-                # exactly the bug: they'd have to go dig it out of the
-                # notification drawer instead of it being handled here.
-                new_payment.mark_paid()
-                notify(
-                    recipient=payment.payer,
-                    notification_type=NotificationType.TEAM_BOOKING_PAYMENT_RECEIVED,
-                    title="Payment received",
-                    body=f"You paid {top_up} Br for {booking_request.pitch_name}.",
-                    data={"team_booking_request_id": str(booking_request.id)},
-                    send_push=False,
-                )
-            else:
-                notify(
-                    recipient=payment.payer,
-                    notification_type=NotificationType.TEAM_BOOKING_PAYMENT_REQUEST,
-                    title="Extra payment needed",
-                    body=f"Some teammates couldn't pay, so your share for {booking_request.pitch_name} increased by {top_up} Br. You have 10 minutes.",
-                    data={
-                        "team_booking_request_id": str(booking_request.id),
-                        "payment_expires_at": deadline.isoformat(),
-                    },
-                )
+            notify(
+                recipient=payment.payer,
+                notification_type=NotificationType.TEAM_BOOKING_PAYMENT_REQUEST,
+                title="Extra payment needed",
+                body=f"Some teammates couldn't pay, so your share for {booking_request.pitch_name} increased by {top_up} Br. You have 10 minutes.",
+                data={
+                    "team_booking_request_id": str(booking_request.id),
+                    "payment_expires_at": deadline.isoformat(),
+                },
+                send_push=False,
+            )
 
         _try_finalize_if_all_paid(booking_request)
         return {"unavailable": False, "cancelled": False}
@@ -752,7 +733,18 @@ def resolve_confirm_summary(*, request_id, owner, action: str) -> dict:
             },
         )
 
-    _mark_owner_paid_and_maybe_finalize(booking_request, owner)
+    when_label = _format_selection_summary(booking_request.selections)
+    notify(
+        recipient=owner,
+        notification_type=NotificationType.TEAM_BOOKING_PAYMENT_REQUEST,
+        title="Time to pay",
+        body=f"Pay {owner_amount} Br for {booking_request.pitch_name} on {when_label}. You have 10 minutes.",
+        data={
+            "team_booking_request_id": str(booking_request.id),
+            "payment_expires_at": payment_deadline.isoformat(),
+        },
+        send_push=False,
+    )
     return {"unavailable": False, "cancelled": False}
 
 
@@ -764,7 +756,6 @@ def get_pending_payment_for_user(user):
             status=PaymentStatus.PENDING,
             request__status=TeamBookingRequestStatus.PAYMENT_PENDING,
         )
-        .exclude(is_owner=True)
         .order_by("-round", "created_at")
         .first()
     )
@@ -1245,5 +1236,15 @@ def cover_remaining_open_slots_and_start_payment(*, request_id, owner) -> dict:
             },
         )
 
-    _mark_owner_paid_and_maybe_finalize(booking_request, owner)
+    notify(
+        recipient=owner,
+        notification_type=NotificationType.TEAM_BOOKING_PAYMENT_REQUEST,
+        title="Time to pay",
+        body=f"Pay {owner_amount} Br for {booking_request.pitch_name}. You have 10 minutes.",
+        data={
+            "team_booking_request_id": str(booking_request.id),
+            "payment_expires_at": payment_deadline.isoformat(),
+        },
+        send_push=False,
+    )
     return {"unavailable": False, "covered_slots": remaining}

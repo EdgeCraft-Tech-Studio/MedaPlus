@@ -1,5 +1,7 @@
 from django.urls import path
 
+from bookings.views import SoloBookingPaymentInfoView, SubmitSoloBookingPaymentView
+
 from .views import (
     BankRequirementsView,
     ExtractReceiptDataView,
@@ -74,4 +76,6 @@ urlpatterns = [
         ResolveReviewView.as_view(),
         name="resolve-review",
     ),
+    path("payment/solo-bookings/<uuid:hold_id>/payment-info/", SoloBookingPaymentInfoView.as_view()),
+    path("payment/solo-bookings/<uuid:hold_id>/pay/", SubmitSoloBookingPaymentView.as_view()),
 ]

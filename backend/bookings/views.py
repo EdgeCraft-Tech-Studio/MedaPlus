@@ -1,15 +1,22 @@
 import random
 import string
 from decimal import Decimal
+from xml.dom import ValidationErr
 
+from amqp import NotFound
+from django.contrib.auth import views
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import APIView, api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 
 from accounts.models.user import UserRole
+from payment.exceptions import PaymentServiceError
+from payment.serializers import PaymentInfoSerializer, PaymentTransactionSerializer, SubmitManualBankPaymentSerializer
+from payment.services import get_payment_info_for_owner, submit_manual_bank_payment
+from payment.throttling import PaymentSubmitThrottle
 from pitches.models import Pitch, BookingType
 from .models import Slot, SlotStatus, Booking, BookingStatus
 from .serializers import BookingCreateSerializer
@@ -170,3 +177,92 @@ def create_booking_group(request):
         },
         status=status.HTTP_201_CREATED,
     )
+
+
+def _get_solo_booking_hold(hold_id, user):
+    from bookings.models import SoloBookingHold
+    hold = get_object_or_404(SoloBookingHold, id=hold_id)
+    if hold.player_id != user.id:
+        raise NotFound()
+    return hold
+
+
+class SoloBookingPaymentInfoView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, hold_id):
+        hold = _get_solo_booking_hold(hold_id, request.user)
+        info = get_payment_info_for_owner(owner=hold.pitch.tenant.owner)
+        from payment.choices import SupportedBank
+        info["bank_accounts"] = [
+            a for a in info["bank_accounts"]
+            if a.bank != SupportedBank.ZEMEN
+        ]
+        info["amount_due"] = str(hold.total_price)
+        return Response(PaymentInfoSerializer(info).data)
+
+
+class SubmitSoloBookingPaymentView(APIView):
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [PaymentSubmitThrottle]
+
+    def post(self, request, hold_id):
+        from bookings.models import SoloBookingStatus
+        hold = _get_solo_booking_hold(hold_id, request.user)
+        if hold.status != SoloBookingStatus.PAYMENT_PENDING:
+            raise ValidationErr({"detail": "This payment is no longer pending."})
+        if hold.is_payment_expired:
+            raise ValidationErr({"detail": "The payment window has closed."})
+
+        serializer = SubmitManualBankPaymentSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            txn = submit_manual_bank_payment(solo_booking_hold=hold, payer=request.user, **serializer.validated_data)
+        except PaymentServiceError as exc:
+            raise ValidationErr({"detail": str(exc)})
+        return Response(PaymentTransactionSerializer(txn).data, status=201)
+
+
+from .models import SoloBookingHold
+from .services import create_solo_booking_hold
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def create_solo_booking_hold_view(request):
+    pitch = get_object_or_404(Pitch, id=request.data.get("pitch_id"))
+    selections = request.data.get("selections") or []
+    for s in selections:
+        s["start_iso"] = s["start_iso"]  # already strings from JSON body — no parsing needed here
+    try:
+        hold = create_solo_booking_hold(
+            pitch=pitch, player=request.user,
+            booking_type=request.data.get("booking_type", "HOURLY"),
+            selections=selections,
+            notes=request.data.get("notes", ""),
+        )
+    except (ValueError, PermissionError) as exc:
+        return Response({"detail": str(exc)}, status=400)
+
+    return Response({
+        "id": str(hold.id),
+        "pitch_name": pitch.name,
+        "amount": str(hold.total_price),
+        "payment_expires_at": hold.payment_expires_at.isoformat(),
+    }, status=201)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def pending_solo_booking_view(request):
+    from .services import get_pending_solo_hold_for_user
+
+    hold = get_pending_solo_hold_for_user(request.user)
+    if not hold:
+        return Response(None)
+    return Response({
+        "id": str(hold.id),
+        "pitch_name": hold.pitch.name,
+        "amount": str(hold.total_price),
+        "payment_expires_at": hold.payment_expires_at.isoformat(),
+    })

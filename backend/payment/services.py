@@ -222,25 +222,29 @@ def _apply_verification_result(
         return _handle_verified_conflict(transaction)
 
     _sync_team_booking_payment(transaction)
+    _sync_solo_booking_hold(transaction)
     return transaction
 
 
-def _resolve_payment_target(*, booking=None, team_booking_payment=None) -> dict:
-    """Single place that knows how to pull the three things every
-    payment needs, regardless of which kind of target it's for: who
-    gets paid, how much is owed, and when the underlying booking
-    action happened (used by the same-day fraud check).
-    """
-    if booking is not None and team_booking_payment is not None:
-        raise PaymentValidationError("Provide exactly one of booking or team_booking_payment.")
+def _resolve_payment_target(*, booking=None, team_booking_payment=None, solo_booking_hold=None) -> dict:
+    provided = [x for x in (booking, team_booking_payment, solo_booking_hold) if x is not None]
+    if len(provided) != 1:
+        raise PaymentValidationError("Provide exactly one payment target.")
     if booking is not None:
         return {"pitch_owner": booking.pitch.tenant.owner, "amount_expected": booking.total_price}
     if team_booking_payment is not None:
         from pitches.models import Pitch
-
         pitch = Pitch.objects.select_related("tenant").get(id=team_booking_payment.request.pitch_id)
         return {"pitch_owner": pitch.tenant.owner, "amount_expected": team_booking_payment.amount}
-    raise PaymentValidationError("A payment target is required.")
+    return {"pitch_owner": solo_booking_hold.pitch.tenant.owner, "amount_expected": solo_booking_hold.total_price}
+
+def _sync_solo_booking_hold(transaction: PaymentTransaction) -> None:
+    if not transaction.solo_booking_hold_id or transaction.status != PaymentStatus.VERIFIED:
+        return
+    from bookings.services import finalize_solo_booking
+    finalize_solo_booking(hold_id=transaction.solo_booking_hold_id)
+
+
 
 
 def _sync_team_booking_payment(transaction: PaymentTransaction) -> None:
@@ -290,6 +294,7 @@ def submit_manual_bank_payment(
     phone_number: str = "",
     booking=None,
     team_booking_payment=None,
+    solo_booking_hold=None,
 ) -> PaymentTransaction:
     
     reference_number = (reference_number or "").strip().upper()
@@ -350,16 +355,17 @@ def submit_manual_bank_payment(
     if bank not in PAYER_PHONE_REQUIRED_BANKS:
         phone_number = ""
 
-    target = _resolve_payment_target(booking=booking, team_booking_payment=team_booking_payment)
+    target = _resolve_payment_target(booking=booking, team_booking_payment=team_booking_payment, solo_booking_hold=solo_booking_hold)
     pitch_owner = target["pitch_owner"]
     amount_expected = target["amount_expected"]
 
     already_paid_qs = PaymentTransaction.objects.filter(status=PaymentStatus.VERIFIED)
-    already_paid_qs = (
-        already_paid_qs.filter(booking=booking)
-        if booking is not None
-        else already_paid_qs.filter(team_booking_payment=team_booking_payment)
-    )
+    if booking is not None:
+        already_paid_qs = already_paid_qs.filter(booking=booking)
+    elif team_booking_payment is not None:
+        already_paid_qs = already_paid_qs.filter(team_booking_payment=team_booking_payment)
+    else:
+        already_paid_qs = already_paid_qs.filter(solo_booking_hold=solo_booking_hold)
     if already_paid_qs.exists():
         raise PaymentValidationError("This has already been paid.")
 
@@ -447,15 +453,15 @@ def submit_manual_bank_payment(
         return _apply_verification_result(transaction=transaction_row, result_item=result_item)
     except Exception:
         # ANY unexpected failure here — a malformed response, a bug
-        # on our side, anything — must never leave this row stuck at
-        # PROCESSING forever. That would permanently block the payer
-        # from ever retrying, even though their money may genuinely
-        # have gone through. Reverting to PENDING always allows a
-        # clean retry.
-        transaction_row.status = PaymentStatus.PENDING
-        transaction_row.rejection_reason = "internal_error"
-        transaction_row.save(update_fields=["status", "rejection_reason", "updated_at"])
+        # on our side, anything — must never leave a dead row sitting
+        # around blocking retries. Reverting to PENDING alone wasn't
+        # enough: the already_in_flight check treats PENDING as
+        # "still in progress" too, so the payer got permanently stuck
+        # even though their real payment may have gone through fine.
+        # Deleting the row entirely frees the reference number for an
+        # immediate clean retry.
         logger.exception("Unexpected error finishing verification for transaction %s", transaction_row.id)
+        transaction_row.delete()
         raise PaymentProviderError("Something went wrong while verifying this payment. Please try again.")
 
 
@@ -593,6 +599,7 @@ def resolve_needs_review(
                 "Cannot approve: this booking already has a verified payment, or this reference was already used."
             )
         _sync_team_booking_payment(transaction)
+        _sync_solo_booking_hold(transaction)
         return transaction
 
     transaction.status = PaymentStatus.REJECTED
@@ -641,6 +648,30 @@ def mark_payment_verified_from_gateway(*, team_booking_payment_id) -> None:
     this share reaches VERIFIED. This is what actually confirms money
     moved — it replaces the old pay_for_booking() stub, which just
     faked a payment instantly with no real verification behind it.
+    """
+    try:
+        payment = TeamBookingPayment.objects.select_related("request").get(
+            id=team_booking_payment_id, status=PaymentStatus.PENDING
+        )
+    except TeamBookingPayment.DoesNotExist:
+        return
+
+    payment.mark_paid()
+    notify(
+        recipient=payment.request.created_by,
+        notification_type=NotificationType.TEAM_BOOKING_PAYMENT_RECEIVED,
+        title="Payment received",
+        body=f"{_display_name(payment.payer)} paid for {payment.request.pitch_name}.",
+        data={"team_booking_request_id": str(payment.request.id)},
+        send_push=False,
+    )
+    _try_finalize_if_all_paid(payment.request)
+
+
+def mark_payment_verified_from_gateway(*, team_booking_payment_id) -> None:
+    """Called by the payment app the instant a REAL PaymentTransaction
+    for this share reaches VERIFIED — this is the actual confirmation
+    that money moved, replacing the old instant-fake pay_for_booking().
     """
     try:
         payment = TeamBookingPayment.objects.select_related("request").get(

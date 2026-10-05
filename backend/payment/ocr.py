@@ -10,14 +10,10 @@ logger = logging.getLogger(__name__)
 
 MAX_IMAGE_PIXELS = 25_000_000
 OCR_TIMEOUT_SECONDS = 15
-TARGET_OCR_WIDTH = 2200  # "server-side zoom" — matches what manually cropping/zooming achieves
+TARGET_OCR_WIDTH = 2200
 
 
 class OcrUnavailable(Exception):
-    """Raised when the tesseract binary itself isn't installed/reachable.
-    Callers must catch this and degrade to manual entry — never let a
-    missing OCR engine crash a real payment submission.
-    """
     pass
 
 
@@ -35,24 +31,24 @@ _BANK_PATTERNS = [
 ]
 
 _REFERENCE_LABELS = [
-    "TRANSACTION ID",
-    "TRANSACTION NUMBER",
-    "TRANSACTION REFERENCE",
-    "TRANSFER REFERENCE",
-    "TRANSACTION REF",
-    "REFERENCE NUMBER",
-    "REFERENCE NO",
-    "REF NO",
-    "RECEIPT NUMBER",
-    "RECEIPT NO",
-    "TXN NUMBER",
-    "TXN NO",
-    "TXN ID",
+    "TRANSACTION ID", "TRANSACTION NUMBER", "TRANSACTION REFERENCE",
+    "TRANSFER REFERENCE", "TRANSACTION REF", "REFERENCE NUMBER",
+    "REFERENCE NO", "REF NO", "RECEIPT NUMBER", "RECEIPT NO",
+    "TXN NUMBER", "TXN NO", "TXN ID",
 ]
 
-_CBE_RECEIPT_URL = re.compile(r"mbreciept\.cbe\.com\.et/+([A-Z0-9]{6,20})", re.IGNORECASE)
+_CBE_RECEIPT_URL = re.compile(r"mbreciept\.cbe\.com\.et/+([A-Z0-9]{6,32})", re.IGNORECASE)
 
-_CODE = re.compile(r"(?=[A-Z0-9]*[0-9])(?=[A-Z0-9]*[A-Z])[A-Z0-9]{6,20}")
+# FT-prefixed references (CBE, and BOA's "other bank transfer" routed
+# through CBE's network) are highly distinctive — checked FIRST,
+# globally, before any label search. This alone restores CBE/BOA to
+# the reliability they had before this whole rewrite started.
+_FT_PATTERN = re.compile(r"(?<![A-Z0-9])FT[A-Z0-9]{8,16}(?![A-Z0-9])")
+
+# Widened from 20 -> 32 to fit Dashen's 25-char references. Matching
+# stays SINGLE-LINE only — no joining adjacent lines together, which
+# is what previously produced garbage from unrelated nearby text.
+_CODE = re.compile(r"(?=[A-Z0-9]*[0-9])(?=[A-Z0-9]*[A-Z])[A-Z0-9]{6,32}")
 _STOPWORDS = {
     "ETB", "AMOUNT", "DATE", "TIME", "BIRR", "BALANCE", "TOTAL",
     "TRANSACTION", "NUMBER", "REFERENCE", "REFNO", "TXN", "NAME",
@@ -79,6 +75,11 @@ def _best_code_in_text(text: str) -> str:
 
 
 def _find_code_near_label(lines: list, label: str, max_lookahead: int = 2) -> str:
+    """Finds `label` on a line, pulls a code from the rest of THAT
+    line, or from one of the next 1-2 lines individually — never
+    joined together. Line-joining was removed; it's what caused the
+    garbage-string regression.
+    """
     label_compact = re.sub(r"\s+", "", label)
 
     for i, line in enumerate(lines):
@@ -107,13 +108,6 @@ def _find_code_near_label(lines: list, label: str, max_lookahead: int = 2) -> st
 
 
 def _isolated_line_candidate(lines: list) -> str:
-    """Last-resort only: for receipts where the LABEL text itself was
-    too faint/small for OCR to read (e.g. light-gray 'Transaction
-    Number' captions) but the bold VALUE underneath it was readable.
-    Only ever accepts a token that is the ENTIRE content of its own
-    line — never picks something out of flowing sentence text — which
-    is what keeps this safe to use as a fallback.
-    """
     for line in lines:
         compact = re.sub(r"\s+", "", line.upper())
         if not compact or compact in _STOPWORDS:
@@ -136,13 +130,19 @@ def _prepare_base_image(image_file) -> Image.Image:
 
 
 def _enhance_image(image: Image.Image) -> Image.Image:
-    """Second-pass boost only — autocontrast stretches faded gray
-    text toward black/white, UnsharpMask crisps up thin label
-    strokes. Cheap (pure Pillow, no extra dependency).
-    """
     enhanced = ImageOps.autocontrast(image, cutoff=1)
     enhanced = enhanced.filter(ImageFilter.UnsharpMask(radius=2, percent=150, threshold=3))
     return enhanced
+
+
+def _binarize_image(image: Image.Image) -> Image.Image:
+    """Last-resort third pass: hard black/white threshold. Cheap
+    (pure Pillow point() op, no new dependency) and specifically
+    helps receipts where a faint watermark or stamp bleeds into the
+    text — binarizing tends to wipe out light-gray background noise
+    while keeping solid black text intact.
+    """
+    return image.point(lambda p: 255 if p > 150 else 0)
 
 
 def _run_tesseract(image: Image.Image, psm: int) -> str:
@@ -152,13 +152,17 @@ def _run_tesseract(image: Image.Image, psm: int) -> str:
         raise OcrUnavailable("Tesseract is not installed on this server.") from exc
 
 
-def _try_label_extract(raw_text: str, bank_hint: str):
+def _try_extract(raw_text: str, bank_hint: str):
     lines = [l.strip() for l in raw_text.splitlines() if l.strip()]
     detected_bank = _detect_bank(raw_text)
 
     url_match = _CBE_RECEIPT_URL.search(raw_text)
     if url_match:
         return url_match.group(1).upper(), "high", (bank_hint or detected_bank or SupportedBank.CBE)
+
+    ft_match = _FT_PATTERN.search(re.sub(r"\s+", "", raw_text.upper()))
+    if ft_match:
+        return ft_match.group(0), "high", (bank_hint or detected_bank)
 
     for label in _REFERENCE_LABELS:
         found = _find_code_near_label(lines, label)
@@ -170,21 +174,26 @@ def _try_label_extract(raw_text: str, bank_hint: str):
 
 def extract_reference_from_image(*, image_file, bank_hint: str = "") -> dict:
     """Best-effort suggestion only — the payer confirms/edits it, and
-    submit_manual_bank_payment() independently re-checks it against a
-    fresh OCR pass before anything is trusted. At most 2 real
-    Tesseract calls per upload — bounded CPU, VPS-safe.
+    submit_manual_bank_payment() independently re-checks it. At most
+    3 Tesseract calls, only reaching the 3rd on genuinely hard images.
     """
     base_image = _prepare_base_image(image_file)
 
     raw_text_1 = _run_tesseract(base_image, psm=6)
-    suggested, confidence, bank = _try_label_extract(raw_text_1, bank_hint)
+    suggested, confidence, bank = _try_extract(raw_text_1, bank_hint)
     combined_text = raw_text_1
 
     if not suggested:
         enhanced_image = _enhance_image(base_image)
         raw_text_2 = _run_tesseract(enhanced_image, psm=11)
-        combined_text = raw_text_1 + "\n" + raw_text_2
-        suggested, confidence, bank = _try_label_extract(raw_text_2, bank_hint)
+        combined_text += "\n" + raw_text_2
+        suggested, confidence, bank = _try_extract(raw_text_2, bank_hint)
+
+    if not suggested:
+        binarized_image = _binarize_image(base_image)
+        raw_text_3 = _run_tesseract(binarized_image, psm=6)
+        combined_text += "\n" + raw_text_3
+        suggested, confidence, bank = _try_extract(raw_text_3, bank_hint)
 
     if not suggested:
         lines = [l.strip() for l in combined_text.splitlines() if l.strip()]
