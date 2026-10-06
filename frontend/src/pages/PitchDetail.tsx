@@ -179,8 +179,6 @@ export default function PitchDetail() {
 const [bookingStep, setBookingStep] = useState<BookingStep>("closed");
 const [selectedTeam, setSelectedTeam] = useState<MyTeam | null>(null);
 const [teamBookingLoading, setTeamBookingLoading] = useState(false);
-const [soloPayment, setSoloPayment] = useState<{ id: string; pitch_name: string; amount: string; payment_expires_at: string } | null>(null);
-const [soloHoldLoading, setSoloHoldLoading] = useState(false);
 
   // ---------- days scroller: overflow + scroll-affordance state ----------
   const daysScrollRef = useRef<HTMLDivElement>(null);
@@ -458,7 +456,6 @@ const [soloHoldLoading, setSoloHoldLoading] = useState(false);
   if (!pitch || !pitchId || selectedList.length === 0) return;
   const bookingType = mode === "daily" ? "HOURLY" : mode === "weekly" ? "WEEKLY" : "MONTHLY";
 
-  setSoloHoldLoading(true);
   try {
     await createSoloBookingHold({
       pitch_id: pitchId,
@@ -476,8 +473,6 @@ const [soloHoldLoading, setSoloHoldLoading] = useState(false);
     showToast("Almost there — complete your payment in the popup.", "create");
   } catch (e: any) {
     showToast(e?.response?.data?.detail || "Couldn't start payment — this slot may have just been taken.", "delete");
-  } finally {
-    setSoloHoldLoading(false);
   }
 }
 

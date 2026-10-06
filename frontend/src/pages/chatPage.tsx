@@ -32,7 +32,6 @@ import {
   getMyPaymentDetail,
   confirmTeamBooking,
   declineTeamBooking,
-  payForBooking,
   type TeamBookingMemberStatus,
   type BookedPitchSummary,
   type ConfirmationDetail,
@@ -629,7 +628,6 @@ function ChatThread({ teamSlug, onBack, onOpenSearch, onMessagesChange, scrollTo
   const [viewedConfirmation, setViewedConfirmation] = useState<ConfirmationDetail | null>(null);
   const [viewedPayment, setViewedPayment] = useState<PaymentDetail | null>(null);
   const [viewedBookedSummary, setViewedBookedSummary] = useState<BookedPitchSummary | null>(null);
-  const [paymentActionLoading, setPaymentActionLoading] = useState(false);
 
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
@@ -697,16 +695,7 @@ function ChatThread({ teamSlug, onBack, onOpenSearch, onMessagesChange, scrollTo
     refreshBookings();
   }
 
-  async function handlePay(requestId: string) {
-    setPaymentActionLoading(true);
-    try {
-      await payForBooking(requestId);
-      setViewedPayment(null);
-      refreshBookings();
-    } finally {
-      setPaymentActionLoading(false);
-    }
-  }
+ 
 
   useEffect(() => {
     setTeamId(null);
@@ -1276,7 +1265,7 @@ function ChatThread({ teamSlug, onBack, onOpenSearch, onMessagesChange, scrollTo
         />
       )}
 
-      {viewedPayment && (
+            {viewedPayment && (
         <MemberPaymentPopup
           payment={{
             id: viewedPayment.id,
@@ -1286,8 +1275,10 @@ function ChatThread({ teamSlug, onBack, onOpenSearch, onMessagesChange, scrollTo
             amount: viewedPayment.amount,
             payment_expires_at: viewedPayment.payment_expires_at,
           }}
-          loading={paymentActionLoading}
-          onPay={handlePay}
+          onPaid={() => {
+            setViewedPayment(null);
+            refreshBookings();
+          }}
           onClose={() => setViewedPayment(null)}
           readOnly={!viewedPayment.can_pay}
           readOnlyStatusLabel={
