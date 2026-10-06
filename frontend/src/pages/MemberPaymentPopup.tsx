@@ -2,11 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import styles from "./css/MemberPaymentPopup.module.css";
 import {
   getTeamBookingPaymentInfo, extractReceiptData, submitTeamBookingPayment, pollPaymentTransaction,
+  getSoloBookingPaymentInfo, submitSoloBookingPayment,
   type PaymentInfo, type OwnerBankAccount,
 } from "../lib/payment";
 import PaymentLogo from "../components/PaymentLogo";
-
-import { getSoloBookingPaymentInfo, submitSoloBookingPayment } from "../lib/payment";
 
 interface PendingPaymentLike {
   id: string;
@@ -19,7 +18,7 @@ interface PendingPaymentLike {
 
 interface Props {
   payment: PendingPaymentLike;
-  kind?: "team" | "solo"; // defaults to "team" to preserve existing call sites
+  kind?: "team" | "solo";
   onClose?: () => void;
   onPaid?: () => void;
   readOnly?: boolean;
@@ -82,15 +81,13 @@ function CheckCircleIcon(props: React.SVGProps<SVGSVGElement>) {
 function SpinnerIcon(props: React.SVGProps<SVGSVGElement>) {
   return <svg viewBox="0 0 24 24" fill="none" {...props}><circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeDasharray="42 100" /></svg>;
 }
-// Stylized hand gesture — the "no-no" wag animation is applied via
-// the .noNoBadge wrapper class in CSS, not here.
 function NoGestureIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" {...props}>
       <path d="M8 21v-7.3a1.9 1.9 0 1 1 3.8 0V13" />
       <path d="M8 13V7.2a1.5 1.5 0 1 1 3 0V11" />
       <path d="M11 11V5.7a1.5 1.5 0 1 1 3 0V11" />
-      <path d="M14 11V6.9a1.5 1.5 0 1 1 3 0V13a6 6 0 0 1-6 6H10a5 5 0 0 1-4-2l-2.3-3a1.25 1.25 0 0 1 1.9-1.6L8 14" />
+      <path d="M14 11V6.9a1.5 1.5 0 1 1 3 0V13a6 6 0 0 1-6 6h-1a5 5 0 0 1-4-2l-2.3-3a1.25 1.25 0 0 1 1.9-1.6L8 14" />
     </svg>
   );
 }
@@ -118,7 +115,8 @@ export default function MemberPaymentPopup({ payment, kind = "team", onClose, on
   useEffect(() => {
     if (readOnly) return;
     let cancelled = false;
-    (kind === "solo" ? getSoloBookingPaymentInfo(payment.id) : getTeamBookingPaymentInfo(payment.id))
+    const fetchInfo = kind === "solo" ? getSoloBookingPaymentInfo(payment.id) : getTeamBookingPaymentInfo(payment.id);
+    fetchInfo
       .then((data) => {
         if (cancelled) return;
         setInfo(data);
@@ -131,7 +129,7 @@ export default function MemberPaymentPopup({ payment, kind = "team", onClose, on
       })
       .catch(() => !cancelled && setError("Couldn't load payment options. Please try again."));
     return () => { cancelled = true; };
-  }, [payment.id, readOnly]);
+  }, [payment.id, readOnly, kind]);
 
   useEffect(() => () => { if (pollTimer.current) clearInterval(pollTimer.current); }, []);
 
@@ -148,8 +146,6 @@ export default function MemberPaymentPopup({ payment, kind = "team", onClose, on
         setReferenceNumber(result.suggested_reference_number);
         setRefAutoFilled(true);
       } else {
-        // OCR ran fine but found nothing confident — never guess,
-        // just ask the payer to confirm it themselves.
         setRefNeedsManual(true);
       }
       if (!selectedAccount && result.suggested_bank && info) {
@@ -211,7 +207,7 @@ export default function MemberPaymentPopup({ payment, kind = "team", onClose, on
         account_suffix: accountSuffix,
         phone_number: phoneNumber,
       });
-      if (txn.status === "verified") { setStep("verified"); }
+      if (txn.status === "verified") setStep("verified");
       else if (txn.status === "rejected") { setRejectionReason(txn.rejection_reason); setStep("rejected"); }
       else if (txn.status === "needs_review") setStep("needs_review");
       else startPolling(txn.id);
@@ -223,13 +219,41 @@ export default function MemberPaymentPopup({ payment, kind = "team", onClose, on
 
   function retry() { setStep("form"); setError(""); }
 
+  function handleDone() {
+    onPaid?.();
+    onClose?.();
+  }
+
   const refMeta = selectedAccount ? (REFERENCE_LABELS[selectedAccount.bank] || DEFAULT_REF) : DEFAULT_REF;
+
+  // ---------------- Clean, dedicated success screen — no leftover
+  // "Pay for X" header, no countdown. The ONLY way this popup closes
+  // is the user clicking Done, which calls BOTH onPaid and onClose,
+  // guaranteeing every payment-related popup disappears together. ----------------
+  if (step === "verified") {
+    return (
+      <div className={styles.overlay}>
+        <div className={styles.card} role="alertdialog" aria-modal="true">
+          <div className={styles.successBox}>
+            <CheckCircleIcon className={styles.successIcon} />
+            <div className={styles.successText}>Payment Completed! 🎉</div>
+            <div className={styles.successSub}>
+              Your spot at {payment.pitch_name} is booked. {payment.amount} Br paid.
+            </div>
+            <button className={styles.payBtn} onClick={handleDone}>
+              Done
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={styles.overlay}>
       <div className={styles.card} role="alertdialog" aria-modal="true">
-        {!readOnly && step !== "verified" && <div className={styles.countdown}>{countdown}</div>}
-        {onClose && (readOnly || step === "verified" || step === "rejected" || step === "needs_review") && (
+        {!readOnly && <div className={styles.countdown}>{countdown}</div>}
+        {onClose && readOnly && (
           <button className={styles.readOnlyClose} onClick={onClose} aria-label="Close"><CloseIcon /></button>
         )}
 
@@ -362,7 +386,7 @@ export default function MemberPaymentPopup({ payment, kind = "team", onClose, on
                         />
                         {suffixInvalid && (
                           <span className={styles.manualHint}>
-                            እባክዎ የ{selectedAccount.requirements.label} አካውንት ቁጥሮን የመጨረሻዎቹን {selectedAccount.requirements.account_suffix_length} ቁጥሮች ያስገቡ
+                            እባክዎ የ{selectedAccount.requirements.label} መለያዎን የመጨረሻ {selectedAccount.requirements.account_suffix_length} ቁጥሮች ያስገቡ
                           </span>
                         )}
                       </label>
@@ -381,8 +405,6 @@ export default function MemberPaymentPopup({ payment, kind = "team", onClose, on
                   </>
                 )}
 
-                {/* moved out of normal flow — rendered at the TOP of the card, see below */}
-
                 <button className={styles.payBtn} onClick={handleSubmit} disabled={!selectedAccount}>
                   Submit Payment
                 </button>
@@ -398,22 +420,6 @@ export default function MemberPaymentPopup({ payment, kind = "team", onClose, on
               </div>
             )}
 
-            {step === "verified" && (
-              <div className={styles.successBox}>
-                <CheckCircleIcon className={styles.successIcon} />
-                <div className={styles.successText}>Payment Completed! 🎉</div>
-                <div className={styles.successSub}>
-                  Your spot at {payment.pitch_name} is booked. {payment.amount} Br paid.
-                </div>
-                <button
-                  className={styles.payBtn}
-                  onClick={() => { onPaid?.(); onClose?.(); }}
-                >
-                  Done
-                </button>
-              </div>
-            )}
-
             {step === "rejected" && (
               <div className={styles.rejectBox}>
                 <span className={styles.noNoBadge}><NoGestureIcon className={styles.noNoIcon} /></span>
@@ -422,6 +428,11 @@ export default function MemberPaymentPopup({ payment, kind = "team", onClose, on
               </div>
             )}
 
+            {step === "needs_review" && (
+              <div className={styles.infoBox}>
+                We're double-checking this payment manually — you'll be notified once it's confirmed.
+              </div>
+            )}
 
             {step === "timeout" && (
               <div className={styles.rejectBox}>

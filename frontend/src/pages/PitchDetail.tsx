@@ -17,7 +17,6 @@ import { getMyTeams, requestTeamBooking, type MyTeam } from "../lib/team";
 import type { BookingStep } from "./BookingTeamModal";
 import BookingTeamModal from "./BookingTeamModal";
 import { createSoloBookingHold } from "../lib/pitches";
-import MemberPaymentPopup from "./MemberPaymentPopup";
 
 type BookingMode = "daily" | "weekly" | "monthly";
 type SelectedMap = Record<string, AvailabilitySlot>;
@@ -461,14 +460,20 @@ const [soloHoldLoading, setSoloHoldLoading] = useState(false);
 
   setSoloHoldLoading(true);
   try {
-    const hold = await createSoloBookingHold({
+    await createSoloBookingHold({
       pitch_id: pitchId,
       booking_type: bookingType,
       selections: selectedList.map((s) => ({ start_iso: s.start_iso, end_iso: s.end_iso })),
       notes,
     });
-    setSoloPayment(hold);
     setBookingStep("closed");
+    setSelected({});
+    setNotes("");
+    // AppShell's own poll picks this up within a few seconds and
+    // shows the mandatory payment popup — it's the ONLY place this
+    // popup is ever rendered, so there's never a second, stale copy
+    // left on screen after payment completes.
+    showToast("Almost there — complete your payment in the popup.", "create");
   } catch (e: any) {
     showToast(e?.response?.data?.detail || "Couldn't start payment — this slot may have just been taken.", "delete");
   } finally {
@@ -966,25 +971,7 @@ async function handleConfirmTeamBooking() {
         onBack={backToChoiceStep}
         onBackToTeams={backToTeamSelectStep}
       />
-            {soloPayment && (
-        <MemberPaymentPopup
-          payment={soloPayment}
-          kind="solo"
-          onClose={() => setSoloPayment(null)}
-          onPaid={async () => {
-            showToast("Booking confirmed!", "create");
-            setSelected({});
-            setNotes("");
-            if (pitchId) {
-              const refreshed = await getPitchDetail(pitchId);
-              setPitch(refreshed.pitch);
-              setDays(refreshed.daily_weekly_days);
-              setMonthlyWeeks(refreshed.monthly_weeks);
-              setExistingBookings(refreshed.existing_bookings || []);
-            }
-          }}
-        />
-      )}
+       
     </div>
     </div>
   );

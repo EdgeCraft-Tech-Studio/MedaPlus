@@ -886,10 +886,8 @@ export default function AppShell() {
         <MemberPaymentPopup
           payment={pendingSoloPayment}
           kind="solo"
-          onPaid={() => {
-            setPendingSoloPayment(null);
-            refreshPendingSoloPayment();
-          }}
+          onClose={() => { setPendingSoloPayment(null); refreshPendingSoloPayment(); }}
+          onPaid={() => { setPendingSoloPayment(null); refreshPendingSoloPayment(); }}
         />
       )}
 
