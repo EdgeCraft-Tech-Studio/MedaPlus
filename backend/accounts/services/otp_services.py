@@ -161,7 +161,6 @@ class OTPService:
             SMSSendError: provider error, timeout, or connection failure
         """
         message = self._build_message(otp_code, purpose)
-        
 
         print(f"⚡ OTP for {phone} ({purpose}): {otp_code}")
 
