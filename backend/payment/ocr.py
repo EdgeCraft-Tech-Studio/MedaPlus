@@ -96,8 +96,12 @@ _LABELS = [
     "transactionno", "transactioncode", "transferreference", "transferid",
     "referencenumber", "referenceno", "referenceid", "reference", "refno",
     "receiptnumber", "receiptno", "txnnumber", "txnno", "txnid", "trxid",
-    "invoiceno", "invoicenumber", "paymentreference", "confirmationnumber",
+    "invoiceno", "invoicenumber",
 ]
+# Priority: any transaction-number/reference/id label wins; "Invoice No" is only
+# used when NO such label produced a value (telebirr's downloaded PDF receipt
+# has only "Invoice No.").
+_SECONDARY_LABELS = {"invoiceno", "invoicenumber"}
 # look-alike labels that must NOT be mistaken for a reference label
 _NEGATIVE_LABELS = [
     "transactiontime", "transactiontype", "transactionto", "transactiondate",
@@ -110,8 +114,8 @@ _REFERENCE_LABELS = _LABELS  # kept for backwards compatibility
 
 
 def _label_ends(compact: str) -> list:
-    """End offsets of every fuzzy label occurrence inside a compact line."""
-    ends = set()
+    """[(end_offset, is_secondary)] for every fuzzy label occurrence."""
+    hits = {}
     for label in _LABELS:
         n = len(label)
         for size in {n - 1, n, n + 1}:
@@ -124,13 +128,15 @@ def _label_ends(compact: str) -> list:
                     continue
                 if any(SequenceMatcher(None, seg, neg).ratio() >= ratio for neg in _NEGATIVE_LABELS):
                     continue
-                ends.add(start + size)
+                end = start + size
+                secondary = label in _SECONDARY_LABELS
+                hits[end] = hits.get(end, True) and secondary
     merged = []
-    for end in sorted(ends):
-        if merged and end - merged[-1] <= 3:
-            merged[-1] = end  # same label matched with a slightly different window
+    for end in sorted(hits):
+        if merged and end - merged[-1][0] <= 3:
+            merged[-1] = (end, merged[-1][1] and hits[end])
         else:
-            merged.append(end)
+            merged.append((end, hits[end]))
     return merged
 
 
@@ -163,14 +169,20 @@ def _try_ft(token: str) -> str:
     return fixed if _FT_STRICT.fullmatch(fixed) else ""
 
 
+_WORD_FRAGMENTS = ("PAYER", "PAYMENT", "ACCOUNT", "TELEBIRR", "CUSTOMER", "INVOICE",
+                   "AMOUNT", "TRANSACTION", "SERVICE", "BIRR", "STATUS", "NUMBER", "REGISTERED")
+
+
 def _is_codelike(tok: str) -> bool:
     if not re.fullmatch(r"[A-Z0-9]{6,24}", tok) or tok in _STOPWORDS:
         return False
-    has_digit = any(c.isdigit() for c in tok)
+    if any(frag in tok for frag in _WORD_FRAGMENTS):
+        return False
+    digits = sum(c.isdigit() for c in tok)
     has_alpha = any(c.isalpha() for c in tok)
-    if has_digit and has_alpha:
+    if digits >= 2 and has_alpha:   # real references carry several digits
         return True
-    return has_digit and len(tok) >= 8  # all-digit reference (rare, needs length)
+    return digits >= 8 and not has_alpha  # all-digit reference (rare, needs length)
 
 
 def _tokens(text: str) -> list:
@@ -314,8 +326,8 @@ def _text_of(lines: list) -> str:
 
 # ------------------------------------------------------------ observations
 
-def _obs(out: list, code: str, score: float, bbox=None, label=False):
-    out.append({"code": code, "score": score, "bbox": bbox, "label": label})
+def _obs(out: list, code: str, score: float, bbox=None, label=False, secondary=False):
+    out.append({"code": code, "score": score, "bbox": bbox, "label": label, "secondary": secondary})
 
 
 def _word_bbox(w):
@@ -349,7 +361,7 @@ def _label_observations(lines: list) -> list:
         if len(compact) < 5 or not _LABEL_PREFILTER.search(compact):
             continue
 
-        for end in _label_ends(compact):
+        for end, secondary in _label_ends(compact):
             label_words = [w for w, (s, _e) in zip(line, spans) if s < end]
             if not label_words:
                 continue
@@ -371,7 +383,7 @@ def _label_observations(lines: list) -> list:
                 remainder = label_words[-1]["compact"][end - last_start:].upper()
                 remainder = _try_ft(remainder) or remainder
                 if _is_codelike(remainder):
-                    _obs(out, remainder, 6.0, _word_bbox(label_words[-1]), label=True)
+                    _obs(out, remainder, 6.0, _word_bbox(label_words[-1]), label=True, secondary=secondary)
                     continue
                 label_right = label_words[-1]["left"] + (label_words[-1]["right"] - label_words[-1]["left"]) * (end - last_start) / max(len(label_words[-1]["compact"]), 1)
 
@@ -388,7 +400,7 @@ def _label_observations(lines: list) -> list:
             row_hits = 0
             for w in row:
                 for code in _codes_from_word(w):
-                    _obs(out, code, 6.0 if row_hits == 0 else 2.0, _word_bbox(w), label=True)
+                    _obs(out, code, 6.0 if row_hits == 0 else 2.0, _word_bbox(w), label=True, secondary=secondary)
                     row_hits += 1
             if row and row_hits == 0:  # value split by spaces: "DDI415 MGL4"
                 joined = re.sub(r"[^A-Za-z0-9]", "", "".join(w["text"] for w in row[:3])).upper()
@@ -397,22 +409,25 @@ def _label_observations(lines: list) -> list:
                         and not any(re.fullmatch(r"[\d\s/:.,\-+*%()]+", w["text"]) for w in row[:3])):
                     box = (row[0]["left"], min(w["top"] for w in row[:3]),
                            row[min(2, len(row) - 1)]["right"], max(w["bottom"] for w in row[:3]))
-                    _obs(out, joined, 5.0, box, label=True)
+                    _obs(out, joined, 5.0, box, label=True, secondary=secondary)
                     row_hits += 1
 
             # (c) directly below the label (value on the next line)
             if row_hits == 0:
-                below = sorted(
-                    (w for w in all_words
-                     if id(w) not in label_ids
-                     and bottom - 0.1 * height <= w["top"]
-                     and (w["top"] + w["bottom"]) / 2 <= bottom + 3.5 * height),
-                    key=lambda w: (round(w["top"] / height), w["left"]),
-                )
+                lab_l = min(w["left"] for w in label_words)
+                lab_r = max(w["right"] for w in label_words)
+                below_all = [w for w in all_words
+                             if id(w) not in label_ids
+                             and bottom - 0.1 * height <= w["top"]
+                             and (w["top"] + w["bottom"]) / 2 <= bottom + 3.5 * height]
+                # table layout: the value sits in the same COLUMN as the label
+                same_col = [w for w in below_all if w["right"] >= lab_l - height and w["left"] <= lab_r + height]
+                below = sorted(same_col if any(_codes_from_word(w) for w in same_col) else below_all,
+                               key=lambda w: (round(w["top"] / height), w["left"]))
                 hits = 0
                 for w in below:
                     for code in _codes_from_word(w):
-                        _obs(out, code, 4.5 if hits == 0 else 1.5, _word_bbox(w), label=True)
+                        _obs(out, code, 4.5 if hits == 0 else 1.5, _word_bbox(w), label=True, secondary=secondary)
                         hits += 1
                     if hits >= 2:
                         break
@@ -466,7 +481,9 @@ class _Votes:
 
     def add(self, pass_name: str, observations: list):
         for o in observations:
-            item = self.items.setdefault(o["code"], {"passes": {}, "bbox": (0, None), "label": False})
+            item = self.items.setdefault(
+                o["code"], {"passes": {}, "bbox": (0, None), "label": False, "primary": False})
+            item["primary"] = item["primary"] or (o["label"] and not o.get("secondary", False))
             item["passes"][pass_name] = max(item["passes"].get(pass_name, 0), o["score"])
             if o["bbox"] is not None and o["score"] >= item["bbox"][0]:
                 item["bbox"] = (o["score"], o["bbox"])
@@ -548,7 +565,13 @@ def _resolve(votes: _Votes, bank: str) -> list:
             "code": code, "score": sum(members.values()), "agree": agree,
             "members": list(members), "bbox": bbox[1] if bbox else None, "label": label,
         })
-    resolved.sort(key=lambda r: -r["score"])
+        resolved[-1]["primary"] = any(votes.items[c]["primary"] for c in members if c in votes.items)
+    # Priority rule: a value found next to a Transaction Number/Reference/ID
+    # label beats one found next to "Invoice No" (secondary-only candidates are
+    # used only when no primary-label candidate exists).
+    if any(r["primary"] for r in resolved):
+        resolved = [r for r in resolved if r["primary"] or not r["label"]]
+    resolved.sort(key=lambda r: (-int(r["primary"]), -r["score"]))
     return resolved
 
 
@@ -664,9 +687,12 @@ def _confidence(top) -> str:
 
 
 def _is_confident(top) -> bool:
-    return top is not None and top["score"] >= 10 and (
-        len(top["members"]) >= 1 and (top["score"] >= 14 or _FT_STRICT.fullmatch(top["code"]))
-    )
+    if top is None:
+        return False
+    if top["score"] >= 10 and _FT_STRICT.fullmatch(top["code"]):
+        return True
+    # same value read next to a label by two independent passes
+    return top["label"] and top["agree"] >= 2 and top["score"] >= 9
 
 
 def extract_reference_from_image(*, image_file, bank_hint: str = "") -> dict:

@@ -10,8 +10,8 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libpq-dev \
+    tesseract-ocr \
     && rm -rf /var/lib/apt/lists/*
-
 # Install python deps first (better layer caching)
 COPY requirements.txt .
 RUN pip install --no-cache-dir --default-timeout=500 -r requirements.txt

@@ -4,7 +4,8 @@ venv/
 
 # Environment variables
 .env
-
+# Uploaded media
+media/
 # Python cache
 __pycache__/
 *.py[cod]

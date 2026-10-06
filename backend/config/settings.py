@@ -27,7 +27,8 @@ ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "localhost").split(",")
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
-VERIFY_ET_API_KEY = "VERIFY_BANK_ET_4VGAjNvNCf4nCRYYLetLuN6W7N8Vk25xKb6G8HFBkLr-yEM_pDD7N6dXwr1e_iob"
+VERIFY_ET_API_KEY = os.getenv("VERIFY_ET_API_KEY")
+
 VERIFY_ET_BASE_URL = os.getenv("VERIFY_ET_BASE_URL", "https://verify.et")
 
 

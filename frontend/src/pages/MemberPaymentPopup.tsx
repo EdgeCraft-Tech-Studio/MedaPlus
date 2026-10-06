@@ -175,7 +175,7 @@ export default function MemberPaymentPopup({ payment, kind = "team", onClose, on
       attempts += 1;
       try {
         const txn = await pollPaymentTransaction(transactionId);
-        if (txn.status === "verified") { clearInterval(pollTimer.current!); setStep("verified"); onPaid?.(); }
+        if (txn.status === "verified") { clearInterval(pollTimer.current!); setStep("verified"); }
         else if (txn.status === "rejected") { clearInterval(pollTimer.current!); setRejectionReason(txn.rejection_reason); setStep("rejected"); }
         else if (txn.status === "needs_review") { clearInterval(pollTimer.current!); setStep("needs_review"); }
         else if (attempts > 20) { clearInterval(pollTimer.current!); setStep("timeout"); }
@@ -211,7 +211,7 @@ export default function MemberPaymentPopup({ payment, kind = "team", onClose, on
         account_suffix: accountSuffix,
         phone_number: phoneNumber,
       });
-      if (txn.status === "verified") { setStep("verified"); onPaid?.(); }
+      if (txn.status === "verified") { setStep("verified"); }
       else if (txn.status === "rejected") { setRejectionReason(txn.rejection_reason); setStep("rejected"); }
       else if (txn.status === "needs_review") setStep("needs_review");
       else startPolling(txn.id);
@@ -401,7 +401,16 @@ export default function MemberPaymentPopup({ payment, kind = "team", onClose, on
             {step === "verified" && (
               <div className={styles.successBox}>
                 <CheckCircleIcon className={styles.successIcon} />
-                <div className={styles.successText}>Payment verified!</div>
+                <div className={styles.successText}>Payment Completed! 🎉</div>
+                <div className={styles.successSub}>
+                  Your spot at {payment.pitch_name} is booked. {payment.amount} Br paid.
+                </div>
+                <button
+                  className={styles.payBtn}
+                  onClick={() => { onPaid?.(); onClose?.(); }}
+                >
+                  Done
+                </button>
               </div>
             )}
 
