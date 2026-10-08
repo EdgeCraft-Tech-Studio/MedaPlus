@@ -12,7 +12,7 @@ from pitches.models import Pitch, BookingType
 from .availability import hold_slots, is_slot_available, release_slots, finalize_team_slots_as_booked
 from .models import SoloBookingHold, SoloBookingStatus
 
-PAYMENT_LIFETIME_MINUTES = 10
+PAYMENT_LIFETIME_MINUTES = 5
 
 
 def _generate_booking_code(length=8):

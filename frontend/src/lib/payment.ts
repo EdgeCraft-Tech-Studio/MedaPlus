@@ -56,6 +56,28 @@ export interface PaymentTransaction {
   processed_at: string | null;
 }
 
+/** What the payer sends. `bank` = the bank / wallet they paid FROM,
+ *  `pay_to_bank` = which of the pitch owner's accounts they paid INTO. */
+export interface SubmitPaymentPayload {
+  bank: string;
+  pay_to_bank?: string;
+  screenshot: File;
+  reference_number: string;
+  account_suffix?: string;
+  phone_number?: string;
+}
+
+function buildPaymentForm(payload: SubmitPaymentPayload): FormData {
+  const form = new FormData();
+  form.append("bank", payload.bank);
+  if (payload.pay_to_bank) form.append("pay_to_bank", payload.pay_to_bank);
+  form.append("screenshot", payload.screenshot);
+  form.append("reference_number", payload.reference_number);
+  if (payload.account_suffix) form.append("account_suffix", payload.account_suffix);
+  if (payload.phone_number) form.append("phone_number", payload.phone_number);
+  return form;
+}
+
 export async function getTeamBookingPaymentInfo(teamBookingPaymentId: string): Promise<PaymentInfo> {
   const res = await api.get(`/payment/team-booking-payments/${teamBookingPaymentId}/payment-info/`);
   return res.data;
@@ -73,24 +95,11 @@ export async function extractReceiptData(screenshot: File, bankHint?: string): P
 
 export async function submitTeamBookingPayment(
   teamBookingPaymentId: string,
-  payload: {
-    bank: string;
-    screenshot: File;
-    reference_number: string;
-    account_suffix?: string;
-    phone_number?: string;
-  }
+  payload: SubmitPaymentPayload
 ): Promise<PaymentTransaction> {
-  const form = new FormData();
-  form.append("bank", payload.bank);
-  form.append("screenshot", payload.screenshot);
-  form.append("reference_number", payload.reference_number);
-  if (payload.account_suffix) form.append("account_suffix", payload.account_suffix);
-  if (payload.phone_number) form.append("phone_number", payload.phone_number);
-
   const res = await api.post(
     `/payment/team-booking-payments/${teamBookingPaymentId}/pay/`,
-    form,
+    buildPaymentForm(payload),
     { headers: { "Content-Type": "multipart/form-data" } }
   );
   return res.data;
@@ -101,21 +110,95 @@ export async function pollPaymentTransaction(transactionId: string): Promise<Pay
   return res.data;
 }
 
-
 export async function getSoloBookingPaymentInfo(holdId: string): Promise<PaymentInfo> {
   const res = await api.get(`/payment/solo-bookings/${holdId}/payment-info/`);
   return res.data;
 }
 
-export async function submitSoloBookingPayment(holdId: string, payload: {
-  bank: string; screenshot: File; reference_number: string; account_suffix?: string; phone_number?: string;
-}): Promise<PaymentTransaction> {
-  const form = new FormData();
-  form.append("bank", payload.bank);
-  form.append("screenshot", payload.screenshot);
-  form.append("reference_number", payload.reference_number);
-  if (payload.account_suffix) form.append("account_suffix", payload.account_suffix);
-  if (payload.phone_number) form.append("phone_number", payload.phone_number);
-  const res = await api.post(`/payment/solo-bookings/${holdId}/pay/`, form, { headers: { "Content-Type": "multipart/form-data" } });
+export async function submitSoloBookingPayment(
+  holdId: string,
+  payload: SubmitPaymentPayload
+): Promise<PaymentTransaction> {
+  const res = await api.post(`/payment/solo-bookings/${holdId}/pay/`, buildPaymentForm(payload), {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return res.data;
+}
+
+export interface PaymentCompletionInfo {
+  transaction_id: string;
+  kind: "solo" | "team" | "booking";
+  pitch_name: string;
+  team_name?: string;
+  when_label: string;
+  amount: string;
+}
+
+export async function getPendingPaymentCompletion(): Promise<PaymentCompletionInfo | null> {
+  const res = await api.get("/payment/transactions/pending-completion/");
+  return res.data;
+}
+
+export async function acknowledgePaymentCompletion(transactionId: string): Promise<void> {
+  await api.post(`/payment/transactions/${transactionId}/acknowledge-completion/`);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Pitch owner: "Payment Detail" table
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type OwnerPaymentStatus = "verified" | "needs_review" | "rejected";
+export type OwnerPaymentFilter = "all" | OwnerPaymentStatus;
+
+export interface OwnerPaymentRow {
+  id: string;
+  status: OwnerPaymentStatus;
+  kind: "solo" | "team" | "booking";
+  team_name: string;
+  payer_first_name: string;
+  payer_last_name: string;
+  payer_phone: string;
+  amount: string;
+  sender_bank: string;
+  pay_to_bank: string;
+  reference_number: string;
+  paid_at: string | null;
+  submitted_at: string;
+  review_reason: string;
+}
+
+export interface OwnerPaymentPage {
+  results: OwnerPaymentRow[];
+  total: number;
+  page: number;
+  page_size: number;
+  counts: Record<OwnerPaymentStatus, number>;
+}
+
+export async function getPitchPayments(
+  pitchId: string,
+  params: { status?: OwnerPaymentFilter; page?: number } = {}
+): Promise<OwnerPaymentPage> {
+  const res = await api.get(`/payment/pitches/${pitchId}/transactions/`, {
+    params: { status: params.status ?? "all", page: params.page ?? 1 },
+  });
+  return res.data;
+}
+
+/** Approve / reject a payment that is waiting for review. */
+export async function ownerReviewPayment(
+  transactionId: string,
+  action: "approve" | "reject"
+): Promise<OwnerPaymentRow> {
+  const res = await api.post(`/payment/transactions/${transactionId}/owner-review/`, { action });
+  return res.data;
+}
+
+/** Turn a VERIFIED payment into REJECTED. Needs the owner's own password. */
+export async function ownerRejectVerifiedPayment(
+  transactionId: string,
+  password: string
+): Promise<OwnerPaymentRow> {
+  const res = await api.post(`/payment/transactions/${transactionId}/owner-reject-verified/`, { password });
   return res.data;
 }

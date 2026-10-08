@@ -14,6 +14,7 @@ class NotificationType(models.TextChoices):
     TEAM_INVITATION_ACCEPTED = "team_invitation_accepted", "Invitation Accepted"
     TEAM_INVITATION_DECLINED = "team_invitation_declined", "Invitation Declined"
     TEAM_JOIN_REQUEST_RECEIVED = "team_join_request_received", "New Join Request"
+    PAYMENT_CONFIRMATION = "payment_confirmation", "Payment Confirmation"
     TEAM_JOIN_REQUEST_APPROVED = "team_join_request_approved", "Join Request Approved"
     TEAM_JOIN_REQUEST_REJECTED = "team_join_request_rejected", "Join Request Rejected"
     TEAM_ROLE_CHANGED = "team_role_changed", "Your Role Changed"

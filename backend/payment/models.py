@@ -205,6 +205,12 @@ class PaymentTransaction(models.Model):
     processed_at = models.DateTimeField(null=True, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    # Drives the separate, mandatory "Payment Completed" popup — set
+    # True only when the PAYER clicks Done on it. Independent of any
+    # "is something still pending" check, so it survives exactly as
+    # long as the user needs it to, including across a refresh.
+    completion_acknowledged = models.BooleanField(default=False)
+
     objects = PaymentTransactionManager()
 
     class Meta:

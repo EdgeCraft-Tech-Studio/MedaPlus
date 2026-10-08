@@ -2,10 +2,12 @@ import re
 import logging
 from datetime import timedelta
 from decimal import Decimal, InvalidOperation
+from difflib import SequenceMatcher
 
 import requests
 from django.conf import settings
 from django.db import IntegrityError
+from django.db.models import Case, Count, IntegerField, Q, Value, When
 from django.db import transaction as db_transaction
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
@@ -29,10 +31,48 @@ from .models import (
 
 logger = logging.getLogger(__name__)
 
+
+class PaymentNotFound(PaymentValidationError):
+    """No such payment for this owner."""
+
+
+class InvalidOwnerPassword(PaymentValidationError):
+    """The pitch owner typed a wrong password."""
+
+
+class ReferenceAlreadyVerified(DuplicateTransactionError):
+    """The same transaction reference is already saved with status VERIFIED."""
+
+    def __init__(self, reference_number: str):
+        super().__init__(f"The transaction {reference_number} is already verified.")
+        self.reference_number = reference_number
+
 VERIFY_ET_BASE_URL = getattr(settings, "VERIFY_ET_BASE_URL", "https://verify.et")
-VERIFY_ET_API_KEY = getattr(settings, "VERIFY_ET_API_KEY", "")
-VERIFY_ET_TIMEOUT_SECONDS = 15
-VERIFY_ET_WAIT_MS = 8000
+VERIFY_ET_API_KEY = getattr(settings, "VERIFY_ET_API_KEY", "VERIFY_BANK_ET_uVZqtyPFucEujcveISCwsAZTvTqoj08KCayuv5IuS7DfRpzlg9haB2V6nXW9vz8v")
+VERIFY_ET_TIMEOUT_SECONDS = 30
+VERIFY_ET_WAIT_MS = 20000
+
+# ─────────────────────────────────────────────────────────────────────────────
+# RULE: a payment is rejected if the bank says it was made MORE THAN this many
+# hours BEFORE payment started on our side. Payment "started" =
+#   solo booking  -> the moment "Occupy / Cash booking" was clicked
+#                    (SoloBookingHold.created_at)
+#   team booking  -> the moment the owner clicked "Start Payment"
+#                    (TeamBookingPayment.created_at)
+# Both are exposed by PaymentTransaction.reference_date (see models.py).
+# Change the number in settings.py / .env, nothing else needs to move.
+# ─────────────────────────────────────────────────────────────────────────────
+MAX_PAYMENT_TIME_ALLOWED_HOURS = getattr(settings, "MAX_PAYMENT_TIME_ALLOWED_HOURS", 5)
+
+STALE_PROCESSING_MINUTES = 10
+MAX_BANK_RETRIES = 3
+
+# settings.py -> CHECK_NAME_FOR_PAYMENT = True / False
+#   True : the SENDER name on the bank receipt must match the payer's profile name,
+#          otherwise the payment waits in the pitch owner's review table.
+#   False: that sender-name check is skipped (a mother / father / friend may pay).
+# (The RECEIVER-name check - money went to the owner's account - is always on.)
+CHECK_NAME_FOR_PAYMENT = bool(getattr(settings, "CHECK_NAME_FOR_PAYMENT", False))
 
 
 def _call_verify_et(*, payload: dict, idempotency_key: str) -> requests.Response:
@@ -51,56 +91,6 @@ def _call_verify_et(*, payload: dict, idempotency_key: str) -> requests.Response
     )
 
 
-def _response_get(result_item: dict, *candidate_keys: str) -> str:
-    """verify.et's JSON key casing isn't fully pinned down from the
-    docs alone — try every reasonable variant of a field name rather
-    than assuming one exact key.
-    """
-    for key in candidate_keys:
-        if key in result_item and result_item[key] not in (None, ""):
-            return str(result_item[key])
-    return ""
-
-
-def _check_sender_identity(transaction, result_item: dict) -> str:
-    """Returns an empty string if the identity check passes (or isn't
-    applicable), or a rejection reason string if it fails.
-
-    This is what stops Player B from submitting Player A's real
-    screenshot as their own payment: verify.et independently reports
-    the real sender's account suffix in its response — this compares
-    that against what the submitting payer actually typed in, which
-    they'd only know if the account receiving/sending the money is
-    genuinely theirs.
-    """
-    if transaction.bank not in SUFFIX_REQUIRED_BANKS:
-        return ""  # wallets (phone-based) checked separately below
-
-    if not transaction.account_suffix:
-        return "sender_identity_mismatch"
-
-    suffix_len = SUFFIX_REQUIRED_BANKS[transaction.bank]
-    reported = _response_get(
-        result_item, "accountSuffix", "account_suffix",
-        "senderAccountLast4", "sender_account_last4",
-    )
-    if not reported:
-        # verify.et didn't give us anything to check against — don't
-        # silently pass; this bank is supposed to return this field.
-        return "sender_identity_mismatch"
-
-    # "Account Suffix" from CBE in your sample is 8 digits even
-    # though the submitted suffix field is also 8 digits for CBE —
-    # compare the LAST N digits of whichever is longer, since some
-    # banks may return the suffix embedded in a longer account string.
-    reported_tail = re.sub(r"\D", "", reported)[-suffix_len:]
-    submitted_tail = re.sub(r"\D", "", transaction.account_suffix)[-suffix_len:]
-
-    if reported_tail != submitted_tail:
-        return "sender_identity_mismatch"
-    return ""
-
-
 def _poll_verify_et(*, request_id: str) -> requests.Response:
     return requests.get(
         f"{VERIFY_ET_BASE_URL}/api/verify/{request_id}",
@@ -109,11 +99,155 @@ def _poll_verify_et(*, request_id: str) -> requests.Response:
     )
 
 
+def _response_get(result_item: dict, *candidate_keys: str) -> str:
+    """verify.et's JSON key casing isn't fully pinned down from the
+    docs alone — try every reasonable variant of a field name rather
+    than assuming one exact key. Looks at the top level first, then
+    inside "bankSpecific".
+    """
+    sources = [result_item]
+    nested = result_item.get("bankSpecific")
+    if isinstance(nested, dict):
+        sources.append(nested)
+    for source in sources:
+        for key in candidate_keys:
+            if key in source and source[key] not in (None, ""):
+                return str(source[key])
+    return ""
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# RECEIVER NAME CHECK
+# ─────────────────────────────────────────────────────────────────────────────
+
+_NAME_TITLES = {
+    "mr", "mrs", "ms", "miss", "dr", "prof", "sir", "ato", "wro", "weyzero",
+    "woizero", "w", "ro", "abba", "memhir",
+}
+
+
+def _name_tokens(name: str) -> list:
+    """'Mr Yeabsira  Tesfaye-Asefa' -> ['yeabsira', 'tesfaye', 'asefa']"""
+    text = re.sub(r"[\W\d_]+", " ", (name or "").lower(), flags=re.UNICODE)
+    return [t for t in text.split() if t and t not in _NAME_TITLES]
+
+
+def _names_match(expected: str, actual: str) -> bool:
+    """True when both names describe the same person.
+
+    - ignores case, titles (Mr/Ato/...), punctuation and word order
+    - tolerates small spelling differences per word (similarity >= 0.85)
+    - the SHORTER name must be fully contained in the longer one, so
+      "Yeabsira Tesfaye" matches "Mr Yeabsira Tesfaye Asefa"
+    - a one-word name can never prove identity (unless both are that one word)
+    """
+    a, b = _name_tokens(expected), _name_tokens(actual)
+    if not a or not b:
+        return False
+    short, long_ = (a, b) if len(a) <= len(b) else (b, a)
+    if len(short) < 2 and len(long_) > 1:
+        return False
+
+    remaining = list(long_)
+    for token in short:
+        best = max(remaining, key=lambda t: SequenceMatcher(None, token, t).ratio(), default=None)
+        if best is None or SequenceMatcher(None, token, best).ratio() < 0.85:
+            return False
+        remaining.remove(best)
+    return True
+
+
+def _receiver_name_from(result_item: dict) -> str:
+    return _response_get(
+        result_item,
+        "receiverName", "receiver_name", "creditedPartyName", "credited_party_name",
+        "beneficiaryName", "beneficiary_name",
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SENDER IDENTITY (sender name on the receipt vs the payer's profile name)
+# ─────────────────────────────────────────────────────────────────────────────
+
+# identity outcomes that go to the admin review queue instead of rejecting
+_REVIEW_IDENTITY_REASONS = {"sender_identity_missing_in_response", "sender_name_mismatch"}
+
+
+def _payer_full_name(payer) -> str:
+    getter = getattr(payer, "get_full_name", None)
+    full = getter() if callable(getter) else ""
+    if not full:
+        full = f"{getattr(payer, 'first_name', '')} {getattr(payer, 'last_name', '')}".strip()
+    return full or ""
+
+
+def _check_sender_name(transaction, result_item: dict) -> str:
+    """'' = fine / can't judge, otherwise a review reason."""
+    if not CHECK_NAME_FOR_PAYMENT:
+        return ""
+    payer_name = _payer_full_name(transaction.payer)
+    if len(_name_tokens(payer_name)) < 2:
+        return ""  # profile has no full name -> nothing reliable to compare
+    sender = _response_get(result_item, "senderName", "sender_name", "payerName")
+    if not sender:
+        return "sender_identity_missing_in_response"
+    return "" if _names_match(payer_name, sender) else "sender_name_mismatch"
+
+def _check_sender_identity(transaction, result_item: dict) -> str:
+    """'' = pass, otherwise a reason. CBE / BOA only (wallets are unchanged).
+
+    The suffix is the pitch owner's now, so it proves nothing about the payer;
+    the sender name on the receipt vs the payer's profile name is the check.
+    """
+    if transaction.bank not in SUFFIX_REQUIRED_BANKS:
+        return ""
+    return _check_sender_name(transaction, result_item)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STATUS HELPERS
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _drop_screenshot_file(transaction: PaymentTransaction) -> None:
+    """Screenshots are kept only for payments that succeed (or wait for review)."""
+    try:
+        if transaction.screenshot:
+            transaction.screenshot.delete(save=False)
+    except Exception:
+        logger.exception("Could not delete screenshot file for transaction %s", transaction.id)
+
+
+def _discard_row(transaction: PaymentTransaction) -> None:
+    """Remove an attempt that never produced an answer, file included."""
+    _drop_screenshot_file(transaction)
+    transaction.delete()
+
+
+def _recover_or_discard(transaction: PaymentTransaction) -> PaymentTransaction:
+    """After an UNEXPECTED error. If the payment already reached VERIFIED
+    (money confirmed; only a follow-up step such as booking sync failed) the row
+    must never be deleted: log loudly and return it. Otherwise remove the dead
+    attempt so the payer can retry at once."""
+    try:
+        transaction.refresh_from_db()
+    except PaymentTransaction.DoesNotExist:
+        raise PaymentProviderError("Something went wrong while verifying this payment. Please try again.")
+    if transaction.status == PaymentStatus.VERIFIED:
+        logger.critical(
+            "Payment %s is VERIFIED but a follow-up step failed — check the booking by hand.",
+            transaction.id,
+        )
+        return transaction
+    _discard_row(transaction)
+    raise PaymentProviderError("Something went wrong while verifying this payment. Please try again.")
+
+
 def _reject(transaction: PaymentTransaction, reason: str) -> PaymentTransaction:
+    _drop_screenshot_file(transaction)
     transaction.status = PaymentStatus.REJECTED
     transaction.rejection_reason = reason
     transaction.processed_at = timezone.now()
-    transaction.save(update_fields=["status", "rejection_reason", "processed_at", "updated_at"])
+    transaction.save(update_fields=["status", "rejection_reason", "processed_at", "screenshot", "updated_at"])
     return transaction
 
 
@@ -125,15 +259,25 @@ def _needs_review(transaction: PaymentTransaction, reason: str) -> PaymentTransa
     return transaction
 
 
+def _target_filter(transaction: PaymentTransaction) -> dict:
+    if transaction.booking_id:
+        return {"booking_id": transaction.booking_id}
+    if transaction.team_booking_payment_id:
+        return {"team_booking_payment_id": transaction.team_booking_payment_id}
+    return {"solo_booking_hold_id": transaction.solo_booking_hold_id}
+
+
 def _handle_verified_conflict(transaction: PaymentTransaction) -> PaymentTransaction:
     """A uniqueness constraint fired on the final VERIFIED save.
-    Same reference used elsewhere -> reject (replay). Booking already
-    paid with a DIFFERENT reference -> real money moved twice, so it
-    goes to manual review for a refund decision instead of a silent reject.
+    Same reference used elsewhere -> reject (replay). This target
+    (booking / team share / solo hold) already paid with a DIFFERENT
+    reference -> real money moved twice, so it goes to manual review
+    for a refund decision instead of a silent reject.
     """
     transaction.refresh_from_db()
+
     other = (
-        PaymentTransaction.objects.filter(booking=transaction.booking, status=PaymentStatus.VERIFIED)
+        PaymentTransaction.objects.filter(status=PaymentStatus.VERIFIED, **_target_filter(transaction))
         .exclude(id=transaction.id)
         .first()
     )
@@ -145,29 +289,87 @@ def _handle_verified_conflict(transaction: PaymentTransaction) -> PaymentTransac
     return _reject(transaction, "duplicate_transaction")
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# THE CHECKS (run after verify.et answered, or on a stored verify.et answer)
+# ─────────────────────────────────────────────────────────────────────────────
+
 def _apply_verification_result(
     *, transaction: PaymentTransaction, result_item: dict | None
 ) -> PaymentTransaction:
+    """Order of checks:
+      0. provider gave an answer / bank was reachable
+      1. bank says success + verified
+      2. currency is ETB
+      3. RECEIVER NAME == account-holder name the super admin saved for
+         this bank account
+      4. PAYMENT TIME: not made more than MAX_PAYMENT_TIME_ALLOWED_HOURS
+         before payment started
+      5. amount equals what is owed
+      6. sender name on the receipt matches the payer's profile name
+         (CBE / BOA; a mismatch goes to manual review)
+      7. save as VERIFIED (DB constraints block any reuse of the reference)
+    """
     if result_item is None:
         return _reject(transaction, "no_result_from_provider")
+
+    err = result_item.get("error")
+    if isinstance(err, dict) and (err.get("retryable") or err.get("code") == "upstream_unavailable"):
+        return _reject(transaction, "bank_unavailable")
 
     if result_item.get("status") != "success" or not result_item.get("verified"):
         return _reject(transaction, "not_verified")
 
-    currency = (result_item.get("currency") or "").upper()
+    currency = (result_item.get("currency") or _response_get(result_item, "currency")).upper()
     if currency and currency != "ETB":
         return _reject(transaction, "currency_mismatch")
 
-    # THE anti-scam check: verify.et's own settlement-account matcher,
-    # not a receiver string we'd have to parse (and get wrong)
-    # ourselves. A missing match object at all means we can't confirm
-    # who received the money — never treated as a pass.
-    match = result_item.get("settlementAccountMatch")
-    if match is None:
-        return _needs_review(transaction, "settlement_match_missing_in_response")
-    if not match.get("matched"):
-        return _reject(transaction, "receiver_mismatch")
+    # ── 3. receiver name ────────────────────────────────────────────────
+    owner_account = transaction.owner_bank_account
+    if owner_account is None:
+        return _needs_review(transaction, "owner_account_missing")
 
+    receiver_name = _receiver_name_from(result_item)
+    if receiver_name:
+        if not _names_match(owner_account.account_holder_name, receiver_name):
+            logger.warning(
+                "Payment %s rejected: receiver name %r does not match account holder %r",
+                transaction.id, receiver_name, owner_account.account_holder_name,
+            )
+            return _reject(transaction, "receiver_name_mismatch")
+    else:
+        # This bank's answer carries no receiver name (some wallets): fall back to
+        # verify.et's own account matcher against the settlementAccount we sent.
+        match = result_item.get("settlementAccountMatch")
+        if not isinstance(match, dict):
+            return _needs_review(transaction, "receiver_name_missing_in_response")
+        if not match.get("matched"):
+            return _reject(transaction, "receiver_mismatch")
+
+    # ── 4. payment time ─────────────────────────────────────────────────
+    txn_time_raw = (
+        result_item.get("transactionDateIsoUtc")
+        or result_item.get("timestamp")
+        or _response_get(result_item, "transactionDateIsoUtc")
+    )
+    txn_time = parse_datetime(txn_time_raw) if txn_time_raw else None
+    if txn_time is None:
+        return _needs_review(transaction, "timestamp_missing_in_response")
+
+    now = timezone.now()
+    if txn_time > now + timedelta(minutes=5):
+        return _reject(transaction, "timestamp_in_future")
+
+    reference_date = transaction.reference_date  # when payment STARTED
+    earliest_allowed = reference_date - timedelta(hours=MAX_PAYMENT_TIME_ALLOWED_HOURS)
+    if txn_time < earliest_allowed:
+        logger.warning(
+            "Payment %s rejected as transaction_too_old: paid at %s, payment started at %s, "
+            "earliest allowed %s (limit %sh)",
+            transaction.id, txn_time, reference_date, earliest_allowed, MAX_PAYMENT_TIME_ALLOWED_HOURS,
+        )
+        return _reject(transaction, "transaction_too_old")
+
+    # ── 5. amount ───────────────────────────────────────────────────────
     raw_amount = result_item.get("amount")
     if raw_amount is None:
         raw_amount = result_item.get("amountValue")
@@ -180,36 +382,19 @@ def _apply_verification_result(
     if amount_dec != transaction.amount_expected:
         return _reject(transaction, "amount_mismatch")
 
-    txn_time_raw = result_item.get("transactionDateIsoUtc") or result_item.get("timestamp")
-    txn_time = parse_datetime(txn_time_raw) if txn_time_raw else None
-    if txn_time is None:
-        return _needs_review(transaction, "timestamp_missing_in_response")
-
-    now = timezone.now()
-    if txn_time > now + timedelta(minutes=5):
-        return _reject(transaction, "timestamp_in_future")
-
-    # The transaction date must match the DAY the booking was made —
-    # not just "recent relative to now". Comparing to "now" instead of
-    # the booking's own date would let someone submit a stale
-    # screenshot days later and still pass, as long as they submitted
-    # it "soon" after upload — the actual fraud case being guarded
-    # against is an old real payment reused for an unrelated booking,
-    # which only the booking's own date catches.
-    #
-    # ASSUMPTION FLAGGED: booking.created_at exists. Adjust if your
-    # real Booking model names this field differently.
-    reference_date = transaction.reference_date
-    booking_date = timezone.localtime(reference_date).date()
-    txn_date = timezone.localtime(txn_time).date()
-    if txn_date != booking_date:
-        return _reject(transaction, "transaction_date_mismatch")
-    if abs((txn_time - reference_date).total_seconds()) > 36 * 3600:
-        return _reject(transaction, "transaction_date_mismatch")
-
+    # ── 6. sender identity ──────────────────────────────────────────────
     identity_failure = _check_sender_identity(transaction, result_item or {})
+    if identity_failure in _REVIEW_IDENTITY_REASONS:
+        return _needs_review(transaction, identity_failure)  # a human decides; don't reject a genuine payer
     if identity_failure:
         return _reject(transaction, identity_failure)
+
+    # ── 7. save ─────────────────────────────────────────────────────────
+    # Store the bank's own canonical reference so the same payment can't be
+    # re-submitted under a different spelling of its identifier.
+    canonical = (result_item.get("referenceNumber") or "").strip().upper()
+    if canonical:
+        transaction.reference_number = canonical[:64]
 
     transaction.verified_amount = amount_dec
     transaction.verified_transaction_at = txn_time
@@ -223,6 +408,7 @@ def _apply_verification_result(
 
     _sync_team_booking_payment(transaction)
     _sync_solo_booking_hold(transaction)
+    _notify_payer_of_completion(transaction)
     return transaction
 
 
@@ -238,6 +424,94 @@ def _resolve_payment_target(*, booking=None, team_booking_payment=None, solo_boo
         return {"pitch_owner": pitch.tenant.owner, "amount_expected": team_booking_payment.amount}
     return {"pitch_owner": solo_booking_hold.pitch.tenant.owner, "amount_expected": solo_booking_hold.total_price}
 
+
+def _format_payment_when(selections: list) -> str:
+    if not selections:
+        return "the booked time"
+    first = selections[0]
+    try:
+        start = parse_datetime(first["start_iso"])
+        if start and timezone.is_naive(start):
+            start = timezone.make_aware(start, timezone.get_current_timezone())
+        label = timezone.localtime(start).strftime("%a, %d %b, %I:%M %p") if start else first.get("start_iso", "")
+    except Exception:
+        label = first.get("start_iso", "")
+    if len(selections) > 1:
+        label += f" (+{len(selections) - 1} more slot{'s' if len(selections) > 2 else ''})"
+    return label
+
+
+def _build_completion_context(transaction: PaymentTransaction) -> dict:
+    """One shared source of truth for 'what does this completed
+    payment mean', used both for the payer's notification text and
+    for what the frontend's completion popup displays.
+    """
+    amount = transaction.verified_amount or transaction.amount_expected
+
+    if transaction.solo_booking_hold_id:
+        hold = transaction.solo_booking_hold
+        return {
+            "kind": "solo",
+            "pitch_name": hold.pitch.name,
+            "when_label": _format_payment_when(hold.selections),
+            "amount": str(amount),
+        }
+    if transaction.team_booking_payment_id:
+        request = transaction.team_booking_payment.request
+        return {
+            "kind": "team",
+            "pitch_name": request.pitch_name,
+            "team_name": request.team.name,
+            "when_label": _format_payment_when(request.selections),
+            "amount": str(amount),
+        }
+    return {
+        "kind": "booking",
+        "pitch_name": transaction.booking.pitch.name,
+        "when_label": "",
+        "amount": str(amount),
+    }
+
+
+def _notify_payer_of_completion(transaction: PaymentTransaction) -> None:
+    ctx = _build_completion_context(transaction)
+    if ctx["kind"] == "solo":
+        body = f"You paid {ctx['amount']} Br for {ctx['pitch_name']}. Booked for {ctx['when_label']}."
+    elif ctx["kind"] == "team":
+        body = f"You paid {ctx['amount']} Br for {ctx['team_name']} at {ctx['pitch_name']} on {ctx['when_label']}."
+    else:
+        body = f"You paid {ctx['amount']} Br for {ctx['pitch_name']}."
+
+    notify(
+        recipient=transaction.payer,
+        notification_type=NotificationType.PAYMENT_CONFIRMATION,
+        title="Payment completed",
+        body=body,
+        data={"payment_transaction_id": str(transaction.id)},
+        send_push=False,
+    )
+
+
+def get_pending_payment_completion_for_user(user):
+    return (
+        PaymentTransaction.objects.filter(
+            payer=user, status=PaymentStatus.VERIFIED, completion_acknowledged=False
+        )
+        .order_by("-processed_at")
+        .first()
+    )
+
+
+def get_payment_completion_payload(transaction: PaymentTransaction) -> dict:
+    ctx = _build_completion_context(transaction)
+    ctx["transaction_id"] = str(transaction.id)
+    return ctx
+
+
+def acknowledge_payment_completion(*, transaction_id, user) -> None:
+    PaymentTransaction.objects.filter(id=transaction_id, payer=user).update(completion_acknowledged=True)
+
+
 def _sync_solo_booking_hold(transaction: PaymentTransaction) -> None:
     if not transaction.solo_booking_hold_id or transaction.status != PaymentStatus.VERIFIED:
         return
@@ -245,19 +519,101 @@ def _sync_solo_booking_hold(transaction: PaymentTransaction) -> None:
     finalize_solo_booking(hold_id=transaction.solo_booking_hold_id)
 
 
-
-
 def _sync_team_booking_payment(transaction: PaymentTransaction) -> None:
     """When a PaymentTransaction tied to a TeamBookingPayment reaches
     VERIFIED, this is the real-money confirmation that replaces the
-    old fake pay_for_booking() stub. Lazy import avoids a circular
-    import between this app and team_booking.
+    old fake pay_for_booking() stub.
     """
     if not transaction.team_booking_payment_id or transaction.status != PaymentStatus.VERIFIED:
         return
 
     mark_payment_verified_from_gateway(team_booking_payment_id=transaction.team_booking_payment_id)
 
+
+def _owner_suffix_for(sender_bank: str, owner_account) -> str:
+    """verify.et's suffix for the bank the payer paid FROM (CBE 8 digits, BOA 5):
+    the last digits of the pitch owner's account / phone being paid. Works the
+    same for same-bank and cross-bank payments. Banks that need none get ''."""
+    length = SUFFIX_REQUIRED_BANKS.get(sender_bank)
+    if not length:
+        return ""
+    source = owner_account.account_number or owner_account.phone_number or ""
+    digits = re.sub(r"\D", "", source)
+    if len(digits) < length:
+        raise PaymentValidationError(
+            "The pitch owner's account number for this bank looks incomplete. "
+            "Please contact support so it can be corrected."
+        )
+    return digits[-length:]
+
+
+def _build_verify_payload(*, bank, reference_number, owner_account, account_suffix, phone_number) -> dict:
+    payload = {
+        "bank": bank,
+        "reference": reference_number,
+        "settlementAccount": owner_account.settlement_identifier,
+    }
+    if bank in SUFFIX_REQUIRED_BANKS and account_suffix:
+        payload["suffix"] = account_suffix
+    if bank in PAYER_PHONE_REQUIRED_BANKS:
+        payload["phoneNumber"] = phone_number
+    return payload
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STORED verify.et ANSWERS (so we never pay for / wait on the same lookup twice)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _first_result_item(data):
+    """verify.et's status endpoint may return the result as a dict, a list,
+    or nested under result/results/data. Always return ONE dict (or None)."""
+    if isinstance(data, list):
+        data = data[0] if data else None
+    if not isinstance(data, dict):
+        return None
+    for key in ("result", "results", "data"):
+        inner = data.get(key)
+        if isinstance(inner, list):
+            inner = inner[0] if inner else None
+        if isinstance(inner, dict):
+            return {**data, **inner}
+    return data
+
+
+def _extract_result_item(body):
+    """One result dict out of a stored verify.et response body (sync or polled)."""
+    if not isinstance(body, dict):
+        return None
+    item = _first_result_item(body.get("data")) if body.get("data") else None
+    if item is None:
+        verification = body.get("verification")
+        if isinstance(verification, dict) and isinstance(verification.get("result"), dict):
+            item = verification["result"]
+    return item
+
+
+def _find_stored_provider_result(*, bank: str, reference_number: str):
+    """If we ALREADY hold a bank-confirmed answer for this bank + reference
+    (from any earlier attempt, by anyone), return (body, result_item) so the
+    checks can run on it WITHOUT calling verify.et again. Failures
+    (e.g. 'bank unavailable') are never reused — only confirmed payments."""
+    rows = (
+        PaymentTransaction.objects
+        .filter(bank=bank, reference_number=reference_number, verify_response__isnull=False)
+        .order_by("-submitted_at")[:10]
+    )
+    for row in rows:
+        item = _extract_result_item(row.verify_response)
+        if item and item.get("verified") is True:
+            result_item = dict(item)
+            result_item["status"] = "success"
+            return row.verify_response, result_item
+    return None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# OCR CROSS-CHECK
+# ─────────────────────────────────────────────────────────────────────────────
 
 # OCR commonly confuses visually similar characters, especially on a
 # compressed phone screenshot — a byte-exact match is too brittle for
@@ -284,6 +640,10 @@ def _reference_appears_in_receipt(reference_number: str, raw_text: str) -> bool:
     return _ocr_normalize(reference_number) in _ocr_normalize(raw_text)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# SUBMIT
+# ─────────────────────────────────────────────────────────────────────────────
+
 def submit_manual_bank_payment(
     *,
     payer,
@@ -295,28 +655,38 @@ def submit_manual_bank_payment(
     booking=None,
     team_booking_payment=None,
     solo_booking_hold=None,
+    pay_to_bank: str = "",
 ) -> PaymentTransaction:
-    
+    """`bank`       = the bank / wallet the payer paid FROM (its receipt is verified).
+    `pay_to_bank` = which of the pitch owner's accounts was paid INTO (defaults to
+    `bank`). They differ for cross-bank transfers, e.g. a CBE app paying a BOA account.
+    """
+    pay_to_bank = pay_to_bank or bank
+
     reference_number = (reference_number or "").strip().upper()
     if not reference_number:
         raise PaymentValidationError("reference_number is required.")
 
-    if bank == SupportedBank.ZEMEN:
+    if bank == SupportedBank.ZEMEN or pay_to_bank == SupportedBank.ZEMEN:
         raise PaymentValidationError(
             "Zemen Bank can't be verified automatically yet — ask the pitch owner for another bank/wallet."
         )
 
-    reference_number = (reference_number or "").strip().upper()
-    if not reference_number:
-        raise PaymentValidationError("reference_number is required.")
-    
+    # ── RULE 1: our own database FIRST ──────────────────────────────────
+    # A reference that already belongs to a VERIFIED payment is refused here,
+    # before OCR (CPU) and before verify.et (money / time). This is what stops
+    # Player B from re-using Player A's transaction number.
+    already_verified = PaymentTransaction.objects.filter(
+        bank=bank, reference_number=reference_number, status=PaymentStatus.VERIFIED
+    ).exists()
+    if already_verified:
+        raise DuplicateTransactionError("This transaction reference has already been used.")
+
     # Tie the typed reference number to what's actually IN the
     # uploaded image. Without this, any unrelated image plus a
     # manually-typed reference number sails straight through to
     # verify.et — verify.et only ever checks the reference string
-    # itself, never the screenshot. This is a REAL server-side
-    # cross-check, not the earlier client-side OCR suggestion (which
-    # the payer could freely overwrite).
+    # itself, never the screenshot.
     screenshot.seek(0)
     try:
         ocr_check = extract_reference_from_image(image_file=screenshot, bank_hint=bank)
@@ -343,19 +713,18 @@ def submit_manual_bank_payment(
             reference_number,
         )
 
-    if bank in SUFFIX_REQUIRED_BANKS:
-        expected_len = SUFFIX_REQUIRED_BANKS[bank]
-        if not account_suffix or len(account_suffix) != expected_len or not account_suffix.isdigit():
-            raise PaymentValidationError(f"{bank} requires an exact {expected_len}-digit account suffix.")
     if bank in PAYER_PHONE_REQUIRED_BANKS and not phone_number:
         raise PaymentValidationError(f"{bank} requires a phone number.")
 
-    if bank not in SUFFIX_REQUIRED_BANKS:
-        account_suffix = ""
+    # `account_suffix` is only filled by a payer who was asked for it after a failed
+    # automatic attempt (see below); normally it stays empty.
+    account_suffix = (account_suffix or "").strip()
     if bank not in PAYER_PHONE_REQUIRED_BANKS:
         phone_number = ""
 
-    target = _resolve_payment_target(booking=booking, team_booking_payment=team_booking_payment, solo_booking_hold=solo_booking_hold)
+    target = _resolve_payment_target(
+        booking=booking, team_booking_payment=team_booking_payment, solo_booking_hold=solo_booking_hold
+    )
     pitch_owner = target["pitch_owner"]
     amount_expected = target["amount_expected"]
 
@@ -374,56 +743,91 @@ def submit_manual_bank_payment(
         raise PaymentValidationError("This pitch owner is not set up for manual bank payments.")
 
     owner_account = PitchOwnerBankAccount.objects.filter(
-        owner=pitch_owner, bank=bank, is_active=True
+        owner=pitch_owner, bank=pay_to_bank, is_active=True
     ).first()
     if owner_account is None:
         raise PaymentValidationError("Pitch owner has no active account registered for this bank.")
 
-    already_verified = PaymentTransaction.objects.filter(
-        bank=bank, reference_number=reference_number, status=PaymentStatus.VERIFIED
-    ).exists()
-    if already_verified:
-        raise DuplicateTransactionError("This transaction reference has already been used.")
+    # The suffix verify.et needs (CBE 8 digits, BOA 5, chosen by the bank PAID FROM)
+    # = last digits of the pitch owner's account that was paid. Wallets: none.
+    # If the automatic suffix failed once, the payer may type the digits of THEIR own
+    # account instead (the form shows that field only after a failure).
+    suffix_length = SUFFIX_REQUIRED_BANKS.get(bank)
+    if suffix_length and account_suffix:
+        if not (account_suffix.isdigit() and len(account_suffix) == suffix_length):
+            raise PaymentValidationError(f"Enter exactly {suffix_length} digits.")
+    else:
+        account_suffix = _owner_suffix_for(bank, owner_account)
 
-    already_in_flight = PaymentTransaction.objects.filter(
-        bank=bank,
-        reference_number=reference_number,
-        status__in=[PaymentStatus.PENDING, PaymentStatus.PROCESSING],
-    ).exists()
-    if already_in_flight:
-        raise DuplicateTransactionError("A verification for this transaction is already in progress.")
+    # Do we already hold a bank-confirmed answer for this reference?
+    stored = _find_stored_provider_result(bank=bank, reference_number=reference_number)
 
+    # A retry must ALWAYS be possible. Only a VERIFIED payment blocks a reference
+    # (checked above). Any earlier attempt still PENDING/PROCESSING for this
+    # reference (an abandoned tab, a poll that never finished, a crash...) is
+    # closed here and replaced by this fresh attempt.
+    now = timezone.now()
     try:
-        transaction_row = PaymentTransaction.objects.create(
-            booking=booking,
-            team_booking_payment=team_booking_payment,
-            solo_booking_hold=solo_booking_hold,
-            payer=payer,
-            pitch_owner=pitch_owner,
-            amount_expected=amount_expected,
-            payment_mode=PaymentMode.MANUAL_BANK,
-            bank=bank,
-            owner_bank_account=owner_account,
-            screenshot=screenshot,
-            reference_number=reference_number,
-            account_suffix=account_suffix,
-            payer_phone_number=phone_number,
-            status=PaymentStatus.PENDING,
-        )
+        with db_transaction.atomic():
+            for old in PaymentTransaction.objects.select_for_update().filter(
+                bank=bank,
+                reference_number=reference_number,
+                status__in=[PaymentStatus.PENDING, PaymentStatus.PROCESSING],
+            ):
+                # Never cancel ANOTHER payer's fresh attempt (someone could abuse that to
+                # race for a payment that isn't theirs). Your own attempts, and anyone's
+                # stale ones, are always replaced.
+                if old.payer_id != payer.id and (now - old.submitted_at) < timedelta(minutes=STALE_PROCESSING_MINUTES):
+                    raise DuplicateTransactionError(
+                        "This transaction is being checked right now for another payment. "
+                        "Please try again in a few minutes."
+                    )
+                _drop_screenshot_file(old)
+                old.status = PaymentStatus.REJECTED
+                old.rejection_reason = "superseded_by_retry"
+                old.processed_at = now
+                old.save(update_fields=["status", "rejection_reason", "processed_at", "screenshot", "updated_at"])
+            transaction_row = PaymentTransaction.objects.create(
+                booking=booking,
+                team_booking_payment=team_booking_payment,
+                solo_booking_hold=solo_booking_hold,
+                payer=payer,
+                pitch_owner=pitch_owner,
+                amount_expected=amount_expected,
+                payment_mode=PaymentMode.MANUAL_BANK,
+                bank=bank,
+                owner_bank_account=owner_account,
+                screenshot=screenshot,
+                reference_number=reference_number,
+                account_suffix=account_suffix,
+                payer_phone_number=phone_number,
+                status=PaymentStatus.PENDING,
+            )
     except IntegrityError:
+        # Only possible if the very same reference was submitted in the same
+        # instant; the next try goes through.
         raise DuplicateTransactionError(
-            "A verification for this transaction is already in progress or completed."
+            "This transaction is being checked right now. Please wait a few seconds and try again."
         )
 
-    payload = {
-        "bank": bank,
-        "reference": reference_number,
-        "settlementAccount": owner_account.settlement_identifier,
-    }
-    if bank in SUFFIX_REQUIRED_BANKS:
-        payload["suffix"] = account_suffix
-    if bank in PAYER_PHONE_REQUIRED_BANKS:
-        payload["phoneNumber"] = phone_number
+    # ── stored answer: run every check on it, NO call to verify.et ──────
+    if stored is not None:
+        stored_body, stored_item = stored
+        try:
+            transaction_row.verify_request_id = (stored_body or {}).get("requestId", "") if isinstance(stored_body, dict) else ""
+            transaction_row.verify_response = stored_body
+            transaction_row.save(update_fields=["verify_request_id", "verify_response", "updated_at"])
+            logger.info("Using stored verify.et answer for %s %s (no API call)", bank, reference_number)
+            return _apply_verification_result(transaction=transaction_row, result_item=stored_item)
+        except Exception:
+            logger.exception("Failed applying stored verify.et answer for transaction %s", transaction_row.id)
+            return _recover_or_discard(transaction_row)
+
+    # ── no stored answer: call verify.et ────────────────────────────────
+    payload = _build_verify_payload(
+        bank=bank, reference_number=reference_number,
+        owner_account=owner_account, account_suffix=account_suffix, phone_number=phone_number,
+    )
 
     transaction_row.status = PaymentStatus.PROCESSING
     transaction_row.save(update_fields=["status", "updated_at"])
@@ -431,15 +835,21 @@ def submit_manual_bank_payment(
     try:
         response = _call_verify_et(payload=payload, idempotency_key=str(transaction_row.id))
     except requests.RequestException as exc:
-        transaction_row.status = PaymentStatus.PENDING
-        transaction_row.rejection_reason = "provider_unreachable"
-        transaction_row.save(update_fields=["status", "rejection_reason", "updated_at"])
         logger.exception("verify.et unreachable for transaction %s", transaction_row.id)
+        _discard_row(transaction_row)
         raise PaymentProviderError(str(exc))
 
     try:
         if response.status_code not in (200, 202):
-            return _reject(transaction_row, f"provider_error_{response.status_code}")
+            logger.error(
+                "verify.et ERROR: status=%s body=%s",
+                response.status_code,
+                response.text[:1000],
+            )
+            return _reject(
+                transaction_row,
+                f"provider_error_{response.status_code}"
+            )
 
         body = response.json()
         transaction_row.verify_request_id = body.get("requestId", "")
@@ -455,28 +865,65 @@ def submit_manual_bank_payment(
     except Exception:
         # ANY unexpected failure here — a malformed response, a bug
         # on our side, anything — must never leave a dead row sitting
-        # around blocking retries. Reverting to PENDING alone wasn't
-        # enough: the already_in_flight check treats PENDING as
-        # "still in progress" too, so the payer got permanently stuck
-        # even though their real payment may have gone through fine.
-        # Deleting the row entirely frees the reference number for an
-        # immediate clean retry.
+        # around blocking retries. The dead attempt is removed so the payer
+        # can retry at once (a VERIFIED payment is never removed).
         logger.exception("Unexpected error finishing verification for transaction %s", transaction_row.id)
-        transaction_row.delete()
-        raise PaymentProviderError("Something went wrong while verifying this payment. Please try again.")
+        return _recover_or_discard(transaction_row)
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# QUEUED (202) PATH
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _retry_verification(transaction):
+    """The bank didn't answer verify.et (retryable). Send a NEW verification
+    request automatically instead of failing the payer. Returns the updated
+    transaction, or None when out of retries / can't retry."""
+    prev = transaction.verify_response if isinstance(transaction.verify_response, dict) else {}
+    retries = int(prev.get("_retries", 0))
+    account = transaction.owner_bank_account
+    if retries >= MAX_BANK_RETRIES or account is None:
+        return None
+
+    payload = _build_verify_payload(
+        bank=transaction.bank,
+        reference_number=transaction.reference_number,
+        owner_account=account,
+        account_suffix=transaction.account_suffix,
+        phone_number=transaction.payer_phone_number,
+    )
+
+    try:
+        response = _call_verify_et(
+            payload=payload, idempotency_key=f"{transaction.id}-retry{retries + 1}"
+        )
+        if response.status_code not in (200, 202):
+            logger.warning("verify.et retry returned %s: %s", response.status_code, response.text[:300])
+            return None
+        new_body = response.json()
+    except (requests.RequestException, PaymentProviderError, ValueError):
+        return None
+
+    new_body["_retries"] = retries + 1
+    transaction.verify_request_id = new_body.get("requestId", "")
+    transaction.verify_response = new_body
+    transaction.save(update_fields=["verify_request_id", "verify_response", "updated_at"])
+
+    if response.status_code == 200:
+        data = new_body.get("data") or []
+        return _apply_verification_result(
+            transaction=transaction, result_item=data[0] if data else None
+        )
+    return transaction  # queued again; the frontend keeps polling
 
 
 def check_pending_payment(*, transaction: PaymentTransaction) -> PaymentTransaction:
-    """For the 202/queued path. Re-map the status endpoint's shape
-    into the same shape _apply_verification_result expects. The
-    documented example for this endpoint is thinner than the
-    synchronous response — if the real response is missing
-    settlementAccountMatch/amount, this correctly lands on
-    NEEDS_REVIEW rather than guessing either way.
-    """
+    """For the 202/queued path (CBE usually lands here)."""
     if transaction.status != PaymentStatus.PROCESSING or not transaction.verify_request_id:
         return transaction
+
+    if timezone.now() - transaction.submitted_at > timedelta(minutes=STALE_PROCESSING_MINUTES):
+        return _needs_review(transaction, "provider_never_completed")
 
     try:
         response = _poll_verify_et(request_id=transaction.verify_request_id)
@@ -484,24 +931,52 @@ def check_pending_payment(*, transaction: PaymentTransaction) -> PaymentTransact
         return transaction
 
     if response.status_code != 200:
+        logger.warning("verify.et poll returned %s for %s", response.status_code, transaction.id)
         return transaction
 
-    body = response.json()
-    data = body.get("data") or {}
-    if data.get("processingStatus") != "completed":
+    try:
+        body = response.json()
+    except ValueError:
         return transaction
 
-    result_item = {
-        "status": data.get("status"),
-        "verified": data.get("verified"),
-        "currency": data.get("currency", "ETB"),
-        "amount": data.get("amount"),
-        "settlementAccountMatch": data.get("settlementAccountMatch"),
-        "transactionDateIsoUtc": data.get("completedAt"),
-    }
+    logger.info("verify.et poll body for %s: %s", transaction.id, body)
+
+    data = _first_result_item(body.get("data") if isinstance(body, dict) else body)
+    if data is None:
+        return transaction
+
+    processing = str(data.get("processingStatus") or data.get("processing_status") or "").lower()
+
+    if processing in ("failed", "error"):
+        err = data.get("error") if isinstance(data.get("error"), dict) else {}
+        if err.get("retryable") or err.get("code") == "upstream_unavailable":
+            retried = _retry_verification(transaction)
+            if retried is not None:
+                return retried
+            transaction.verify_response = body
+            transaction.save(update_fields=["verify_response", "updated_at"])
+            return _reject(transaction, "bank_unavailable")
+        transaction.verify_response = body
+        transaction.save(update_fields=["verify_response", "updated_at"])
+        return _reject(transaction, "no_result_from_provider")
+
+    if processing != "completed":
+        return transaction
+
+    result_item = dict(data)
+    result_item["status"] = "success" if data.get("verified") else (data.get("status") or "failed")
+    result_item.setdefault("currency", "ETB")
+    result_item["transactionDateIsoUtc"] = (
+        data.get("transactionDateIsoUtc") or data.get("timestamp") or data.get("transactionDate")
+    )
+
     transaction.verify_response = body
     return _apply_verification_result(transaction=transaction, result_item=result_item)
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ADMIN / SETUP
+# ─────────────────────────────────────────────────────────────────────────────
 
 def configure_payment_profile(
     *, owner, configured_by, payment_mode: str, gateway_provider: str = "", gateway_merchant_ref: str = ""
@@ -537,6 +1012,13 @@ def upsert_bank_account(
         raise PaymentValidationError(f"{bank} requires a phone number.")
     if bank not in WALLET_BANKS and not account_number:
         raise PaymentValidationError(f"{bank} requires an account number.")
+
+    # This name is what every payment's receiver is compared against, so it
+    # must be a real full name exactly as the bank shows it.
+    if len(_name_tokens(account_holder_name)) < 2:
+        raise PaymentValidationError(
+            "Enter the account holder's full name (at least two words) exactly as the bank shows it."
+        )
 
     existing = PitchOwnerBankAccount.objects.filter(owner=owner, bank=bank, is_active=True).first()
     if existing:
@@ -624,17 +1106,16 @@ def get_bank_requirement(bank: str) -> dict:
     truth for the frontend, derived from the same constants the
     verification code uses, so the two can never drift apart.
     """
-    suffix_length = SUFFIX_REQUIRED_BANKS.get(bank)
     needs_phone = bank in PAYER_PHONE_REQUIRED_BANKS
     return {
         "bank": bank,
         "label": SupportedBank(bank).label,
         "supported": bank != SupportedBank.ZEMEN,
-        "requires_account_suffix": suffix_length is not None,
-        "account_suffix_length": suffix_length,
-        "account_suffix_help": (
-            f"Last {suffix_length} digits of the account you paid from." if suffix_length else ""
-        ),
+        # The suffix is the pitch owner's and is added by the server, so the
+        # payer's form never asks for it.
+        "requires_account_suffix": False,
+        "account_suffix_length": None,
+        "account_suffix_help": "",
         "requires_phone_number": needs_phone,
         "phone_number_help": "The CBE Birr phone number you paid from." if needs_phone else "",
     }
@@ -642,31 +1123,6 @@ def get_bank_requirement(bank: str) -> dict:
 
 def get_bank_requirements() -> list:
     return [get_bank_requirement(b.value) for b in SupportedBank]
-
-
-def mark_payment_verified_from_gateway(*, team_booking_payment_id) -> None:
-    """Called by the payment app once a REAL PaymentTransaction for
-    this share reaches VERIFIED. This is what actually confirms money
-    moved — it replaces the old pay_for_booking() stub, which just
-    faked a payment instantly with no real verification behind it.
-    """
-    try:
-        payment = TeamBookingPayment.objects.select_related("request").get(
-            id=team_booking_payment_id, status=PaymentStatus.PENDING
-        )
-    except TeamBookingPayment.DoesNotExist:
-        return
-
-    payment.mark_paid()
-    notify(
-        recipient=payment.request.created_by,
-        notification_type=NotificationType.TEAM_BOOKING_PAYMENT_RECEIVED,
-        title="Payment received",
-        body=f"{_display_name(payment.payer)} paid for {payment.request.pitch_name}.",
-        data={"team_booking_request_id": str(payment.request.id)},
-        send_push=False,
-    )
-    _try_finalize_if_all_paid(payment.request)
 
 
 def mark_payment_verified_from_gateway(*, team_booking_payment_id) -> None:
@@ -691,3 +1147,166 @@ def mark_payment_verified_from_gateway(*, team_booking_payment_id) -> None:
         send_push=False,
     )
     _try_finalize_if_all_paid(payment.request)
+
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PITCH OWNER: "Payment Detail" table + approve / reject
+# ─────────────────────────────────────────────────────────────────────────────
+
+OWNER_TABLE_PAGE_SIZE = 10
+OWNER_TABLE_FILTERS = {"all", "verified", "needs_review", "rejected"}
+
+
+def payment_time_from_response(transaction: PaymentTransaction):
+    """When the bank says the payment was made (works for rows still in review)."""
+    if transaction.verified_transaction_at:
+        return transaction.verified_transaction_at
+    item = _extract_result_item(transaction.verify_response)
+    if not item:
+        return None
+    raw = item.get("transactionDateIsoUtc") or item.get("timestamp") or _response_get(item, "transactionDateIsoUtc")
+    return parse_datetime(raw) if raw else None
+
+
+def _owner_visible_payments(pitch_id):
+    """Every payment of ONE pitch the owner cares about: verified, waiting for
+    review, and the ones the owner / admin rejected by hand. (Automatic rejections
+    are just failed attempts and are not listed.)"""
+    on_this_pitch = (
+        Q(booking__pitch_id=pitch_id)
+        | Q(team_booking_payment__request__pitch_id=pitch_id)
+        | Q(solo_booking_hold__pitch_id=pitch_id)
+    )
+    shown = Q(status__in=[PaymentStatus.VERIFIED, PaymentStatus.NEEDS_REVIEW]) | (
+        Q(status=PaymentStatus.REJECTED)
+        & (Q(rejection_reason__startswith="owner_rejected") | Q(rejection_reason__startswith="manual_review_rejected"))
+    )
+    return PaymentTransaction.objects.filter(on_this_pitch).filter(shown)
+
+
+def list_pitch_payments(*, pitch_id, status_filter: str = "all", page: int = 1, page_size: int = OWNER_TABLE_PAGE_SIZE) -> dict:
+    """3 queries in total (counts, page rows with payer / account / team joined in)."""
+    status_filter = status_filter if status_filter in OWNER_TABLE_FILTERS else "all"
+    page = max(int(page or 1), 1)
+
+    base = _owner_visible_payments(pitch_id)
+    raw_counts = {row["status"]: row["n"] for row in base.values("status").annotate(n=Count("id"))}
+    counts = {
+        "verified": raw_counts.get(PaymentStatus.VERIFIED, 0),
+        "needs_review": raw_counts.get(PaymentStatus.NEEDS_REVIEW, 0),
+        "rejected": raw_counts.get(PaymentStatus.REJECTED, 0),
+    }
+    total = sum(counts.values()) if status_filter == "all" else counts[status_filter]
+
+    rows_qs = base
+    if status_filter != "all":
+        rows_qs = rows_qs.filter(status=status_filter)
+
+    offset = (page - 1) * page_size
+    rows = list(
+        rows_qs
+        .select_related("payer", "owner_bank_account", "team_booking_payment__request__team")
+        .annotate(_priority=Case(
+            When(status=PaymentStatus.NEEDS_REVIEW, then=Value(0)),
+            default=Value(1), output_field=IntegerField(),
+        ))
+        .order_by("_priority", "-submitted_at")[offset: offset + page_size]
+    )
+    return {"results": rows, "total": total, "page": page, "page_size": page_size, "counts": counts}
+
+
+def _lock_owner_payment(transaction_id, owner) -> PaymentTransaction:
+    try:
+        return PaymentTransaction.objects.select_for_update().get(id=transaction_id, pitch_owner_id=owner.id)
+    except PaymentTransaction.DoesNotExist:
+        raise PaymentNotFound("Payment not found.")
+
+
+def _ensure_can_become_verified(transaction: PaymentTransaction) -> None:
+    if (
+        PaymentTransaction.objects
+        .filter(bank=transaction.bank, reference_number=transaction.reference_number, status=PaymentStatus.VERIFIED)
+        .exclude(id=transaction.id)
+        .exists()
+    ):
+        raise ReferenceAlreadyVerified(transaction.reference_number)
+    if (
+        PaymentTransaction.objects
+        .filter(status=PaymentStatus.VERIFIED, **_target_filter(transaction))
+        .exclude(id=transaction.id)
+        .exists()
+    ):
+        raise PaymentValidationError("This booking / share is already paid by another verified payment.")
+
+
+def owner_resolve_payment(*, transaction_id, owner, action: str) -> PaymentTransaction:
+    """The pitch owner approves or rejects a payment that is waiting for review."""
+    if action not in ("approve", "reject"):
+        raise PaymentValidationError("Unknown action.")
+
+    with db_transaction.atomic():
+        transaction = _lock_owner_payment(transaction_id, owner)
+        if transaction.status != PaymentStatus.NEEDS_REVIEW:
+            raise PaymentValidationError("This payment is no longer waiting for review.")
+
+        now = timezone.now()
+        if action == "reject":
+            _drop_screenshot_file(transaction)
+            transaction.status = PaymentStatus.REJECTED
+            transaction.rejection_reason = f"owner_rejected:{owner.id}"
+            transaction.processed_at = now
+            transaction.save(update_fields=["status", "rejection_reason", "processed_at", "screenshot", "updated_at"])
+            return transaction
+
+        _ensure_can_become_verified(transaction)
+
+        item = _extract_result_item(transaction.verify_response) or {}
+        raw_amount = item.get("amount") if item.get("amount") is not None else item.get("amountValue")
+        try:
+            transaction.verified_amount = Decimal(str(raw_amount)) if raw_amount is not None else transaction.amount_expected
+        except InvalidOperation:
+            transaction.verified_amount = transaction.amount_expected
+        transaction.verified_transaction_at = payment_time_from_response(transaction)
+        transaction.status = PaymentStatus.VERIFIED
+        transaction.rejection_reason = f"owner_approved:{owner.id}"
+        transaction.processed_at = now
+        try:
+            with db_transaction.atomic():
+                transaction.save()
+        except IntegrityError:
+            _ensure_can_become_verified(transaction)  # raises the precise reason
+            raise PaymentValidationError("This payment can't be approved because it conflicts with another one.")
+
+    # booking / team-share follow-ups run after the row lock is released
+    _sync_team_booking_payment(transaction)
+    _sync_solo_booking_hold(transaction)
+    _notify_payer_of_completion(transaction)
+    return transaction
+
+
+def owner_reverse_verified_payment(*, transaction_id, owner, password: str) -> PaymentTransaction:
+    """The pitch owner changes a VERIFIED payment to REJECTED. Needs the owner's
+    own account password (stored hashed, checked with Django's check_password).
+
+    NOTE: this only changes the payment record. A team share already marked paid
+    or a solo booking already created is NOT cancelled here - that belongs to the
+    booking / team_booking services.
+    """
+    if not owner.check_password(password or ""):
+        raise InvalidOwnerPassword("Incorrect password.")
+
+    with db_transaction.atomic():
+        transaction = _lock_owner_payment(transaction_id, owner)
+        if transaction.status != PaymentStatus.VERIFIED:
+            raise PaymentValidationError("Only a verified payment can be rejected this way.")
+        transaction.status = PaymentStatus.REJECTED
+        transaction.rejection_reason = f"owner_rejected_verified:{owner.id}"
+        transaction.processed_at = timezone.now()
+        transaction.save(update_fields=["status", "rejection_reason", "processed_at", "updated_at"])
+
+    logger.warning(
+        "Owner %s reversed VERIFIED payment %s (booking / share is NOT cancelled automatically).",
+        owner.id, transaction.id,
+    )
+    return transaction

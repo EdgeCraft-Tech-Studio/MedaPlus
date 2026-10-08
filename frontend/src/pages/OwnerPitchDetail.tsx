@@ -5,6 +5,7 @@ import { getOwnerPitchStats, updatePitch } from "../lib/pitches";
 import PitchWizardModal from "../components/PitchWizardModal";
 import styles from "./css/OwnerPitchDetail.module.css";
 import BookingGrid from "./BookingGrid";
+import PaymentDetailTable from "./PaymentDetailTable";
 
 type IconName =
   | "arrowLeft" | "cash" | "calendarCheck" | "pin" | "clock" | "tag"
@@ -296,6 +297,7 @@ export default function OwnerPitchDetail() {
 
         {/* ---------- Booking history ---------- */}
         <BookingGrid pitch={pitch} />
+         <PaymentDetailTable pitchId={pitch.id} />   
       </div>
 
       <PitchWizardModal

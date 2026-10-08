@@ -5,6 +5,7 @@ import {
   getSoloBookingPaymentInfo, submitSoloBookingPayment,
   type PaymentInfo, type OwnerBankAccount,
 } from "../lib/payment";
+import { SUPPORTED_BANKS } from "../lib/paymentAdmin";
 import PaymentLogo from "../components/PaymentLogo";
 
 interface PendingPaymentLike {
@@ -38,10 +39,21 @@ const REFERENCE_LABELS: Record<string, { label: string; placeholder: string }> =
 };
 const DEFAULT_REF = { label: "Transaction Reference", placeholder: "Reference number" };
 
+// Banks / wallets a payer can pay FROM (any of them can send to any owner account).
+const SENDER_BANKS = SUPPORTED_BANKS.filter((b) => b.value !== "zemen");
+const SENDER_VALUES: string[] = SENDER_BANKS.map((b) => b.value);
+
+// Banks whose lookup needs account digits. The server fills them in from the pitch
+// owner's account; this is only used for the "second chance" field after a failure.
+const SUFFIX_LENGTH: Record<string, number> = { cbe: 8, boa: 5 };
+
 const REJECTION_MESSAGES: Record<string, string> = {
+  bank_unavailable: "The bank isn't responding right now. This is a temporary problem on the bank's side. Please wait a minute and tap Try Again.",
+  receiver_name_mismatch: "This payment wasn't sent to the pitch owner's account. Check the account name and pay again.",
+  transaction_too_old: "This payment was made too long before this booking's payment started, so it can't be used. Please make a new payment for this booking or contact pitch owner.",
   sender_identity_mismatch: "The account number on this payment doesn't match yours. Make sure you're uploading your OWN payment, not someone else's.",
-  no_result_from_provider: "We couldn't find a matching transaction. Double-check the reference and try again.",
-  not_verified: "This transaction couldn't be verified. Please check the details and try again.",
+  no_result_from_provider: "We couldn't find a matching transaction. Check the reference and that \"I paid from\" is the bank you really used, then try again.",
+  not_verified: "This transaction couldn't be verified. Check the reference and that \"I paid from\" is the bank you really used, then try again.",
   currency_mismatch: "This transaction wasn't in ETB.",
   receiver_mismatch: "This payment wasn't sent to the correct account. Double-check and try again.",
   amount_mismatch: "The amount paid doesn't match what's owed.",
@@ -53,7 +65,9 @@ const REJECTION_MESSAGES: Record<string, string> = {
 };
 function friendlyRejection(reason: string): string {
   if (REJECTION_MESSAGES[reason]) return REJECTION_MESSAGES[reason];
-  if (reason.startsWith("provider_error_")) return "The verification service returned an error. Try again shortly.";
+  if (reason.startsWith("provider_error_")) {
+    console.log(reason);
+    return "Check your bank selection Try again please!";}
   return "This payment couldn't be verified. Please try again or contact support.";
 }
 
@@ -92,25 +106,38 @@ function NoGestureIcon(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
-type Step = "loading" | "no_config" | "gateway_unavailable" | "form" | "submitting" | "polling" | "verified" | "rejected" | "needs_review" | "timeout";
+type Step = "loading" | "no_config" | "gateway_unavailable" | "form" | "submitting" | "polling" | "rejected" | "needs_review" | "timeout";
 
 export default function MemberPaymentPopup({ payment, kind = "team", onClose, onPaid, readOnly = false, readOnlyStatusLabel }: Props) {
   const countdown = useCountdown(payment.payment_expires_at);
   const [step, setStep] = useState<Step>(readOnly ? "form" : "loading");
   const [info, setInfo] = useState<PaymentInfo | null>(null);
+
+  // selectedAccount = the pitch owner's account being paid INTO
   const [selectedAccount, setSelectedAccount] = useState<OwnerBankAccount | null>(null);
+  // senderBank = the bank / wallet the payer paid FROM (may differ from selectedAccount.bank)
+  const [senderBank, setSenderBank] = useState<string>("");
+  const [senderAutoDetected, setSenderAutoDetected] = useState(false);
+
   const [screenshotFile, setScreenshotFile] = useState<File | null>(null);
   const [screenshotPreview, setScreenshotPreview] = useState<string>("");
   const [scanning, setScanning] = useState(false);
   const [referenceNumber, setReferenceNumber] = useState("");
   const [refAutoFilled, setRefAutoFilled] = useState(false);
   const [refNeedsManual, setRefNeedsManual] = useState(false);
+  const [suffixFallback, setSuffixFallback] = useState(false);
   const [accountSuffix, setAccountSuffix] = useState("");
   const [suffixInvalid, setSuffixInvalid] = useState(false);
   const [phoneNumber, setPhoneNumber] = useState("");
   const [error, setError] = useState("");
   const [rejectionReason, setRejectionReason] = useState("");
   const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const suffixLength = SUFFIX_LENGTH[senderBank];
+  // Normally the server adds the account digits itself. The field only appears as a
+  // second chance, after the automatic attempt failed for CBE / BOA.
+  const showSuffixField = suffixFallback && !!suffixLength;
+  const senderNeedsPhone = senderBank === "cbebirr";
 
   useEffect(() => {
     if (readOnly) return;
@@ -124,7 +151,10 @@ export default function MemberPaymentPopup({ payment, kind = "team", onClose, on
         else if (data.payment_mode === "gateway") setStep("gateway_unavailable");
         else {
           setStep("form");
-          if (data.bank_accounts.length === 1) setSelectedAccount(data.bank_accounts[0]);
+          if (data.bank_accounts.length === 1) {
+            setSelectedAccount(data.bank_accounts[0]);
+            setSenderBank(data.bank_accounts[0].bank);
+          }
         }
       })
       .catch(() => !cancelled && setError("Couldn't load payment options. Please try again."));
@@ -132,6 +162,20 @@ export default function MemberPaymentPopup({ payment, kind = "team", onClose, on
   }, [payment.id, readOnly, kind]);
 
   useEffect(() => () => { if (pollTimer.current) clearInterval(pollTimer.current); }, []);
+
+  function chooseSenderBank(bank: string) {
+    setSenderBank(bank);
+    setSenderAutoDetected(false);
+    setSuffixFallback(false);
+    setAccountSuffix("");
+    setSuffixInvalid(false);
+  }
+
+  function chooseOwnerAccount(acc: OwnerBankAccount) {
+    setSelectedAccount(acc);
+    // Until the receipt or the payer says otherwise, assume a same-bank payment.
+    if (!senderAutoDetected) setSenderBank(acc.bank);
+  }
 
   async function handleFileSelected(file: File) {
     setScreenshotFile(file);
@@ -141,12 +185,18 @@ export default function MemberPaymentPopup({ payment, kind = "team", onClose, on
     setRefAutoFilled(false);
     setRefNeedsManual(false);
     try {
-      const result = await extractReceiptData(file, selectedAccount?.bank);
+      // No bank hint on purpose: the scan tells us which bank's receipt this really is.
+      const result = await extractReceiptData(file);
       if (result.suggested_reference_number) {
         setReferenceNumber(result.suggested_reference_number);
         setRefAutoFilled(true);
       } else {
         setRefNeedsManual(true);
+      }
+      if (result.suggested_bank && SENDER_VALUES.includes(result.suggested_bank)) {
+        setSenderBank(result.suggested_bank);
+        setSenderAutoDetected(true);
+        setSuffixFallback(false);
       }
       if (!selectedAccount && result.suggested_bank && info) {
         const match = info.bank_accounts.find((a) => a.bank === result.suggested_bank);
@@ -164,6 +214,28 @@ export default function MemberPaymentPopup({ payment, kind = "team", onClose, on
     }
   }
 
+  // A CBE / BOA check that couldn't confirm the payment with the automatic digits gets
+  // a second chance: reveal the field so the payer can type their own account digits.
+  function handleRejected(reason: string) {
+  console.error("❌ PAYMENT REJECTED");
+  console.error("Rejection reason:", reason);
+  console.error("Sender bank:", senderBank);
+  console.error("Pay-to bank:", selectedAccount?.bank);
+  console.error("Reference:", referenceNumber);
+
+  setRejectionReason(reason);
+
+  if (
+    suffixLength &&
+    !suffixFallback &&
+    (reason === "not_verified" || reason === "no_result_from_provider")
+  ) {
+    setSuffixFallback(true);
+  }
+
+  setStep("rejected");
+}
+
   function startPolling(transactionId: string) {
     setStep("polling");
     let attempts = 0;
@@ -171,27 +243,26 @@ export default function MemberPaymentPopup({ payment, kind = "team", onClose, on
       attempts += 1;
       try {
         const txn = await pollPaymentTransaction(transactionId);
-        if (txn.status === "verified") { clearInterval(pollTimer.current!); setStep("verified"); }
-        else if (txn.status === "rejected") { clearInterval(pollTimer.current!); setRejectionReason(txn.rejection_reason); setStep("rejected"); }
+        if (txn.status === "verified") { clearInterval(pollTimer.current!); onPaid?.(); onClose?.(); }
+        else if (txn.status === "rejected") { clearInterval(pollTimer.current!); handleRejected(txn.rejection_reason); }
         else if (txn.status === "needs_review") { clearInterval(pollTimer.current!); setStep("needs_review"); }
-        else if (attempts > 20) { clearInterval(pollTimer.current!); setStep("timeout"); }
+        else if (attempts > 40) { clearInterval(pollTimer.current!); setStep("timeout"); }
       } catch { /* transient — keep polling */ }
     }, 3000);
   }
 
   async function handleSubmit() {
-    if (!selectedAccount || !screenshotFile || !referenceNumber.trim()) {
-      setError("Select a bank, upload the screenshot, and confirm the transaction number.");
+    if (!selectedAccount || !senderBank || !screenshotFile || !referenceNumber.trim()) {
+      setError("Select where you paid to, the bank you paid from, upload the screenshot, and confirm the transaction number.");
       return;
     }
-    const req = selectedAccount.requirements;
-    if (req.requires_account_suffix && accountSuffix.length !== req.account_suffix_length) {
+    if (showSuffixField && accountSuffix.length !== suffixLength) {
       setSuffixInvalid(true);
-      setError(`Enter exactly ${req.account_suffix_length} digits for the account suffix.`);
+      setError(`Enter exactly ${suffixLength} digits.`);
       return;
     }
     setSuffixInvalid(false);
-    if (req.requires_phone_number && !phoneNumber.trim()) {
+    if (senderNeedsPhone && !phoneNumber.trim()) {
       setError("Enter the phone number you paid from.");
       return;
     }
@@ -201,14 +272,15 @@ export default function MemberPaymentPopup({ payment, kind = "team", onClose, on
     try {
       const submitFn = kind === "solo" ? submitSoloBookingPayment : submitTeamBookingPayment;
       const txn = await submitFn(payment.id, {
-        bank: selectedAccount.bank,
+        bank: senderBank,                    // paid FROM
+        pay_to_bank: selectedAccount.bank,   // paid INTO
         screenshot: screenshotFile,
         reference_number: referenceNumber.trim(),
-        account_suffix: accountSuffix,
-        phone_number: phoneNumber,
+        account_suffix: showSuffixField ? accountSuffix : "",
+        phone_number: senderNeedsPhone ? phoneNumber : "",
       });
-      if (txn.status === "verified") setStep("verified");
-      else if (txn.status === "rejected") { setRejectionReason(txn.rejection_reason); setStep("rejected"); }
+      if (txn.status === "verified") { onPaid?.(); onClose?.(); }
+      else if (txn.status === "rejected") handleRejected(txn.rejection_reason);
       else if (txn.status === "needs_review") setStep("needs_review");
       else startPolling(txn.id);
     } catch (err: any) {
@@ -219,35 +291,8 @@ export default function MemberPaymentPopup({ payment, kind = "team", onClose, on
 
   function retry() { setStep("form"); setError(""); }
 
-  function handleDone() {
-    onPaid?.();
-    onClose?.();
-  }
-
-  const refMeta = selectedAccount ? (REFERENCE_LABELS[selectedAccount.bank] || DEFAULT_REF) : DEFAULT_REF;
-
-  // ---------------- Clean, dedicated success screen — no leftover
-  // "Pay for X" header, no countdown. The ONLY way this popup closes
-  // is the user clicking Done, which calls BOTH onPaid and onClose,
-  // guaranteeing every payment-related popup disappears together. ----------------
-  if (step === "verified") {
-    return (
-      <div className={styles.overlay}>
-        <div className={styles.card} role="alertdialog" aria-modal="true">
-          <div className={styles.successBox}>
-            <CheckCircleIcon className={styles.successIcon} />
-            <div className={styles.successText}>Payment Completed! 🎉</div>
-            <div className={styles.successSub}>
-              Your spot at {payment.pitch_name} is booked. {payment.amount} Br paid.
-            </div>
-            <button className={styles.payBtn} onClick={handleDone}>
-              Done
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const refMeta = REFERENCE_LABELS[senderBank] || DEFAULT_REF;
+  const senderLabel = SENDER_BANKS.find((b) => b.value === senderBank)?.label || senderBank;
 
   return (
     <div className={styles.overlay}>
@@ -294,20 +339,24 @@ export default function MemberPaymentPopup({ payment, kind = "team", onClose, on
 
             {step === "form" && info && (
               <div className={styles.form}>
+                {/* 1 — which of the owner's accounts you paid INTO */}
                 {info.bank_accounts.length > 1 && (
-                  <div className={styles.accountPicker}>
-                    {info.bank_accounts.map((acc) => (
-                      <button
-                        key={acc.id}
-                        type="button"
-                        className={`${styles.accountOption} ${selectedAccount?.id === acc.id ? styles.accountOptionActive : ""}`}
-                        onClick={() => { setSelectedAccount(acc); setAccountSuffix(""); setPhoneNumber(""); }}
-                      >
-                        <PaymentLogo name={acc.bank} label={acc.requirements.label} size={30} />
-                        <span>{acc.requirements.label}</span>
-                      </button>
-                    ))}
-                  </div>
+                  <>
+                    <span className={styles.fieldLabel}>Pay to</span>
+                    <div className={styles.accountPicker}>
+                      {info.bank_accounts.map((acc) => (
+                        <button
+                          key={acc.id}
+                          type="button"
+                          className={`${styles.accountOption} ${selectedAccount?.id === acc.id ? styles.accountOptionActive : ""}`}
+                          onClick={() => chooseOwnerAccount(acc)}
+                        >
+                          <PaymentLogo name={acc.bank} label={acc.requirements.label} size={30} />
+                          <span>{acc.requirements.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </>
                 )}
 
                 {selectedAccount && (
@@ -321,7 +370,38 @@ export default function MemberPaymentPopup({ payment, kind = "team", onClose, on
                   </div>
                 )}
 
+                {/* 2 — which bank / wallet you paid FROM (any bank can send to any account) */}
                 {selectedAccount && (
+                  <>
+                    <span className={styles.fieldLabel}>
+                      I paid from
+                      {senderAutoDetected && !scanning && (
+                        <span className={styles.ocrTag}><CheckCircleIcon className={styles.ocrTagIcon} /> Auto-detected</span>
+                      )}
+                    </span>
+                    <div className={styles.accountPicker}>
+                      {SENDER_BANKS.map((b) => (
+                        <button
+                          key={b.value}
+                          type="button"
+                          className={`${styles.accountOption} ${senderBank === b.value ? styles.accountOptionActive : ""}`}
+                          onClick={() => chooseSenderBank(b.value)}
+                          title={b.label}
+                        >
+                          <PaymentLogo name={b.value} label={b.label} size={30} />
+                          <span>{b.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                    {senderBank && senderBank !== selectedAccount.bank && (
+                      <span className={styles.manualHint}>
+                        Paying {selectedAccount.requirements.label} from {senderLabel} is fine — we handle bank-to-bank transfers.
+                      </span>
+                    )}
+                  </>
+                )}
+
+                {selectedAccount && senderBank && (
                   <>
                     <label className={styles.field}>
                       <span className={styles.fieldLabel}>Upload payment screenshot</span>
@@ -372,27 +452,25 @@ export default function MemberPaymentPopup({ payment, kind = "team", onClose, on
                       )}
                     </label>
 
-                    {selectedAccount.requirements.requires_account_suffix && (
+                    {showSuffixField && (
                       <label className={styles.field}>
-                        <span className={styles.fieldLabel}>Last {selectedAccount.requirements.account_suffix_length} digits of your account</span>
+                        <span className={styles.fieldLabel}>Last {suffixLength} digits of the account you paid from</span>
                         <input
                           type="text"
                           className={`${styles.input} ${suffixInvalid ? styles.inputNeedsAttention : ""}`}
                           inputMode="numeric"
-                          maxLength={selectedAccount.requirements.account_suffix_length || undefined}
+                          maxLength={suffixLength}
                           value={accountSuffix}
                           onChange={(e) => { setAccountSuffix(e.target.value.replace(/\D/g, "")); setSuffixInvalid(false); }}
-                          placeholder={selectedAccount.requirements.account_suffix_help}
+                          placeholder={`${suffixLength} digits`}
                         />
-                        {suffixInvalid && (
-                          <span className={styles.manualHint}>
-                            እባክዎ የ{selectedAccount.requirements.label} መለያዎን የመጨረሻ {selectedAccount.requirements.account_suffix_length} ቁጥሮች ያስገቡ
-                          </span>
-                        )}
+                        <span className={styles.manualHint}>
+                          The bank couldn't confirm this automatically. Enter the digits and try again.
+                        </span>
                       </label>
                     )}
 
-                    {selectedAccount.requirements.requires_phone_number && (
+                    {senderNeedsPhone && (
                       <label className={styles.field}>
                         <span className={styles.fieldLabel}>Phone number you paid from</span>
                         <input
@@ -405,7 +483,7 @@ export default function MemberPaymentPopup({ payment, kind = "team", onClose, on
                   </>
                 )}
 
-                <button className={styles.payBtn} onClick={handleSubmit} disabled={!selectedAccount}>
+                <button className={styles.payBtn} onClick={handleSubmit} disabled={!selectedAccount || !senderBank || scanning}>
                   Submit Payment
                 </button>
               </div>
@@ -415,7 +493,7 @@ export default function MemberPaymentPopup({ payment, kind = "team", onClose, on
               <div className={styles.loadingWrap}>
                 <SpinnerIcon className={styles.spinnerLarge} />
                 <div className={styles.processingText}>
-                  {step === "submitting" ? "Submitting…" : "Verifying your payment — this usually takes a few seconds…"}
+                  {step === "submitting" ? "Submitting…" : "Verifying your payment — this usually takes a few seconds wait…"}
                 </div>
               </div>
             )}
@@ -430,7 +508,8 @@ export default function MemberPaymentPopup({ payment, kind = "team", onClose, on
 
             {step === "needs_review" && (
               <div className={styles.infoBox}>
-                We're double-checking this payment manually — you'll be notified once it's confirmed.
+                We received your payment, but we couldn't confirm every detail automatically.
+                The pitch owner will review it shortly — please check back in a little while.
               </div>
             )}
 

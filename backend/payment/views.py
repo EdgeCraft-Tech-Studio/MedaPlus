@@ -5,6 +5,7 @@ from rest_framework import views
 from rest_framework.exceptions import APIException, NotFound, PermissionDenied, ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.throttling import UserRateThrottle
 
 from .exceptions import PaymentServiceError
 from .models import PaymentTransaction, PitchOwnerBankAccount
@@ -16,6 +17,9 @@ from .serializers import (
     ConfigurePaymentProfileSerializer,
     ExtractedReceiptDataSerializer,
     ExtractReceiptDataSerializer,
+    OwnerPaymentRowSerializer,
+    OwnerReverseVerifiedSerializer,
+    OwnerReviewActionSerializer,
     PaymentInfoSerializer,
     PaymentTransactionAdminSerializer,
     PaymentTransactionSerializer,
@@ -26,11 +30,20 @@ from .serializers import (
     UpsertBankAccountSerializer,
 )
 from .services import (
+    InvalidOwnerPassword,
+    PaymentNotFound,
+    ReferenceAlreadyVerified,
+    acknowledge_payment_completion,
     get_bank_requirements,
     check_pending_payment,
     configure_payment_profile,
     deactivate_bank_account,
+    get_payment_completion_payload,
     get_payment_info_for_owner,
+    get_pending_payment_completion_for_user,
+    list_pitch_payments,
+    owner_resolve_payment,
+    owner_reverse_verified_payment,
     resolve_needs_review,
     submit_manual_bank_payment,
     upsert_bank_account,
@@ -305,3 +318,132 @@ class ResolveReviewView(views.APIView):
         except PaymentServiceError as exc:
             raise ValidationError({"detail": str(exc)})
         return Response(PaymentTransactionAdminSerializer(transaction).data)
+
+
+class PendingPaymentCompletionView(views.APIView):
+    """GET /payment/transactions/pending-completion/ — polled by
+    AppShell. Completely independent of pendingPayment/pendingSolo
+    checks, which is the whole point: once a transaction is VERIFIED,
+    those correctly stop returning it, but THIS popup must keep
+    showing until the payer explicitly dismisses it.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        txn = get_pending_payment_completion_for_user(request.user)
+        if not txn:
+            return Response(None)
+        return Response(get_payment_completion_payload(txn))
+
+
+class AcknowledgePaymentCompletionView(views.APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, transaction_id):
+        acknowledge_payment_completion(transaction_id=transaction_id, user=request.user)
+        return Response({"status": "acknowledged"})
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PITCH OWNER: "Payment Detail" table on the pitch page
+# ─────────────────────────────────────────────────────────────────────────────
+
+class OwnerPasswordThrottle(UserRateThrottle):
+    """Rejecting a VERIFIED payment asks for the password, so guessing it must
+    be slow even for someone holding a logged-in session."""
+    scope = "payment_owner_password"
+    rate = "5/min"
+
+
+class PitchPaymentTransactionsView(views.APIView):
+    """GET /payment/pitches/{pitch_id}/transactions/?status=all|verified|needs_review|rejected&page=1
+    Only the pitch's owner (or a platform admin)."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pitch_id):
+        from pitches.models import Pitch
+
+        pitch = get_object_or_404(Pitch.objects.select_related("tenant"), id=pitch_id)
+        is_admin = getattr(request.user, "platform_admin", False)
+        if pitch.tenant.owner_id != request.user.id and not is_admin:
+            raise PermissionDenied("Only the pitch owner can see these payments.")
+
+        try:
+            page = int(request.query_params.get("page", 1))
+        except (TypeError, ValueError):
+            page = 1
+        data = list_pitch_payments(
+            pitch_id=pitch.id,
+            status_filter=request.query_params.get("status", "all"),
+            page=page,
+        )
+        data["results"] = OwnerPaymentRowSerializer(data["results"], many=True).data
+        return Response(data)
+
+
+def _owner_action_error_response(exc):
+    """409 for 'this reference is already verified' (the UI shows a popup),
+    404 unknown payment, 400 everything else."""
+    if isinstance(exc, ReferenceAlreadyVerified):
+        return Response(
+            {"code": "reference_already_verified", "detail": str(exc), "reference_number": exc.reference_number},
+            status=409,
+        )
+    if isinstance(exc, PaymentNotFound):
+        return Response({"detail": "Payment not found."}, status=404)
+    return Response({"detail": str(exc)}, status=400)
+
+
+class OwnerReviewTransactionView(views.APIView):
+    """POST /payment/transactions/{id}/owner-review/  {"action": "approve" | "reject"}
+    For a payment that is waiting for review."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, transaction_id):
+        serializer = OwnerReviewActionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            transaction = owner_resolve_payment(
+                transaction_id=transaction_id,
+                owner=request.user,
+                action=serializer.validated_data["action"],
+            )
+        except PaymentServiceError as exc:
+            return _owner_action_error_response(exc)
+        # re-read with the joins the row serializer needs (one query)
+        transaction = (
+            PaymentTransaction.objects
+            .select_related("payer", "owner_bank_account", "team_booking_payment__request__team")
+            .get(id=transaction.id)
+        )
+        return Response(OwnerPaymentRowSerializer(transaction).data)
+
+
+class OwnerReverseVerifiedView(views.APIView):
+    """POST /payment/transactions/{id}/owner-reject-verified/  {"password": "..."}
+    VERIFIED -> REJECTED, only after the owner re-enters their own password."""
+
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [OwnerPasswordThrottle]
+
+    def post(self, request, transaction_id):
+        serializer = OwnerReverseVerifiedSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            transaction = owner_reverse_verified_payment(
+                transaction_id=transaction_id,
+                owner=request.user,
+                password=serializer.validated_data["password"],
+            )
+        except InvalidOwnerPassword:
+            return Response({"code": "invalid_password", "detail": "Incorrect password."}, status=403)
+        except PaymentServiceError as exc:
+            return _owner_action_error_response(exc)
+        transaction = (
+            PaymentTransaction.objects
+            .select_related("payer", "owner_bank_account", "team_booking_payment__request__team")
+            .get(id=transaction.id)
+        )
+        return Response(OwnerPaymentRowSerializer(transaction).data)

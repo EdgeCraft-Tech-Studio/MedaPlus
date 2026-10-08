@@ -8,7 +8,7 @@ from .models import (
     PitchOwnerBankAccount,
     PitchOwnerPaymentProfile,
 )
-from .services import get_bank_requirement, normalize_ethiopian_phone
+from .services import get_bank_requirement, normalize_ethiopian_phone, payment_time_from_response
 
 MAX_SCREENSHOT_BYTES = 8 * 1024 * 1024
 
@@ -82,6 +82,7 @@ class PaymentInfoSerializer(serializers.Serializer):
     bank_accounts = PaymentInfoBankAccountSerializer(many=True)
     amount_due = serializers.CharField(required=False, default="")
 
+
 class PaymentTransactionSerializer(serializers.ModelSerializer):
     class Meta:
         model = PaymentTransaction
@@ -118,7 +119,13 @@ class ExtractedReceiptDataSerializer(serializers.Serializer):
 
 
 class SubmitManualBankPaymentSerializer(serializers.Serializer):
+    # bank        = the bank / wallet the payer paid FROM (its receipt is verified)
+    # pay_to_bank = which of the pitch owner's accounts was paid INTO
+    #               (omit it for a same-bank payment)
     bank = serializers.ChoiceField(choices=SupportedBank.choices)
+    pay_to_bank = serializers.ChoiceField(
+        choices=SupportedBank.choices, required=False, allow_blank=True, default=""
+    )
     screenshot = serializers.ImageField(validators=[_validate_screenshot_size])
     reference_number = serializers.RegexField(
         r"^[A-Za-z0-9\-_/]{6,64}$",
@@ -129,16 +136,15 @@ class SubmitManualBankPaymentSerializer(serializers.Serializer):
 
     def validate(self, attrs):
         bank = attrs["bank"]
-        
+        attrs["pay_to_bank"] = attrs.get("pay_to_bank") or bank
 
-        if bank in SUFFIX_REQUIRED_BANKS:
-            length = SUFFIX_REQUIRED_BANKS[bank]
-            suffix = (attrs.get("account_suffix") or "").strip()
-            if not (suffix.isdigit() and len(suffix) == length):
-                raise serializers.ValidationError({"account_suffix": f"Enter exactly {length} digits."})
-            attrs["account_suffix"] = suffix
-        else:
-            attrs["account_suffix"] = ""
+        # Normally empty (the server uses the pitch owner's digits). The payer only
+        # types it as a second chance after an automatic attempt failed.
+        length = SUFFIX_REQUIRED_BANKS.get(bank)
+        suffix = (attrs.get("account_suffix") or "").strip()
+        if length and suffix and not (suffix.isdigit() and len(suffix) == length):
+            raise serializers.ValidationError({"account_suffix": f"Enter exactly {length} digits."})
+        attrs["account_suffix"] = suffix if length else ""
 
         if bank in PAYER_PHONE_REQUIRED_BANKS:
             phone = normalize_ethiopian_phone(attrs.get("phone_number") or "")
@@ -157,3 +163,66 @@ class SubmitManualBankPaymentSerializer(serializers.Serializer):
 class ResolveReviewSerializer(serializers.Serializer):
     approve = serializers.BooleanField()
     note = serializers.CharField(min_length=3)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Pitch owner "Payment Detail" table
+# ─────────────────────────────────────────────────────────────────────────────
+
+class OwnerPaymentRowSerializer(serializers.ModelSerializer):
+    """One table row. Everything here reads relations that list_pitch_payments()
+    already joined in (payer, owner_bank_account, team) - no per-row queries."""
+
+    payer_first_name = serializers.CharField(source="payer.first_name", read_only=True)
+    payer_last_name = serializers.CharField(source="payer.last_name", read_only=True)
+    payer_phone = serializers.CharField(source="payer.phone", read_only=True)
+    amount = serializers.SerializerMethodField()
+    sender_bank = serializers.CharField(source="bank", read_only=True)
+    pay_to_bank = serializers.SerializerMethodField()
+    kind = serializers.SerializerMethodField()
+    team_name = serializers.SerializerMethodField()
+    paid_at = serializers.SerializerMethodField()
+    review_reason = serializers.SerializerMethodField()
+
+    class Meta:
+        model = PaymentTransaction
+        fields = [
+            "id", "status", "kind", "team_name",
+            "payer_first_name", "payer_last_name", "payer_phone",
+            "amount", "sender_bank", "pay_to_bank", "reference_number",
+            "paid_at", "submitted_at", "review_reason",
+        ]
+        read_only_fields = fields
+
+    def get_amount(self, obj):
+        return str(obj.verified_amount if obj.verified_amount is not None else obj.amount_expected)
+
+    def get_pay_to_bank(self, obj):
+        return obj.owner_bank_account.bank if obj.owner_bank_account_id else ""
+
+    def get_kind(self, obj):
+        if obj.solo_booking_hold_id:
+            return "solo"
+        if obj.team_booking_payment_id:
+            return "team"
+        return "booking"
+
+    def get_team_name(self, obj):
+        if not obj.team_booking_payment_id:
+            return ""
+        return obj.team_booking_payment.request.team.name
+
+    def get_paid_at(self, obj):
+        paid = payment_time_from_response(obj)
+        return paid.isoformat() if paid else None
+
+    def get_review_reason(self, obj):
+        return obj.rejection_reason if obj.status == "needs_review" else ""
+
+
+class OwnerReviewActionSerializer(serializers.Serializer):
+    action = serializers.ChoiceField(choices=["approve", "reject"])
+
+
+class OwnerReverseVerifiedSerializer(serializers.Serializer):
+    password = serializers.CharField(write_only=True, trim_whitespace=False, max_length=128)

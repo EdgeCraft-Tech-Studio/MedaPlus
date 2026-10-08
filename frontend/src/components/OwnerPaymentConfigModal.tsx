@@ -232,7 +232,7 @@ export default function OwnerPaymentConfigModal({ ownerId, ownerName, onClose }:
               </div>
 
               <input
-                className={styles.input} placeholder="Full Name"
+                className={styles.input} placeholder="Account holder full name (exactly as the bank shows it)"
                 value={newHolder} onChange={(e) => setNewHolder(e.target.value)}
               />
               <input

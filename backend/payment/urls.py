@@ -3,6 +3,7 @@ from django.urls import path
 from bookings.views import SoloBookingPaymentInfoView, SubmitSoloBookingPaymentView
 
 from .views import (
+    AcknowledgePaymentCompletionView,
     BankRequirementsView,
     ExtractReceiptDataView,
     MyPaymentTransactionsView,
@@ -10,8 +11,12 @@ from .views import (
     OwnerBankAccountsView,
     OwnerPaymentInfoView,
     OwnerPaymentProfileView,
+    OwnerReverseVerifiedView,
+    OwnerReviewTransactionView,
     PaymentTransactionDetailView,
     PaymentTransactionPollView,
+    PendingPaymentCompletionView,
+    PitchPaymentTransactionsView,
     ResolveReviewView,
     ReviewQueueView,
     SubmitPaymentView,
@@ -71,10 +76,28 @@ urlpatterns = [
         name="transaction-poll",
     ),
     path("payment/transactions/review-queue/", ReviewQueueView.as_view(), name="review-queue"),
+    path("payment/transactions/pending-completion/", PendingPaymentCompletionView.as_view(), name="pending-payment-completion"),
+    path("payment/transactions/<uuid:transaction_id>/acknowledge-completion/", AcknowledgePaymentCompletionView.as_view(), name="acknowledge-payment-completion"),
     path(
         "payment/transactions/<uuid:transaction_id>/resolve-review/",
         ResolveReviewView.as_view(),
         name="resolve-review",
+    ),
+    # pitch owner: "Payment Detail" table on the pitch page
+    path(
+        "payment/pitches/<uuid:pitch_id>/transactions/",
+        PitchPaymentTransactionsView.as_view(),
+        name="pitch-payment-transactions",
+    ),
+    path(
+        "payment/transactions/<uuid:transaction_id>/owner-review/",
+        OwnerReviewTransactionView.as_view(),
+        name="owner-review-transaction",
+    ),
+    path(
+        "payment/transactions/<uuid:transaction_id>/owner-reject-verified/",
+        OwnerReverseVerifiedView.as_view(),
+        name="owner-reject-verified",
     ),
     path("payment/solo-bookings/<uuid:hold_id>/payment-info/", SoloBookingPaymentInfoView.as_view()),
     path("payment/solo-bookings/<uuid:hold_id>/pay/", SubmitSoloBookingPaymentView.as_view()),

@@ -32,6 +32,9 @@ VERIFY_ET_API_KEY = os.getenv("VERIFY_ET_API_KEY")
 VERIFY_ET_BASE_URL = os.getenv("VERIFY_ET_BASE_URL", "https://verify.et")
 
 
+
+CHECK_NAME_FOR_PAYMENT = False
+
 # Application definition
 
 INSTALLED_APPS = [

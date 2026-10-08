@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, Link, useNavigate, useLocation } from "react-router-dom";
+import { getPendingPaymentCompletion, acknowledgePaymentCompletion, type PaymentCompletionInfo } from "../lib/payment";
+import PaymentCompletedPopup from "./PaymentCompletedPopup";
 import styles from "./css/AppShell.module.css";
 import {
   BallIcon, HomeIcon, UsersIcon, CompassIcon,
@@ -193,6 +195,8 @@ export default function AppShell() {
   const [notifDrawerOpen, setNotifDrawerOpen] = useState(false);
   const [notificationsLoading, setNotificationsLoading] = useState(true);
   const bellRef = useRef<HTMLButtonElement>(null);
+  const [pendingCompletion, setPendingCompletion] = useState<PaymentCompletionInfo | null>(null);
+const [completionLoading, setCompletionLoading] = useState(false);
 
   const [chatSummary, setChatSummary] = useState<ChatUnreadSummary | null>(null);
   const [user, setUser] = useState<SessionUser | null>(null);
@@ -289,6 +293,35 @@ export default function AppShell() {
     const interval = setInterval(refreshNotifications, NOTIFICATIONS_POLL_INTERVAL_MS);
     return () => clearInterval(interval);
   }, []);
+
+  async function refreshPendingCompletion() {
+  try {
+    const info = await getPendingPaymentCompletion();
+    setPendingCompletion(info);
+  } catch (err) {
+    console.error("Failed to check pending payment completion:", err);
+  }
+}
+
+useEffect(() => {
+  refreshPendingCompletion();
+  const interval = setInterval(refreshPendingCompletion, PENDING_PAYMENT_POLL_INTERVAL_MS);
+  return () => clearInterval(interval);
+}, []);
+
+async function handleAcknowledgeCompletion() {
+  if (!pendingCompletion) return;
+  setCompletionLoading(true);
+  try {
+    await acknowledgePaymentCompletion(pendingCompletion.transaction_id);
+    setPendingCompletion(null);
+  } catch (err) {
+    console.error("Failed to acknowledge payment completion:", err);
+  } finally {
+    setCompletionLoading(false);
+  }
+}
+
 
   // ---------------- mandatory member play-confirmation popup ----------------
   async function refreshPendingBookingConfirmation() {
@@ -1001,7 +1034,13 @@ export default function AppShell() {
           onClose={() => setViewedBookedSummary(null)}
         />
       )}
-
+      {pendingCompletion && (
+        <PaymentCompletedPopup
+          info={pendingCompletion}
+          loading={completionLoading}
+          onDone={handleAcknowledgeCompletion}
+        />
+      )}
       {viewedInvitationId && (
         <TeamInvitationPopup
           invitationId={viewedInvitationId}

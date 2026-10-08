@@ -1,0 +1,11 @@
+.overlay { position: fixed; inset: 0; background: rgba(10,12,16,0.6); backdrop-filter: blur(5px); display: grid; place-items: center; z-index: 2400; padding: 20px; }
+.card { width: 100%; max-width: 400px; background: #fff; border-radius: 22px; padding: 30px 24px 24px; box-shadow: 0 30px 70px rgba(10,12,16,0.32); text-align: center; font-family: 'Inter', sans-serif; }
+.successBox { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 10px 0; }
+.successIcon { width: 46px; height: 46px; color: #0f7a52; animation: successPop 0.4s cubic-bezier(0.16,1,0.3,1); }
+@keyframes successPop { 0% { transform: scale(0); } 70% { transform: scale(1.15); } 100% { transform: scale(1); } }
+.successText { font-size: 18px; font-weight: 800; }
+.successSub { font-size: 13px; color: #686d76; line-height: 1.5; }
+.doneBtn { width: 100%; margin-top: 10px; padding: 13px; border-radius: 13px; border: none; background: linear-gradient(135deg, #123522, #1c5c37); color: #fff; font-weight: 700; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.doneBtn:disabled { opacity: 0.6; cursor: not-allowed; }
+.spinner { width: 15px; height: 15px; animation: spin 0.7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
