@@ -110,6 +110,15 @@ def _can_view_pitch(user, pitch: Pitch) -> bool:
         return True
     return pitch.is_active and pitch.is_approved and pitch.tenant.is_active and pitch.tenant.is_approved
 
+def _manual_booked_slots(**filters):
+    """Owner-entered bookings (booking grid / setup wizard). They live on Slot, not Booking.
+    In-app "cash" bookings made on the pitch page are real Booking rows and never have
+    manual_booked_name, so nothing is counted twice."""
+    return Slot.objects.filter(status=SlotStatus.BOOKED, **filters).exclude(manual_booked_name="")
+
+
+def _manual_revenue(slots_qs):
+    return slots_qs.aggregate(total=Sum("manual_price"))["total"] or Decimal("0")
 
 def _can_edit_pitch(user, pitch: Pitch) -> bool:
     if is_admin(user):
@@ -657,8 +666,11 @@ def owner_dashboard_stats(request):
 
     for p in pitches:
         bookings_qs = Booking.objects.filter(pitch=p, status=BookingStatus.CONFIRMED)
-        p_revenue = bookings_qs.aggregate(total=Sum("total_price"))["total"] or Decimal("0")
-        p_bookings = bookings_qs.count()
+        manual_qs = _manual_booked_slots(pitch=p)
+        p_revenue = (
+            bookings_qs.aggregate(total=Sum("total_price"))["total"] or Decimal("0")
+        ) + _manual_revenue(manual_qs)
+        p_bookings = bookings_qs.count() + manual_qs.count()
 
         total_revenue += p_revenue
         total_bookings += p_bookings
@@ -758,37 +770,45 @@ def owner_pitch_detail_stats(request, pitch_id: str):
 
     now = timezone.now()
     today = timezone.localdate()
+    tz = timezone.get_current_timezone()
 
     week_start = today - timedelta(days=today.weekday())
-    week_start_dt = timezone.make_aware(datetime.combine(week_start, time.min), timezone.get_current_timezone())
-
-    month_start_dt = timezone.make_aware(datetime.combine(today.replace(day=1), time.min), timezone.get_current_timezone())
-    year_start_dt = timezone.make_aware(datetime.combine(today.replace(month=1, day=1), time.min), timezone.get_current_timezone())
+    week_start_dt = timezone.make_aware(datetime.combine(week_start, time.min), tz)
+    month_start_dt = timezone.make_aware(datetime.combine(today.replace(day=1), time.min), tz)
+    year_start_dt = timezone.make_aware(datetime.combine(today.replace(month=1, day=1), time.min), tz)
 
     def revenue_since(dt):
-        return Booking.objects.filter(
+        booked = Booking.objects.filter(
             pitch=pitch, status=BookingStatus.CONFIRMED, start_dt__gte=dt
         ).aggregate(total=Sum("total_price"))["total"] or Decimal("0")
+        manual = _manual_revenue(_manual_booked_slots(pitch=pitch, start_dt__gte=dt))
+        return booked + manual
 
     def bookings_since(dt):
-        return Booking.objects.filter(
-            pitch=pitch, status=BookingStatus.CONFIRMED, start_dt__gte=dt
-        ).count()
+        return (
+            Booking.objects.filter(pitch=pitch, status=BookingStatus.CONFIRMED, start_dt__gte=dt).count()
+            + _manual_booked_slots(pitch=pitch, start_dt__gte=dt).count()
+        )
 
     all_bookings = Booking.objects.filter(pitch=pitch, status=BookingStatus.CONFIRMED)
+    all_manual = _manual_booked_slots(pitch=pitch)
+    all_earnings = (
+        all_bookings.aggregate(total=Sum("total_price"))["total"] or Decimal("0")
+    ) + _manual_revenue(all_manual)
 
     return Response({
-        "pitch": PitchSerializer(pitch, context={"request": request}).data, 
+        "pitch": PitchSerializer(pitch, context={"request": request}).data,
         "earnings_week": str(revenue_since(week_start_dt)),
         "earnings_month": str(revenue_since(month_start_dt)),
-        "earnings_year": str(revenue_since(year_start_dt)), 
+        "earnings_year": str(revenue_since(year_start_dt)),
         "bookings_1m": bookings_since(now - timedelta(days=30)),
         "bookings_3m": bookings_since(now - timedelta(days=90)),
         "bookings_6m": bookings_since(now - timedelta(days=180)),
         "bookings_1y": bookings_since(now - timedelta(days=365)),
-        "total_bookings": all_bookings.count(),
-        "total_earnings": str(all_bookings.aggregate(total=Sum("total_price"))["total"] or Decimal("0")),
+        "total_bookings": all_bookings.count() + all_manual.count(),
+        "total_earnings": str(all_earnings),
     })
+
 
 
 @api_view(["GET"])
@@ -911,13 +931,19 @@ def admin_platform_stats(request):
     basketball_pitches = pitches_qs.filter(sport_type="BASKETBALL").count()
 
     confirmed_bookings = Booking.objects.filter(status=BookingStatus.CONFIRMED)
-    total_bookings = confirmed_bookings.count()
-    total_revenue = confirmed_bookings.aggregate(total=Sum("total_price"))["total"] or Decimal("0")
+    manual_all = _manual_booked_slots()
+    total_bookings = confirmed_bookings.count() + manual_all.count()
+    total_revenue = (
+        confirmed_bookings.aggregate(total=Sum("total_price"))["total"] or Decimal("0")
+    ) + _manual_revenue(manual_all)
 
     pitch_stats = []
     for p in pitches_qs.select_related("tenant", "tenant__owner").order_by("-created_at"):
         p_bookings = Booking.objects.filter(pitch=p, status=BookingStatus.CONFIRMED)
-        p_revenue = p_bookings.aggregate(total=Sum("total_price"))["total"] or Decimal("0")
+        p_manual = _manual_booked_slots(pitch=p)
+        p_revenue = (
+            p_bookings.aggregate(total=Sum("total_price"))["total"] or Decimal("0")
+        ) + _manual_revenue(p_manual)
         pitch_stats.append({
             "pitch_id": str(p.id),
             "name": p.name,
@@ -925,7 +951,7 @@ def admin_platform_stats(request):
             "owner_username": p.tenant.owner.username if p.tenant_id else "",
             "tenant_name": p.tenant.name if p.tenant_id else "",
             "revenue": str(p_revenue),
-            "bookings_count": p_bookings.count(),
+            "bookings_count": p_bookings.count() + p_manual.count(),
             "is_approved": p.is_approved,
             "is_active": p.is_active,
         })
@@ -935,7 +961,10 @@ def admin_platform_stats(request):
         tenant = getattr(o, "tenant", None)
         owner_pitches = Pitch.objects.filter(tenant=tenant) if tenant else Pitch.objects.none()
         o_bookings = Booking.objects.filter(pitch__in=owner_pitches, status=BookingStatus.CONFIRMED)
-        o_revenue = o_bookings.aggregate(total=Sum("total_price"))["total"] or Decimal("0")
+        o_manual = _manual_booked_slots(pitch__in=owner_pitches)
+        o_revenue = (
+            o_bookings.aggregate(total=Sum("total_price"))["total"] or Decimal("0")
+        ) + _manual_revenue(o_manual)
         owner_stats.append({
             "owner_id": str(o.id),
             "username": o.username,
