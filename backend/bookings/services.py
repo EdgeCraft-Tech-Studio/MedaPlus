@@ -1,6 +1,6 @@
 import uuid
 from datetime import timedelta
-from decimal import Decimal
+from decimal import Decimal, ROUND_DOWN
 
 from django.db import transaction
 from django.utils import timezone

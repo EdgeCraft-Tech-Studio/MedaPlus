@@ -163,9 +163,10 @@ class SignupView(APIView):
 
         validated = serializer.validated_data
         phone     = validated['phone']
+        email     = validated['email']
 
         try:
-            _auth_service.initiate_signup(phone=phone)
+            _auth_service.initiate_signup(phone=phone, email=email)
         except PhoneAlreadyExistsError as e:
             return Response({'detail': str(e)}, status=status.HTTP_409_CONFLICT)
         except SMSSendError as e:

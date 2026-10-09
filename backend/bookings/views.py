@@ -1,6 +1,6 @@
 import random
 import string
-from decimal import Decimal
+from decimal import Decimal, ROUND_DOWN
 from rest_framework.exceptions import NotFound, ValidationError as ValidationErr
 from amqp import NotFound
 from django.contrib.auth import views

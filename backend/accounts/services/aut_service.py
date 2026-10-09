@@ -30,14 +30,14 @@ class AuthException(Exception):
 
 class PhoneAlreadyExistsError(AuthException):
     """
-    Raised when signup phone is already registered.
+    Raised when signup phone (or email) is already registered.
     View returns HTTP 409 Conflict.
     """
     pass
 
 class UsernameAlreadyExistsError(AuthException):
     """
-    Raised when signup phone is already registered.
+    Raised when signup username is already taken.
     View returns HTTP 409 Conflict.
     """
     pass
@@ -155,14 +155,14 @@ class AuthService:
 
     # =========================================================================
     # SIGNUP FLOW
-    # Step 1 → initiate_signup   (sends OTP)
+    # Step 1 → initiate_signup   (sends OTP to the email)
     # Step 2 → store_signup_data (called by view helper after OTP sent)
     # Step 3 → complete_signup   (verifies OTP, creates user, issues session)
     # =========================================================================
 
-    def initiate_signup(self, phone: str) -> None:
+    def initiate_signup(self, phone: str, email: str) -> None:
         """
-        Step 1 of signup flow — sends OTP to phone.
+        Step 1 of signup flow — sends OTP to the user's EMAIL.
 
         Defense-in-depth: re-checks phone uniqueness even though the
         serializer already checked. The serializer runs in request context;
@@ -174,7 +174,7 @@ class AuthService:
 
         Raises:
             PhoneAlreadyExistsError: phone already registered
-            SMSSendError: SMS provider failed
+            SMSSendError: email provider failed
         """
         if User.objects.filter(phone=phone, deleted_at__isnull=True).exists():
             raise PhoneAlreadyExistsError(
@@ -183,8 +183,9 @@ class AuthService:
 
         self.otp_service.send(
             phone=phone,
-            purpose=PhoneVerification.Purpose.SIGNUP, 
-            user=None
+            purpose=PhoneVerification.Purpose.SIGNUP,
+            user=None,
+            email=email,        # NEW — no User row yet, so pass the email explicitly
         )
 
         logger.info('Signup OTP sent')
@@ -197,7 +198,7 @@ class AuthService:
             last_name: str,
             password: str,
             role: str,
-            email: str | None = None,
+            email: str,         # NEW — mandatory
         ) -> None:
             key = f'{self._SIGNUP_KEY_PREFIX}{phone}'
     
@@ -205,7 +206,7 @@ class AuthService:
                 'first_name': first_name,
                 'last_name': last_name,
                 'username': username,
-                'email': email,
+                'email': email.strip().lower(),
                 'role':role,
                 'hashed_password': make_password(password),
             }
@@ -230,6 +231,7 @@ class AuthService:
 
         Called by:
             auth_views.SignupVerifyOTPView
+            otp_views.ResendOTPView (to get the email for signup resend)
         """
         key = f'{self._SIGNUP_KEY_PREFIX}{phone}'
         raw = cache.get(key)
@@ -262,6 +264,7 @@ class AuthService:
         last_name: str,
         hashed_password: str,
         role: str,
+        email: str,             # NEW — mandatory (moved up: required args must come first)
         verification: PhoneVerification,
         device_id: str,
         device_name: str | None = None,
@@ -269,7 +272,6 @@ class AuthService:
         ip_address: str | None = None,
         user_agent: str | None = None,
         fcm_token: str | None = None,
-        email: str | None = None,
     ) -> dict:
         """
         Step 2 of signup flow — creates user and issues session.
@@ -281,13 +283,11 @@ class AuthService:
 
         Accepts hashed_password (not raw) because the view retrieved it from
         Redis where it was stored already hashed by store_signup_data().
-        The User manager's create_user() must accept a pre-hashed password
-        (pass it via set_password=False or an equivalent manager method).
 
         Flow:
             1. Mark OTP as used (inside atomic block — cannot be replayed)
-            2. Race-condition guard — recheck phone uniqueness atomically
-            3. Create user with hashed_password
+            2. Race-condition guard — recheck phone/email/username uniqueness
+            3. Create user with hashed_password and email
             4. Reset failed_attempts to zero (user starts clean)
             5. Create session
             6. Return tokens + user
@@ -296,22 +296,24 @@ class AuthService:
             dict: user, session_token, refresh_token, expires_at, refresh_expires_at
 
         Raises:
-            PhoneAlreadyExistsError: race condition — phone taken between steps
+            PhoneAlreadyExistsError: race condition — phone/email taken between steps
+            UsernameAlreadyExistsError: username taken between steps
         """
+        email = email.strip().lower()
+
         # step 1 — consume OTP inside atomic block
         # serializer already verified the hash; we just mark it used here
         # so that OTP consumption and user creation are a single atomic unit
         verification.mark_used()
 
         # step 2 — race-condition guard
-        # two simultaneous signups for the same phone could both pass
-        # the serializer check; this SELECT FOR UPDATE prevents both from
-        # succeeding by holding the lock until this transaction commits
         if User.objects.filter(phone=phone, deleted_at__isnull=True).exists():
             raise PhoneAlreadyExistsError(
                 'An account with this phone number already exists.'
             )
-        if email and User.objects.filter(email=email, deleted_at__isnull=True).exists():
+        # email column is unique across ALL rows (incl. soft-deleted), so no
+        # deleted_at filter here — otherwise the DB would raise IntegrityError
+        if User.objects.filter(email__iexact=email).exists():
             raise PhoneAlreadyExistsError(
                 'An account with this email already exists.'
             )
@@ -319,24 +321,19 @@ class AuthService:
             raise UsernameAlreadyExistsError(
                 'This username is already taken.'
             )
+
         # step 3 — create user
         # password is already hashed — pass directly to avoid double-hashing
-        if email.strip():
-            user = User(
-                username=username,
-                phone=phone,
-                first_name=first_name,
-                last_name=last_name,
-                email=email,
-                password=hashed_password,
-            )
+        # FIX: the old code built the user with email in an `if`, then always
+        # overwrote it with a second User(...) without email, so email was never saved.
         user = User(
-                        username=username,
-                        phone=phone,
-                        first_name=first_name,
-                        last_name=last_name,
-                        password=hashed_password,
-                    )
+            username=username,
+            phone=phone,
+            first_name=first_name,
+            last_name=last_name,
+            email=email,
+            password=hashed_password,
+        )
 
         user.role = role
         # Players are approved immediately; owners require admin approval
@@ -537,7 +534,7 @@ class AuthService:
 
     # =========================================================================
     # FORGOT PASSWORD FLOW
-    # Step 1 → initiate_forgot_password  (sends OTP silently)
+    # Step 1 → initiate_forgot_password  (sends OTP silently, to user's email)
     # Step 2 → generate_reset_token      (accepts verified object, issues token)
     # Step 3 → reset_password            (validates token, updates password)
     # =========================================================================
@@ -551,11 +548,14 @@ class AuthService:
         The Flutter response is always identical — never reveal whether a
         phone number is registered (prevents enumeration attacks).
 
+        The OTP is emailed to the email stored on the user (OTPService.send
+        falls back to user.email).
+
         Called by:
             auth_views.ForgotPasswordView
 
         Raises:
-            SMSSendError: SMS provider failed (only when user exists)
+            SMSSendError: email provider failed (only when user exists)
         """
         user = User.objects.by_phone(phone).first()
 
@@ -710,40 +710,46 @@ class AuthService:
     # RESEND OTP FLOW
     # =========================================================================
 
-    def resend_otp(self, phone: str, purpose: str) -> None:
+    def resend_otp(
+        self,
+        phone: str,
+        purpose: str,
+        verification,
+        email: str | None = None,
+    ) -> None:
         """
         Resends an OTP for any purpose (signup, password_reset, phone_change).
         Rate limiting is enforced by OTPService.resend().
 
-        The serializer has already found the existing verification record and
-        checked the resend lock. We delegate to OTPService which increments
-        the resend counter and sends the SMS.
+        FIX: OTPService.resend() requires the `verification` row, which this
+        wrapper never passed (it would have raised TypeError). It now accepts
+        and forwards it, plus the optional email (needed for signup).
 
         Raises:
             OTPExpiredError: no active record — user must restart the flow
             OTPRateLimitError: too many resend attempts
-            SMSSendError: SMS provider failed
-
-        Called by:
-            auth_views.ResendOTPView
+            SMSSendError: email provider failed
         """
         self.otp_service.resend(
             phone=phone,
             purpose=purpose,
+            verification=verification,
+            email=email,
         )
 
         logger.info('OTP resent', extra={'phone': phone, 'purpose': purpose})
 
     # =========================================================================
     # PHONE CHANGE FLOW
-    # Step 1 → initiate_phone_change   (sends OTP to new phone)
+    # Step 1 → initiate_phone_change   (sends OTP to user's email)
     # Step 2 → confirm_phone_change    (marks used, updates phone, revokes sessions)
     # =========================================================================
 
     def initiate_phone_change(self, new_phone: str, user: None) -> None:
         """
         Step 1 of phone change flow.
-        Sends OTP to the NEW phone number to verify the user owns it.
+        Sends the OTP to the user's EMAIL (the new phone cannot receive it
+        in this setup) to verify the user is who they claim to be.
 
         The serializer already confirmed new_phone is not taken and is
         different from the current phone before the view calls this.
@@ -752,7 +758,7 @@ class AuthService:
             profile_views.RequestPhoneChangeView
 
         Raises:
-            SMSSendError: SMS provider failed
+            SMSSendError: email provider failed
         """
         self.otp_service.send(
             phone=new_phone,
@@ -761,7 +767,7 @@ class AuthService:
         )
 
         logger.info(
-            'Phone change OTP sent to new phone',
+            'Phone change OTP sent to user email',
             extra={'new_phone': new_phone}
         )
 

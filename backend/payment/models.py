@@ -287,3 +287,28 @@ class PaymentTransaction(models.Model):
         if self.team_booking_payment_id:
             return self.team_booking_payment.created_at
         return self.solo_booking_hold.created_at
+
+
+# ADD this class at the bottom of payment/models.py (nothing else in models.py changes).
+# Then run:  python manage.py makemigrations payment   and   python manage.py migrate
+#
+# It remembers ONLY the last 8 (CBE) / 5 (BOA) digits of the account a player paid
+# from, after a successful payment, so they are not asked for it again.
+
+class PayerBankSuffix(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    payer = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="saved_bank_suffixes"
+    )
+    bank = models.CharField(max_length=15, choices=SupportedBank.choices)
+    suffix = models.CharField(max_length=10)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "payment_payer_bank_suffix"
+        constraints = [
+            models.UniqueConstraint(fields=["payer", "bank"], name="uniq_saved_suffix_per_payer_bank"),
+        ]
+
+    def __str__(self):
+        return f"{self.payer_id} / {self.bank}"

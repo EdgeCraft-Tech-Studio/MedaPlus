@@ -9,7 +9,7 @@ import PaymentLogo from "../components/PaymentLogo";
 import { showToast } from "./Toast";
 
 interface Props {
-  pitchId: string;
+  pitchId: string | number;
 }
 
 const FILTERS: { value: OwnerPaymentFilter; label: string }[] = [

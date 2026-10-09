@@ -1,3 +1,5 @@
+import re
+
 from rest_framework import serializers
 
 from .choices import GatewayProvider, PaymentMode, SupportedBank
@@ -131,20 +133,22 @@ class SubmitManualBankPaymentSerializer(serializers.Serializer):
         r"^[A-Za-z0-9\-_/]{6,64}$",
         error_messages={"invalid": "Reference number may only contain letters, digits, - _ /"},
     )
-    account_suffix = serializers.CharField(required=False, allow_blank=True, default="")
+    # The payer types their FULL account number; the server keeps only the last
+    # digits the bank needs (8 for CBE, 5 for BOA) and never stores the rest.
+    sender_account_number = serializers.CharField(required=False, allow_blank=True, default="", max_length=40)
+    account_suffix = serializers.CharField(required=False, allow_blank=True, default="")  # older clients
     phone_number = serializers.CharField(required=False, allow_blank=True, default="")
 
     def validate(self, attrs):
         bank = attrs["bank"]
         attrs["pay_to_bank"] = attrs.get("pay_to_bank") or bank
 
-        # Normally empty (the server uses the pitch owner's digits). The payer only
-        # types it as a second chance after an automatic attempt failed.
         length = SUFFIX_REQUIRED_BANKS.get(bank)
-        suffix = (attrs.get("account_suffix") or "").strip()
-        if length and suffix and not (suffix.isdigit() and len(suffix) == length):
-            raise serializers.ValidationError({"account_suffix": f"Enter exactly {length} digits."})
-        attrs["account_suffix"] = suffix if length else ""
+        digits = re.sub(r"\D", "", attrs.get("sender_account_number") or "")
+        if length and digits and len(digits) < length:
+            raise serializers.ValidationError({"sender_account_number": "Please enter your full account number."})
+        attrs["sender_account_number"] = digits if length else ""
+        attrs["account_suffix"] = re.sub(r"\D", "", attrs.get("account_suffix") or "") if length else ""
 
         if bank in PAYER_PHONE_REQUIRED_BANKS:
             phone = normalize_ethiopian_phone(attrs.get("phone_number") or "")

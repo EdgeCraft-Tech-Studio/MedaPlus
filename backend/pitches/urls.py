@@ -1,6 +1,8 @@
 from django.urls import path
 from .views import (
     health,
+    owner_grid_book_slots_bulk,
+    owner_grid_close_slots_bulk,
     owner_pitch_booking_history,
     owner_pitch_weekly_grid,       # NEW
     owner_grid_book_slot,          # NEW
@@ -24,6 +26,8 @@ urlpatterns = [
     path("pitches/<str:pitch_id>/booking-history/", owner_pitch_booking_history),
     path("pitches/<str:pitch_id>/weekly-grid/book/", owner_grid_book_slot),    # NEW, must precede weekly-grid/
     path("pitches/<str:pitch_id>/weekly-grid/close/", owner_grid_close_slot),  # NEW, must precede weekly-grid/
+    path("pitches/<str:pitch_id>/weekly-grid/book-bulk/", owner_grid_book_slots_bulk),
+    path("pitches/<str:pitch_id>/weekly-grid/close-bulk/", owner_grid_close_slots_bulk),
     path("pitches/<str:pitch_id>/weekly-grid/", owner_pitch_weekly_grid),      # NEW
     path("pitches/<str:pitch_id>/", pitch_detail),   # keep this LAST — it's a catch-all on pitch_id
     path("admin/stats/", admin_platform_stats),

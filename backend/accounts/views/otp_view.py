@@ -5,7 +5,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from accounts.serializer.auth_serializer import ResendOTPSerializer
+from accounts.serializer.auth_serializer import ResendOTPSerializer    # NEW: to read signup email from Redis
 from accounts.services.otp_services import (
     OTPLockedError,
     OTPService,
@@ -13,6 +13,7 @@ from accounts.services.otp_services import (
     OTPRateLimitError,
     SMSSendError,
 )
+from accounts.services.aut_service import AuthService
 from core.utils.validator import validate_phone_format
 
 logger = logging.getLogger(__name__)
@@ -38,6 +39,7 @@ logger = logging.getLogger(__name__)
 # ─────────────────────────────────────────────────────────────────────────────
 
 _otp_service = OTPService()
+_auth_service = AuthService()       # NEW
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -54,16 +56,21 @@ _otp_service = OTPService()
 #   - Attached it as validated_data['_verification']
 # We pass it directly to the service — no second DB lookup.
 #
+# EMAIL:
+#   signup          → no User row yet, so the email comes from the Redis
+#                     signup cache (stored by AuthService.store_signup_data)
+#   other purposes  → OTPService.resend() reads verification.user.email
+#
 # POST /otp/resend/
 # Body: { "phone": "+251912345678", "purpose": "signup" }
 #
-# Success 200: { "message": "OTP resent to +251912345678" }
+# Success 200: { "message": "OTP resent to your email" }
 # Error   400: { "detail": "No pending OTP found. Please start over." }
 # Error   429: {
 #     "detail": "Too many OTP requests. Try again after 14:30.",
 #     "blocked_until": "2026-06-01T14:30:00Z"
 # }
-# Error   503: { "detail": "SMS service unavailable. Please try again." }
+# Error   503: { "detail": "Email service unavailable. Please try again." }
 # ─────────────────────────────────────────────────────────────────────────────
 
 class ResendOTPView(APIView):
@@ -89,12 +96,24 @@ class ResendOTPView(APIView):
         # Pass _verification already found by serializer — no second DB hit
         verification = validated['_verification']
 
+        # NEW — for signup the email only exists in the Redis cache
+        email = None
+        if purpose == 'signup':
+            signup_data = _auth_service.get_signup_data(phone)
+            if not signup_data:
+                return Response(
+                    {'detail': 'Signup session expired. Please start over.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            email = signup_data['email']
+
         try:
             _otp_service.resend(
                 phone=phone,
                 purpose=purpose,
                 verification=verification,
-                user=None
+                user=None,
+                email=email,
             )
         except OTPNotFoundError as e:
             return Response(
@@ -123,12 +142,12 @@ class ResendOTPView(APIView):
             )
         except SMSSendError:
             logger.error(
-                'SMS send failed during OTP resend',
+                'OTP delivery failed during resend',
                 extra={'phone': phone, 'purpose': purpose},
                 exc_info=True,
             )
             return Response(
-                {'detail': 'SMS service unavailable. Please try again.'},
+                {'detail': 'Email service unavailable. Please try again.'},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE
             )
 
@@ -138,7 +157,7 @@ class ResendOTPView(APIView):
         )
 
         return Response(
-            {'message': f'OTP resent to {phone}'},
+            {'message': 'OTP resent to your email'},
             status=status.HTTP_200_OK
         )
 

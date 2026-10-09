@@ -63,7 +63,8 @@ export interface SubmitPaymentPayload {
   pay_to_bank?: string;
   screenshot: File;
   reference_number: string;
-  account_suffix?: string;
+  /** The payer's FULL account number (CBE / BOA). The server keeps only the digits it needs. */
+  sender_account_number?: string;
   phone_number?: string;
 }
 
@@ -73,7 +74,7 @@ function buildPaymentForm(payload: SubmitPaymentPayload): FormData {
   if (payload.pay_to_bank) form.append("pay_to_bank", payload.pay_to_bank);
   form.append("screenshot", payload.screenshot);
   form.append("reference_number", payload.reference_number);
-  if (payload.account_suffix) form.append("account_suffix", payload.account_suffix);
+  if (payload.sender_account_number) form.append("sender_account_number", payload.sender_account_number);
   if (payload.phone_number) form.append("phone_number", payload.phone_number);
   return form;
 }
@@ -176,7 +177,7 @@ export interface OwnerPaymentPage {
 }
 
 export async function getPitchPayments(
-  pitchId: string,
+  pitchId: string | number,
   params: { status?: OwnerPaymentFilter; page?: number } = {}
 ): Promise<OwnerPaymentPage> {
   const res = await api.get(`/payment/pitches/${pitchId}/transactions/`, {
@@ -201,4 +202,10 @@ export async function ownerRejectVerifiedPayment(
 ): Promise<OwnerPaymentRow> {
   const res = await api.post(`/payment/transactions/${transactionId}/owner-reject-verified/`, { password });
   return res.data;
+}
+
+/** Banks whose account digits we already remember for this player (no need to ask again). */
+export async function getMySavedSenderBanks(): Promise<string[]> {
+  const res = await api.get("/payment/my-saved-banks/");
+  return res.data?.banks ?? [];
 }

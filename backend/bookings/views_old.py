@@ -1,6 +1,6 @@
 import random
 import string
-from decimal import Decimal
+from decimal import Decimal, ROUND_DOWN
 
 from django.shortcuts import get_object_or_404
 from django.utils import timezone

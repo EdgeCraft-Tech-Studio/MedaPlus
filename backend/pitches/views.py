@@ -3,6 +3,7 @@ import json
 import re
 from django.contrib.auth import get_user_model
 from django.db.models.aggregates import Sum
+from django.db import transaction
 from django.utils import timezone 
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes, parser_classes
@@ -18,7 +19,7 @@ from .serializers import AlreadyBookedSlotSerializer, PitchSerializer, PitchCrea
 from collections import defaultdict
 from django.shortcuts import get_object_or_404
 from bookings.models import Booking, Slot, SlotStatus
-from decimal import Decimal
+from decimal import Decimal, ROUND_DOWN
 
 User = get_user_model()
 
@@ -1297,3 +1298,202 @@ def owner_grid_close_slot(request, pitch_id: str):
             "reason": slot.manual_close_reason,
         },
     }, status=201)
+
+
+
+# ----------------------------------------------------------------------
+# Bulk grid actions (drag-select): many slots, one atomic transaction
+# ----------------------------------------------------------------------
+MAX_BULK_SLOTS = 200
+
+
+class _BulkSlotConflict(Exception):
+    """Raised inside transaction.atomic() so every change is rolled back."""
+
+
+def _parse_bulk_targets(pitch, raw_slots):
+    """Validates [{"date": "YYYY-MM-DD", "start_hour": 8}, ...].
+    Returns (targets, error_response). targets = [(day, hour, start_dt, end_dt)]."""
+    if not isinstance(raw_slots, list) or not raw_slots:
+        return None, Response({"detail": "slots must be a non-empty list."}, status=400)
+    if len(raw_slots) > MAX_BULK_SLOTS:
+        return None, Response(
+            {"detail": f"You can select at most {MAX_BULK_SLOTS} slots at once."}, status=400
+        )
+
+    tz = timezone.get_current_timezone()
+    now = timezone.localtime()
+    today = timezone.localdate()
+    targets = []
+    seen = set()
+
+    for item in raw_slots:
+        if not isinstance(item, dict):
+            return None, Response({"detail": "Each slot must be an object."}, status=400)
+        try:
+            day = datetime.strptime(str(item.get("date")), "%Y-%m-%d").date()
+            hour = int(item.get("start_hour"))
+        except (ValueError, TypeError):
+            return None, Response({"detail": "Invalid date or start_hour in slots."}, status=400)
+
+        if day < today:
+            return None, Response({"detail": f"{day.isoformat()} is in the past."}, status=400)
+        if not (pitch.opening_time.hour <= hour < pitch.closing_time.hour):
+            return None, Response(
+                {"detail": f"{hour:02d}:00 on {day.isoformat()} is outside the pitch's open hours."},
+                status=400,
+            )
+
+        start_dt = timezone.make_aware(datetime.combine(day, time(hour=hour)), tz)
+        if start_dt <= now:
+            return None, Response(
+                {"detail": f"{day.isoformat()} {hour:02d}:00 has already passed."}, status=400
+            )
+        if start_dt in seen:
+            continue
+        seen.add(start_dt)
+        targets.append((day, hour, start_dt, start_dt + timedelta(hours=1)))
+
+    return targets, None
+
+
+def _slot_time_label(start_dt, end_dt):
+    return (
+        f"{timezone.localtime(start_dt).strftime('%I:%M %p')} - "
+        f"{timezone.localtime(end_dt).strftime('%I:%M %p')}"
+    )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def owner_grid_book_slots_bulk(request, pitch_id: str):
+    """Books many free grid cells at once for one customer. All-or-nothing.
+    `total_price` is the TOTAL for the whole selection; it is split evenly
+    across the slots (remainder goes on the last slot, so the sum is exact)."""
+    pitch = get_object_or_404(Pitch, id=pitch_id)
+    if not _can_edit_pitch(request.user, pitch):
+        return Response({"detail": "You can only manage bookings on your own pitch."}, status=403)
+
+    name = (request.data.get("name") or "").strip()
+    phone_raw = (request.data.get("phone") or "").strip()
+    total_raw = request.data.get("total_price")
+
+    if not name:
+        return Response({"detail": "Name is required."}, status=400)
+    if not phone_raw:
+        return Response({"detail": "Phone number is required."}, status=400)
+
+    normalized_phone = _normalize_ethiopian_phone(phone_raw)
+    if not normalized_phone:
+        return Response(
+            {"detail": "Enter a valid phone number: 09xxxxxxxx, 07xxxxxxxx, +2519xxxxxxxx or +2517xxxxxxxx."},
+            status=400,
+        )
+
+    total_dec = None
+    if total_raw not in (None, ""):
+        try:
+            total_dec = Decimal(str(total_raw)).quantize(Decimal("0.01"), rounding=ROUND_DOWN)
+        except Exception:
+            return Response({"detail": "Invalid price."}, status=400)
+        if total_dec < 0 or total_dec > Decimal("99999999.99"):
+            return Response({"detail": "Invalid price."}, status=400)
+
+    targets, error = _parse_bulk_targets(pitch, request.data.get("slots"))
+    if error is not None:
+        return error
+
+    count = len(targets)
+    shares = [None] * count
+    if total_dec is not None:
+        base = (total_dec / count).quantize(Decimal("0.01"), rounding=ROUND_DOWN)
+        shares = [base] * count
+        shares[-1] = total_dec - base * (count - 1)
+
+    cells = {}
+    try:
+        with transaction.atomic():
+            for index, (day, hour, start_dt, end_dt) in enumerate(targets):
+                slot, _ = Slot.objects.select_for_update().get_or_create(
+                    pitch=pitch, start_dt=start_dt, end_dt=end_dt,
+                    defaults={"status": SlotStatus.AVAILABLE},
+                )
+                if slot.status != SlotStatus.AVAILABLE:
+                    raise _BulkSlotConflict(
+                        f"{day.isoformat()} at {timezone.localtime(start_dt).strftime('%I:%M %p')} "
+                        f"is no longer free. Nothing was booked."
+                    )
+
+                share = shares[index]
+                slot.status = SlotStatus.BOOKED
+                slot.updated_by = request.user
+                slot.manual_booked_name = name
+                slot.manual_booked_phone = normalized_phone
+                slot.manual_price = share
+                slot.save()
+
+                cells[f"{day.isoformat()}_{hour}"] = {
+                    "status": "booked",
+                    "kind": "manual",
+                    "name": name,
+                    "amount": str(share) if share is not None else None,
+                    "time_label": _slot_time_label(start_dt, end_dt),
+                    "phone": normalized_phone,
+                    "email": None,
+                    "date": day.isoformat(),
+                }
+    except _BulkSlotConflict as exc:
+        return Response({"detail": str(exc)}, status=409)
+
+    return Response({"ok": True, "cells": cells}, status=201)
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def owner_grid_close_slots_bulk(request, pitch_id: str):
+    """Closes many free grid cells at once (SlotStatus.BLOCKED). All-or-nothing."""
+    pitch = get_object_or_404(Pitch, id=pitch_id)
+    if not _can_edit_pitch(request.user, pitch):
+        return Response({"detail": "You can only manage bookings on your own pitch."}, status=403)
+
+    reason = (request.data.get("reason") or "").strip()
+    if not reason:
+        return Response({"detail": "A reason is required."}, status=400)
+
+    targets, error = _parse_bulk_targets(pitch, request.data.get("slots"))
+    if error is not None:
+        return error
+
+    cells = {}
+    try:
+        with transaction.atomic():
+            for day, hour, start_dt, end_dt in targets:
+                slot, _ = Slot.objects.select_for_update().get_or_create(
+                    pitch=pitch, start_dt=start_dt, end_dt=end_dt,
+                    defaults={"status": SlotStatus.AVAILABLE},
+                )
+                if slot.status != SlotStatus.AVAILABLE:
+                    raise _BulkSlotConflict(
+                        f"{day.isoformat()} at {timezone.localtime(start_dt).strftime('%I:%M %p')} "
+                        f"is no longer free. Nothing was closed."
+                    )
+
+                slot.status = SlotStatus.BLOCKED
+                slot.updated_by = request.user
+                slot.manual_close_reason = reason[:255]
+                slot.save()
+
+                cells[f"{day.isoformat()}_{hour}"] = {
+                    "status": "closed",
+                    "kind": "closed",
+                    "name": "Closed",
+                    "amount": None,
+                    "time_label": _slot_time_label(start_dt, end_dt),
+                    "phone": None,
+                    "email": None,
+                    "date": day.isoformat(),
+                    "reason": slot.manual_close_reason,
+                }
+    except _BulkSlotConflict as exc:
+        return Response({"detail": str(exc)}, status=409)
+
+    return Response({"ok": True, "cells": cells}, status=201)

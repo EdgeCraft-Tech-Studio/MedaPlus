@@ -114,7 +114,11 @@ class SignupSerializer(serializers.Serializer):
     first_name = serializers.CharField(max_length=50, required=True, help_text='User first name. Letters only.')
     last_name = serializers.CharField(max_length=50, required=True, help_text='User last name. Letters only.')
     phone = serializers.CharField(max_length=20, required=True, help_text='International format. Example: +251912345678')
-    email = serializers.EmailField(max_length=150, required=False, allow_blank=True)
+    # CHANGED: email is now mandatory — the OTP is delivered to it
+    email = serializers.EmailField(
+        max_length=150, required=True, allow_blank=False,
+        help_text='Required. The verification code is sent to this email.'
+    )
     password = serializers.CharField(
         max_length=128, required=True, write_only=True,
         style={'input_type': 'password'}, help_text='Must meet strength requirements.'
@@ -151,6 +155,15 @@ class SignupSerializer(serializers.Serializer):
             raise serializers.ValidationError('An account with this phone number already exists.')
         return value
 
+    # NEW
+    def validate_email(self, value: str) -> str:
+        value = value.strip().lower()
+        # the model's email column is unique across ALL rows (including
+        # soft-deleted), so no deleted_at filter here
+        if User.objects.filter(email__iexact=value).exists():
+            raise serializers.ValidationError('An account with this email already exists.')
+        return value
+
     def validate_password(self, value: str) -> str:
         return validate_password_strength(value)
 
@@ -179,7 +192,7 @@ class SignupVerifyOTPSerializer(DeviceInfoMixin, serializers.Serializer):
 
     phone = serializers.CharField(max_length=20, required=True, help_text='Same phone number used in SignupSerializer.')
     otp_code = serializers.CharField(
-        max_length=5, min_length=5, required=True, write_only=True, help_text='5-digit OTP sent to phone.'
+        max_length=5, min_length=5, required=True, write_only=True, help_text='5-digit OTP sent to email.'
     )
  
 
@@ -328,7 +341,7 @@ class ForgotPasswordVerifyOTPSerializer(serializers.Serializer):
 
     phone = serializers.CharField(max_length=20, required=True, help_text='Same phone number used in ForgotPasswordSerializer.')
     otp_code = serializers.CharField(
-        max_length=5, min_length=5, required=True, write_only=True, help_text='5-digit OTP sent to phone.'
+        max_length=5, min_length=5, required=True, write_only=True, help_text='5-digit OTP sent to email.'
     )
 
     def validate_phone(self, value: str) -> str:
@@ -586,7 +599,7 @@ class LogoutSerializer(serializers.Serializer):
 
 class RequestPhoneChangeSerializer(serializers.Serializer):
     """
-    Validates new phone before OTP is sent to it.
+    Validates new phone before OTP is sent.
     """
 
     password = serializers.CharField(write_only=True)
@@ -628,13 +641,13 @@ class RequestPhoneChangeSerializer(serializers.Serializer):
 
 class ConfirmPhoneChangeSerializer(serializers.Serializer):
     """
-    Verifies OTP sent to the new phone number.
+    Verifies OTP sent for the phone change.
     Service handles phone update and session revocation.
     """
 
-    new_phone = serializers.CharField(max_length=20, required=True, help_text='The new phone number the OTP was sent to.')
+    new_phone = serializers.CharField(max_length=20, required=True, help_text='The new phone number being confirmed.')
     otp_code = serializers.CharField(
-        max_length=5, min_length=5, required=True, write_only=True, help_text='5-digit OTP sent to the new phone number.'
+        max_length=5, min_length=5, required=True, write_only=True, help_text='5-digit OTP sent to your email.'
     )
 
     def validate_new_phone(self, value: str) -> str:

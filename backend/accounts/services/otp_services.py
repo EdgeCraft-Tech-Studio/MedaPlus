@@ -1,14 +1,16 @@
 import logging
-import random
+import secrets
 import string
 from datetime import timedelta
-from django.db import IntegrityError, transaction
-import requests
+
+import requests  # only needed if you re-enable the AfroMessage SMS block below
 from django.conf import settings
+from django.core.mail import EmailMultiAlternatives
+from django.db import IntegrityError, transaction
+from django.template.loader import render_to_string
 from django.utils import timezone
+
 from core.utils.time_formatter import format_lockout_duration
-
-
 
 from accounts.models import PhoneVerification
 
@@ -23,14 +25,12 @@ class OTPException(Exception):
     """Base exception for all OTP errors."""
     pass
 
+
 class OTPRateLimitError(OTPException):
     """
     Raised when user requests too many OTPs in a short window.
     View returns HTTP 429 Too Many Requests.
     Carries blocked_until so Flutter can show exact countdown timer.
-
-    FIX: added __init__ with blocked_until attribute.
-    View accesses e.blocked_until to return exact time to Flutter.
     """
     def __init__(self, message: str, blocked_until):
         super().__init__(message)
@@ -45,8 +45,7 @@ class OTPExpiredError(OTPException):
     pass
 
 
-# FIX: alias so otp_views.py can import OTPNotFoundError
-# both names point to the same class — no duplication
+# alias so otp_views.py can import OTPNotFoundError
 OTPNotFoundError = OTPExpiredError
 
 
@@ -68,7 +67,7 @@ class OTPInvalidError(OTPException):
 
 class SMSSendError(OTPException):
     """
-    Raised when SMS provider fails to deliver OTP.
+    Raised when the OTP provider (email or SMS) fails to deliver the OTP.
     View returns HTTP 503 Service Unavailable.
     """
     pass
@@ -82,7 +81,8 @@ class OTPService:
     """
     Handles all OTP lifecycle:
     - Generate secure 5-digit code
-    - Send via SMS provider (AfroMessage for Ethiopia)
+    - Send via email (SMTP, HTML + plain text) — SMS provider (AfroMessage)
+      kept commented below
     - Create PhoneVerification record with hashed OTP
     - Verify OTP against hash
     - Handle resend with rate limiting
@@ -91,9 +91,9 @@ class OTPService:
 
     Usage:
         service = OTPService()
-        service.send(phone='+251912345678', purpose='signup')
+        service.send(phone='+251912345678', purpose='signup', email='a@b.com')
         service.verify(phone='+251912345678', otp_code='48291', purpose='signup')
-        service.resend(phone='+251912345678', purpose='signup', verification=obj)
+        service.resend(phone='+251912345678', purpose='signup', verification=obj, email='a@b.com')
         service.get_status(phone='+251912345678', purpose='signup')
     """
 
@@ -103,68 +103,152 @@ class OTPService:
     MAX_RESENDS          = 3
     RESEND_LOCKOUT_HOURS = 1
 
+    # Sentence fragment shown in the email: "Use the code below to <label>."
+    PURPOSE_LABELS = {
+        PhoneVerification.Purpose.SIGNUP:         'complete your signup',
+        PhoneVerification.Purpose.LOGIN:          'log in to your account',
+        PhoneVerification.Purpose.PASSWORD_RESET: 'reset your password',
+        PhoneVerification.Purpose.PHONE_CHANGE:   'change your phone number',
+        PhoneVerification.Purpose.BID_CONFIRM:    'confirm your action',
+    }
+
     # ── private helpers ──
 
     def _generate_otp(self) -> str:
         """
-        Generates a cryptographically random 5-digit OTP.
-        Digits only — avoids confusion between 0/O or 1/I on small screens.
+        Generates a cryptographically secure 5-digit OTP using `secrets`
+        (the `random` module is NOT safe for security codes).
         """
-        return ''.join(random.choices(string.digits, k=self.OTP_LENGTH))
+        return ''.join(
+            secrets.choice(string.digits) for _ in range(self.OTP_LENGTH)
+        )
 
     def _build_message(self, otp_code: str, purpose: str) -> str:
         """
         Builds SMS message body based on purpose.
         Kept short — SMS has 160 character limit.
+        (Only used when SMS delivery is re-enabled.)
         """
         messages = {
             PhoneVerification.Purpose.SIGNUP: (
-                f'Your Auction App signup code is {otp_code}. '
+                f'Your MedaPlus signup code is {otp_code}. '
                 f'Valid for {self.OTP_EXPIRY_MINUTES} minutes. '
                 f'Do not share this code.'
             ),
             PhoneVerification.Purpose.LOGIN: (
-                f'Your Auction App login code is {otp_code}. '
+                f'Your MedaPlus login code is {otp_code}. '
                 f'Valid for {self.OTP_EXPIRY_MINUTES} minutes. '
                 f'Do not share this code.'
             ),
             PhoneVerification.Purpose.PASSWORD_RESET: (
-                f'Your Auction App password reset code is {otp_code}. '
+                f'Your MedaPlus password reset code is {otp_code}. '
                 f'Valid for {self.OTP_EXPIRY_MINUTES} minutes. '
                 f'Do not share this code.'
             ),
             PhoneVerification.Purpose.PHONE_CHANGE: (
-                f'Your Auction App phone change code is {otp_code}. '
+                f'Your MedaPlus phone change code is {otp_code}. '
                 f'Valid for {self.OTP_EXPIRY_MINUTES} minutes. '
                 f'Do not share this code.'
             ),
         }
         return messages.get(
             purpose,
-            f'Your Auction App code is {otp_code}. '
+            f'Your MedaPlus code is {otp_code}. '
             f'Valid for {self.OTP_EXPIRY_MINUTES} minutes. '
             f'Do not share this code.'
         )
 
-    def _send_sms(self, phone: str, otp_code: str, purpose: str) -> None:
+    def _send_email(self, email: str, otp_code: str, purpose: str) -> None:
         """
-        Sends OTP via AfroMessage SMS API.
+        Sends the OTP by email as multipart: plain text + HTML.
+
+        Template:  accounts/templates/emails/otp_email.html
+        Settings:  EMAIL_* (SMTP), DEFAULT_FROM_EMAIL,
+                   EMAIL_LOGO_URL, EMAIL_SUPPORT_ADDRESS, EMAIL_APP_NAME
+
+        Raises:
+            SMSSendError: any delivery failure. The same exception type is
+            reused so views and services need no changes.
+        """
+        try:
+            app_name      = getattr(settings, 'EMAIL_APP_NAME', 'MedaPlus')
+            support_email = getattr(settings, 'EMAIL_SUPPORT_ADDRESS', '')
+            purpose_label = self.PURPOSE_LABELS.get(
+                purpose, 'verify your account'
+            )
+
+            context = {
+                'app_name':       app_name,
+                'otp_code':       otp_code,
+                'purpose_label':  purpose_label,
+                'expiry_minutes': self.OTP_EXPIRY_MINUTES,
+                'logo_url':       getattr(settings, 'EMAIL_LOGO_URL', ''),
+                'support_email':  support_email,
+                'year':           timezone.now().year,
+            }
+
+            html_body = render_to_string('emails/otp_email.html', context)
+
+            text_body = (
+                f"Your {app_name} verification code is {otp_code}\n\n"
+                f"Use it to {purpose_label}. "
+                f"It is valid for {self.OTP_EXPIRY_MINUTES} minutes.\n\n"
+                f"Never share this code with anyone.\n"
+                f"If you didn't request this, you can ignore this email.\n\n"
+                f"Need help? {support_email}"
+            )
+
+            msg = EmailMultiAlternatives(
+                subject=f'{otp_code} is your {app_name} verification code',
+                body=text_body,                       # plain-text part
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                to=[email],
+                reply_to=[support_email] if support_email else None,
+            )
+            msg.attach_alternative(html_body, 'text/html')   # HTML part
+            msg.send(fail_silently=False)
+
+        except Exception:
+            logger.error(
+                'OTP email send failed',
+                extra={'purpose': purpose},
+                exc_info=True,
+            )
+            raise SMSSendError('Failed to send OTP email. Please try again.')
+
+    def _send_sms(
+        self,
+        phone: str,
+        otp_code: str,
+        purpose: str,
+        email: str | None = None,
+    ) -> None:
+        """
+        Delivers the OTP. Currently sends by EMAIL (see _send_email).
+        The AfroMessage SMS block below is kept commented for later use.
         To switch provider: replace this method body only.
         Everything else stays the same.
 
-        Required settings:
+        Required settings (SMS, when re-enabled):
             AFROMESSAGE_API_URL
             AFROMESSAGE_API_KEY
             AFROMESSAGE_SENDER_ID
 
         Raises:
-            SMSSendError: provider error, timeout, or connection failure
+            SMSSendError: provider error, timeout, connection failure,
+                          or no email address available
         """
-        message = self._build_message(otp_code, purpose)
+        message = self._build_message(otp_code, purpose)  # noqa: F841 (used by SMS block)
 
-        print(f"⚡ OTP for {phone} ({purpose}): {otp_code}")
+        if not email:
+            raise SMSSendError('No email address available to send the OTP.')
 
-        #try:
+        self._send_email(email, otp_code, purpose)
+
+        # NOTE: the debug print() that leaked live OTPs into server logs
+        # was removed on purpose. Never log OTP codes in production.
+
+        # try:
         #     response = requests.post(
         #         url=settings.AFROMESSAGE_API_URL,
         #         headers={
@@ -178,7 +262,7 @@ class OTPService:
         #         },
         #         timeout=10,
         #     )
-
+        #
         #     if response.status_code not in (200, 201):
         #         logger.error(
         #             'AfroMessage API error',
@@ -190,12 +274,12 @@ class OTPService:
         #             }
         #         )
         #         raise SMSSendError('Failed to send OTP. Please try again.')
-
+        #
         #     logger.info(
         #         'OTP SMS sent successfully',
         #         extra={'phone': phone, 'purpose': purpose}
         #     )
-
+        #
         # except requests.exceptions.Timeout:
         #     logger.error(
         #         'AfroMessage API timeout',
@@ -204,7 +288,7 @@ class OTPService:
         #     raise SMSSendError(
         #         'SMS service is taking too long. Please try again.'
         #     )
-
+        #
         # except requests.exceptions.ConnectionError:
         #     logger.error(
         #         'AfroMessage API connection error',
@@ -214,7 +298,7 @@ class OTPService:
         #         'Cannot reach SMS service. Please check your connection.'
         #     )
 
-    def _invalidate_old_otps(self, phone: str, purpose: str,user:None) -> None:
+    def _invalidate_old_otps(self, phone: str, purpose: str, user=None) -> None:
         """
         Marks all existing unused OTPs for this phone + purpose as used.
         Called before creating a new OTP — prevents multiple valid OTPs
@@ -235,17 +319,13 @@ class OTPService:
             used_at=timezone.now(),
         )
 
-
-
-   
-    
     def _create_verification_record(
-    self,
-    phone: str,
-    purpose: str,
-    otp_code: str,
-    user=None
-) -> PhoneVerification:
+        self,
+        phone: str,
+        purpose: str,
+        otp_code: str,
+        user=None,
+    ) -> PhoneVerification:
         """
         Create or update OTP verification record.
 
@@ -253,8 +333,8 @@ class OTPService:
         - Existing active OTP is reused and updated.
         - Locked OTP cannot be bypassed by requesting new OTP.
         - A freshly issued OTP always gets a clean attempts budget —
-        we only reach the "replace OTP" branch once we've confirmed
-        the record is NOT currently locked.
+          we only reach the "replace OTP" branch once we've confirmed
+          the record is NOT currently locked.
         """
 
         # Only signup can have no user
@@ -291,7 +371,7 @@ class OTPService:
                     f"Please try again in {time}."
                 )
 
-            # Resend SMS lock
+            # Resend lock
             if verification.is_resend_locked():
 
                 raise OTPRateLimitError(
@@ -345,19 +425,27 @@ class OTPService:
             )
             raise OTPRateLimitError(
                 "An OTP was just requested for this number. "
-                "Please wait a moment and try again."
+                "Please wait a moment and try again.",
+                blocked_until=None,
             )
 
         return verification
-
 
     @transaction.atomic
     def send(
         self,
         phone: str,
         purpose: str,
-        user=None
+        user=None,
+        email: str | None = None,
     ):
+        """
+        email: required for SIGNUP (no User row exists yet — the caller passes
+        the email entered on the signup form). For every other purpose it is
+        optional and falls back to user.email.
+        """
+
+        recipient = email or (user.email if user else None)
 
         otp_code = self._generate_otp()
 
@@ -373,7 +461,8 @@ class OTPService:
             self._send_sms(
                 phone,
                 otp_code,
-                purpose
+                purpose,
+                email=recipient,
             )
 
         except SMSSendError:
@@ -382,7 +471,7 @@ class OTPService:
             # above — no explicit delete() needed, and calling it here
             # would incorrectly wipe a *reused* record's prior history.
             logger.error(
-                "OTP SMS send failed",
+                "OTP send failed",
                 extra={"phone": phone, "purpose": purpose}
             )
             raise
@@ -396,7 +485,6 @@ class OTPService:
         )
 
         return verification
-
 
     @transaction.atomic
     def verify(
@@ -424,16 +512,14 @@ class OTPService:
                 "OTP expired or does not exist."
             )
 
-
-        if verification.is_locked(): 
+        if verification.is_locked():
             time = format_lockout_duration(verification.attempts_locked_until)
             raise OTPLockedError(
                 "Too many incorrect OTP attempts. "
                 f"Please request a new OTP in {time}."
             )
 
-        # Was previously missing — allowed a correct-but-stale OTP
-        # to pass verification after expires_at had already passed.
+        # Prevents a correct-but-stale OTP from passing after expires_at.
         if verification.is_expired():
 
             raise OTPExpiredError(
@@ -453,10 +539,8 @@ class OTPService:
                     f"Try again in {time}."
                 )
 
-            
-
             raise OTPInvalidError(
-                f"Incorrect OTP."
+                "Incorrect OTP."
             )
 
         # Success
@@ -467,7 +551,7 @@ class OTPService:
         verification.save()
 
         # Clear resend history now that this flow completed successfully,
-        # per the model's own documented contract ("call this on successful reset").
+        # per the model's own documented contract.
         verification.reset_resend()
 
         logger.info(
@@ -480,15 +564,19 @@ class OTPService:
 
         return verification
 
-
     @transaction.atomic
     def resend(
         self,
         phone: str,
         purpose: str,
         verification,
-        user=None
+        user=None,
+        email: str | None = None,
     ):
+        """
+        email: required for SIGNUP resend (comes from the Redis signup cache).
+        For other purposes it falls back to the verification's own user email.
+        """
 
         # Re-lock the row fresh rather than trusting the caller's
         # possibly-stale in-memory instance.
@@ -516,9 +604,7 @@ class OTPService:
 
         otp_code = self._generate_otp()
 
-        verification.set_otp(
-            otp_code
-        )
+        verification.set_otp(otp_code)
 
         verification.expires_at = (
             timezone.now()
@@ -528,25 +614,30 @@ class OTPService:
         verification.is_used = False
         verification.used_at = None
 
-        # A resend issues a brand-new code — same reasoning as in
-        # _create_verification_record: clean attempts budget for it.
+        # A resend issues a brand-new code — clean attempts budget for it.
         verification.attempts = 0
         verification.attempts_locked_until = None
 
         verification.save()
+
+        # Resolve who receives the email
+        recipient = email or (
+            verification.user.email if verification.user_id else None
+        )
 
         try:
 
             self._send_sms(
                 phone,
                 otp_code,
-                purpose
+                purpose,
+                email=recipient,
             )
 
         except SMSSendError:
 
             logger.error(
-                "OTP resend SMS failed",
+                "OTP resend failed",
                 extra={"phone": phone, "purpose": purpose}
             )
             raise
@@ -561,12 +652,9 @@ class OTPService:
 
         return verification
 
-
     def get_status(self, phone: str, purpose: str) -> dict:
         """
         Returns current OTP state for Flutter OTP screen countdown timer.
-
-        NEW METHOD — needed by OTPStatusView.
 
         Flutter calls GET /otp/status/ when OTP screen loads to get:
         - expires_in_seconds → initialize countdown timer

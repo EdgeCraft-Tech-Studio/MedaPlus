@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>{{ app_name }} verification code</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f4f6f8;font-family:Arial,Helvetica,sans-serif;">
+
+  <!-- Hidden preview text shown next to the subject in the inbox -->
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:#f4f6f8;">
+    Your code is {{ otp_code }}. It expires in {{ expiry_minutes }} minutes.
+  </div>
+
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+         style="background-color:#f4f6f8;padding:24px 0;">
+    <tr>
+      <td align="center">
+
+        <table role="presentation" width="480" cellpadding="0" cellspacing="0" border="0"
+               style="width:100%;max-width:480px;background-color:#ffffff;border-radius:12px;">
+
+          <!-- Logo -->
+          <tr>
+            <td align="center" style="padding:28px 24px 8px 24px;">
+              {% if logo_url %}
+              <img src="{{ logo_url }}" alt="{{ app_name }}" width="120"
+                   style="display:block;width:120px;height:auto;border:0;outline:none;
+                          font-size:20px;font-weight:bold;color:#1a56db;">
+              {% else %}
+              <span style="font-size:22px;font-weight:bold;color:#1a56db;">{{ app_name }}</span>
+              {% endif %}
+            </td>
+          </tr>
+
+          <!-- Heading + text -->
+          <tr>
+            <td align="center" style="padding:16px 32px 8px 32px;color:#333333;font-size:15px;line-height:24px;">
+              <h2 style="margin:0 0 12px 0;font-size:20px;line-height:28px;color:#111111;">
+                Your verification code
+              </h2>
+              Use the code below to {{ purpose_label }}.
+            </td>
+          </tr>
+
+          <!-- OTP code -->
+          <tr>
+            <td align="center" style="padding:16px 32px;">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td align="center"
+                      style="background-color:#eef4ff;border-radius:10px;padding:14px 28px;
+                             font-size:32px;line-height:40px;font-weight:bold;
+                             letter-spacing:10px;color:#1a56db;">
+                    {{ otp_code }}
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Expiry + warning -->
+          <tr>
+            <td align="center" style="padding:0 32px 24px 32px;color:#666666;font-size:13px;line-height:20px;">
+              This code expires in <strong>{{ expiry_minutes }} minutes</strong>.<br>
+              Never share this code with anyone. {{ app_name }} will never ask for it.
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td align="center"
+                style="background-color:#fafafa;border-radius:0 0 12px 12px;padding:16px 32px;
+                       color:#999999;font-size:12px;line-height:18px;">
+              If you didn't request this, you can safely ignore this email.<br>
+              {% if support_email %}
+              Need help? <a href="mailto:{{ support_email }}" style="color:#1a56db;text-decoration:none;">{{ support_email }}</a><br>
+              {% endif %}
+              &copy; {{ year }} {{ app_name }}
+            </td>
+          </tr>
+
+        </table>
+
+      </td>
+    </tr>
+  </table>
+
+</body>
+</html>

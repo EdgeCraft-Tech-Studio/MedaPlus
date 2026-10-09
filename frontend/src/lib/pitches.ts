@@ -399,3 +399,22 @@ export async function getPendingSoloBooking() {
   const res = await api.get("/bookings/solo/pending/");
   return res.data as { id: string; pitch_name: string; amount: string; payment_expires_at: string } | null;
 }
+
+
+export type GridSlotRef = { date: string; start_hour: number };
+
+export async function bookGridSlotsBulk(
+  pitchId: string,
+  payload: { slots: GridSlotRef[]; name: string; phone: string; total_price?: string }
+) {
+  const res = await api.post(`/pitches/${pitchId}/weekly-grid/book-bulk/`, payload);
+  return res.data as { ok: boolean; cells: Record<string, GridCell> };
+}
+
+export async function closeGridSlotsBulk(
+  pitchId: string,
+  payload: { slots: GridSlotRef[]; reason: string }
+) {
+  const res = await api.post(`/pitches/${pitchId}/weekly-grid/close-bulk/`, payload);
+  return res.data as { ok: boolean; cells: Record<string, GridCell> };
+}

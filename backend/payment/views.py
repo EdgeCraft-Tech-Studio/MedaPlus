@@ -41,6 +41,7 @@ from .services import (
     get_payment_completion_payload,
     get_payment_info_for_owner,
     get_pending_payment_completion_for_user,
+    get_saved_sender_banks,
     list_pitch_payments,
     owner_resolve_payment,
     owner_reverse_verified_payment,
@@ -447,3 +448,14 @@ class OwnerReverseVerifiedView(views.APIView):
             .get(id=transaction.id)
         )
         return Response(OwnerPaymentRowSerializer(transaction).data)
+
+
+class MySavedSenderBanksView(views.APIView):
+    """GET /payment/my-saved-banks/ -> {"banks": ["cbe", ...]}
+    Banks for which we already remember this payer's account digits (kept after a
+    successful payment), so the form does not have to ask for them again."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        return Response({"banks": get_saved_sender_banks(request.user)})

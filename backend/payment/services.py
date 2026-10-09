@@ -1,7 +1,7 @@
 import re
 import logging
 from datetime import timedelta
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, ROUND_DOWN, InvalidOperation
 from difflib import SequenceMatcher
 
 import requests
@@ -24,6 +24,7 @@ from .models import (
     PAYER_PHONE_REQUIRED_BANKS,
     SUFFIX_REQUIRED_BANKS,
     WALLET_BANKS,
+    PayerBankSuffix,
     PaymentTransaction,
     PitchOwnerBankAccount,
     PitchOwnerPaymentProfile,
@@ -34,6 +35,14 @@ logger = logging.getLogger(__name__)
 
 class PaymentNotFound(PaymentValidationError):
     """No such payment for this owner."""
+
+
+class AccountNumberRequired(PaymentValidationError):
+    """The payer must type the account number they paid from. The marker text
+    'account_number_required' is what the form looks for."""
+
+    def __init__(self):
+        super().__init__("Please enter the account number you paid from. [account_number_required]")
 
 
 class InvalidOwnerPassword(PaymentValidationError):
@@ -48,7 +57,7 @@ class ReferenceAlreadyVerified(DuplicateTransactionError):
         self.reference_number = reference_number
 
 VERIFY_ET_BASE_URL = getattr(settings, "VERIFY_ET_BASE_URL", "https://verify.et")
-VERIFY_ET_API_KEY = getattr(settings, "VERIFY_ET_API_KEY", "VERIFY_BANK_ET_uVZqtyPFucEujcveISCwsAZTvTqoj08KCayuv5IuS7DfRpzlg9haB2V6nXW9vz8v")
+VERIFY_ET_API_KEY = getattr(settings, "VERIFY_ET_API_KEY", "")
 VERIFY_ET_TIMEOUT_SECONDS = 30
 VERIFY_ET_WAIT_MS = 20000
 
@@ -62,10 +71,20 @@ VERIFY_ET_WAIT_MS = 20000
 # Both are exposed by PaymentTransaction.reference_date (see models.py).
 # Change the number in settings.py / .env, nothing else needs to move.
 # ─────────────────────────────────────────────────────────────────────────────
-MAX_PAYMENT_TIME_ALLOWED_HOURS = getattr(settings, "MAX_PAYMENT_TIME_ALLOWED_HOURS", 5)
+MAX_PAYMENT_TIME_ALLOWED_HOURS = getattr(settings, "MAX_PAYMENT_TIME_ALLOWED_HOURS", 3)
 
 STALE_PROCESSING_MINUTES = 10
-MAX_BANK_RETRIES = 3
+MAX_BANK_RETRIES = 2
+
+# settings.py -> PAYMENT_DEBUG_PRINT = True  prints, in the terminal, what is sent to
+# verify.et (account digits + transaction id) and what it answers. Defaults to DEBUG.
+PAYMENT_DEBUG_PRINT = bool(getattr(settings, "PAYMENT_DEBUG_PRINT", getattr(settings, "DEBUG", False)))
+
+
+def _dbg(*lines) -> None:
+    if PAYMENT_DEBUG_PRINT:
+        for line in lines:
+            print(line, flush=True)
 
 # settings.py -> CHECK_NAME_FOR_PAYMENT = True / False
 #   True : the SENDER name on the bank receipt must match the payer's profile name,
@@ -78,7 +97,13 @@ CHECK_NAME_FOR_PAYMENT = bool(getattr(settings, "CHECK_NAME_FOR_PAYMENT", False)
 def _call_verify_et(*, payload: dict, idempotency_key: str) -> requests.Response:
     if not VERIFY_ET_API_KEY:
         raise PaymentProviderError("VERIFY_ET_API_KEY is not configured.")
-    return requests.post(
+    _dbg(
+        "──────── sending to verify.et ────────",
+        f'bank: "{payload.get("bank", "")}"',
+        f'account number: "{payload.get("suffix", "")}"',
+        f'transaction id: "{payload.get("reference", "")}"',
+    )
+    response = requests.post(
         f"{VERIFY_ET_BASE_URL}/api/verify",
         params={"waitMs": VERIFY_ET_WAIT_MS},
         json=payload,
@@ -89,14 +114,18 @@ def _call_verify_et(*, payload: dict, idempotency_key: str) -> requests.Response
         },
         timeout=VERIFY_ET_TIMEOUT_SECONDS,
     )
+    _dbg(f"──────── verify.et answered: HTTP {response.status_code} ────────", response.text[:3000])
+    return response
 
 
 def _poll_verify_et(*, request_id: str) -> requests.Response:
-    return requests.get(
+    response = requests.get(
         f"{VERIFY_ET_BASE_URL}/api/verify/{request_id}",
         headers={"x-api-key": VERIFY_ET_API_KEY},
         timeout=VERIFY_ET_TIMEOUT_SECONDS,
     )
+    _dbg(f"──────── verify.et status check: HTTP {response.status_code} ────────", response.text[:3000])
+    return response
 
 
 def _response_get(result_item: dict, *candidate_keys: str) -> str:
@@ -409,6 +438,7 @@ def _apply_verification_result(
     _sync_team_booking_payment(transaction)
     _sync_solo_booking_hold(transaction)
     _notify_payer_of_completion(transaction)
+    _remember_payer_suffix(transaction)
     return transaction
 
 
@@ -530,21 +560,83 @@ def _sync_team_booking_payment(transaction: PaymentTransaction) -> None:
     mark_payment_verified_from_gateway(team_booking_payment_id=transaction.team_booking_payment_id)
 
 
+def _last_digits(number: str, length: int) -> str:
+    digits = re.sub(r"\D", "", number or "")
+    return digits[-length:] if len(digits) >= length else ""
+
+
 def _owner_suffix_for(sender_bank: str, owner_account) -> str:
-    """verify.et's suffix for the bank the payer paid FROM (CBE 8 digits, BOA 5):
-    the last digits of the pitch owner's account / phone being paid. Works the
-    same for same-bank and cross-bank payments. Banks that need none get ''."""
+    """Last digits of the PITCH OWNER's account / phone (CBE 8, BOA 5)."""
     length = SUFFIX_REQUIRED_BANKS.get(sender_bank)
     if not length:
         return ""
-    source = owner_account.account_number or owner_account.phone_number or ""
-    digits = re.sub(r"\D", "", source)
-    if len(digits) < length:
+    digits = _last_digits(owner_account.account_number or owner_account.phone_number or "", length)
+    if not digits:
         raise PaymentValidationError(
             "The pitch owner's account number for this bank looks incomplete. "
             "Please contact support so it can be corrected."
         )
-    return digits[-length:]
+    return digits
+
+
+# Only a SAME-BANK CBE payment can be opened with the receiver's digits: CBE's receipt
+# system only knows accounts that belong to CBE. For any other combination (CBE -> BOA,
+# CBE -> telebirr, anything from BOA) the digits must be the PAYER's own account.
+def _owner_digits_can_work(sender_bank: str, pay_to_bank: str) -> bool:
+    return sender_bank == SupportedBank.CBE and pay_to_bank == SupportedBank.CBE
+
+
+def _resolve_sender_suffix(*, payer, bank, pay_to_bank, owner_account, sender_account_number, typed_suffix):
+    """-> (suffix, source). source: 'payer' | 'saved' | 'owner' | ''.
+    Order: what the payer just typed -> digits we remembered from their last
+    successful payment -> the owner's digits (CBE -> CBE only) -> ask the payer."""
+    length = SUFFIX_REQUIRED_BANKS.get(bank)
+    if not length:
+        return "", ""
+
+    typed = _last_digits(sender_account_number, length) or (
+        typed_suffix if typed_suffix.isdigit() and len(typed_suffix) == length else ""
+    )
+    if (sender_account_number or typed_suffix) and not typed:
+        raise PaymentValidationError("Please enter your full account number.")
+    if typed:
+        return typed, "payer"
+
+    saved = PayerBankSuffix.objects.filter(payer=payer, bank=bank).values_list("suffix", flat=True).first()
+    if saved:
+        return saved, "saved"
+
+    if _owner_digits_can_work(bank, pay_to_bank):
+        return _owner_suffix_for(bank, owner_account), "owner"
+
+    raise AccountNumberRequired()
+
+
+def _remember_payer_suffix(transaction: PaymentTransaction) -> None:
+    """After a VERIFIED payment made with the PAYER's own digits, keep only those
+    last digits (never the full number) so next time they are not asked again."""
+    try:
+        length = SUFFIX_REQUIRED_BANKS.get(transaction.bank)
+        if not length or not transaction.account_suffix:
+            return
+        owner_digits = ""
+        if transaction.owner_bank_account_id:
+            try:
+                owner_digits = _owner_suffix_for(transaction.bank, transaction.owner_bank_account)
+            except PaymentValidationError:
+                pass
+        if transaction.account_suffix == owner_digits:
+            return  # that was the owner's digits, nothing personal to remember
+        PayerBankSuffix.objects.update_or_create(
+            payer_id=transaction.payer_id, bank=transaction.bank,
+            defaults={"suffix": transaction.account_suffix},
+        )
+    except Exception:
+        logger.exception("Could not remember the payer's account digits")
+
+
+def get_saved_sender_banks(user) -> list:
+    return list(PayerBankSuffix.objects.filter(payer=user).values_list("bank", flat=True))
 
 
 def _build_verify_payload(*, bank, reference_number, owner_account, account_suffix, phone_number) -> dict:
@@ -656,6 +748,7 @@ def submit_manual_bank_payment(
     team_booking_payment=None,
     solo_booking_hold=None,
     pay_to_bank: str = "",
+    sender_account_number: str = "",
 ) -> PaymentTransaction:
     """`bank`       = the bank / wallet the payer paid FROM (its receipt is verified).
     `pay_to_bank` = which of the pitch owner's accounts was paid INTO (defaults to
@@ -748,16 +841,16 @@ def submit_manual_bank_payment(
     if owner_account is None:
         raise PaymentValidationError("Pitch owner has no active account registered for this bank.")
 
-    # The suffix verify.et needs (CBE 8 digits, BOA 5, chosen by the bank PAID FROM)
-    # = last digits of the pitch owner's account that was paid. Wallets: none.
-    # If the automatic suffix failed once, the payer may type the digits of THEIR own
-    # account instead (the form shows that field only after a failure).
-    suffix_length = SUFFIX_REQUIRED_BANKS.get(bank)
-    if suffix_length and account_suffix:
-        if not (account_suffix.isdigit() and len(account_suffix) == suffix_length):
-            raise PaymentValidationError(f"Enter exactly {suffix_length} digits.")
-    else:
-        account_suffix = _owner_suffix_for(bank, owner_account)
+    # The digits verify.et needs (CBE 8, BOA 5; wallets none): see _resolve_sender_suffix.
+    account_suffix, suffix_source = _resolve_sender_suffix(
+        payer=payer, bank=bank, pay_to_bank=pay_to_bank, owner_account=owner_account,
+        sender_account_number=sender_account_number, typed_suffix=account_suffix,
+    )
+    _dbg(
+        "──────── new payment ────────",
+        f"paid from: {bank}  ->  paid to: {pay_to_bank}",
+        f"account digits source: {suffix_source or 'not needed'}",
+    )
 
     # Do we already hold a bank-confirmed answer for this reference?
     stored = _find_stored_provider_result(bank=bank, reference_number=reference_number)
@@ -837,19 +930,11 @@ def submit_manual_bank_payment(
     except requests.RequestException as exc:
         logger.exception("verify.et unreachable for transaction %s", transaction_row.id)
         _discard_row(transaction_row)
-        raise PaymentProviderError(str(exc))
+        raise PaymentProviderError("We couldn't reach the verification service. Please try again in a moment.")
 
     try:
         if response.status_code not in (200, 202):
-            logger.error(
-                "verify.et ERROR: status=%s body=%s",
-                response.status_code,
-                response.text[:1000],
-            )
-            return _reject(
-                transaction_row,
-                f"provider_error_{response.status_code}"
-            )
+            return _reject(transaction_row, f"provider_error_{response.status_code}")
 
         body = response.json()
         transaction_row.verify_request_id = body.get("requestId", "")
@@ -1175,7 +1260,7 @@ def _owner_visible_payments(pitch_id):
     are just failed attempts and are not listed.)"""
     on_this_pitch = (
         Q(booking__pitch_id=pitch_id)
-        | Q(team_booking_payment__request__pitch_id=pitch_id)
+        | Q(team_booking_payment__request__pitch_id=str(pitch_id))  # stored as text there
         | Q(solo_booking_hold__pitch_id=pitch_id)
     )
     shown = Q(status__in=[PaymentStatus.VERIFIED, PaymentStatus.NEEDS_REVIEW]) | (

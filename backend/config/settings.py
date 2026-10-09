@@ -34,6 +34,29 @@ VERIFY_ET_BASE_URL = os.getenv("VERIFY_ET_BASE_URL", "https://verify.et")
 
 
 CHECK_NAME_FOR_PAYMENT = False
+MAX_PAYMENT_TIME_ALLOWED_HOURS = 29
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# EMAIL
+# ─────────────────────────────────────────────────────────────────────────────
+
+EMAIL_BACKEND       = "django.core.mail.backends.smtp.EmailBackend"
+EMAIL_HOST          = "smtp.gmail.com"
+EMAIL_PORT          = 587
+EMAIL_USE_TLS       = True
+EMAIL_TIMEOUT       = 10
+EMAIL_HOST_USER     = os.getenv("EMAIL_HOST_USER")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD")    # Gmail *App Password*, not your login password
+DEFAULT_FROM_EMAIL  = "MedaPlus <medaplussupport@gmail.com>"
+
+# NEW: used by emails/otp_email.html
+# Must be a PUBLIC url that anyone on the internet can open.
+# Switch to https:// as soon as you have a domain + certificate.
+EMAIL_LOGO_URL        = os.getenv("EMAIL_LOGO_URL", "http://187.7.16.5/vite.png")
+EMAIL_SUPPORT_ADDRESS = os.getenv("EMAIL_SUPPORT_ADDRESS", "medaplussupport@gmail.com")
+EMAIL_APP_NAME        = "MedaPlus"
+
 
 # Application definition
 
@@ -80,7 +103,7 @@ TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
         "DIRS": [],
-        "APP_DIRS": True,
+        "APP_DIRS": True,   # lets Django find accounts/templates/emails/otp_email.html
         "OPTIONS": {
             "context_processors": [
                 "django.template.context_processors.request",

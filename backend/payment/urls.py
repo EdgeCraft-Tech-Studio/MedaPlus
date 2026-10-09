@@ -7,6 +7,7 @@ from .views import (
     BankRequirementsView,
     ExtractReceiptDataView,
     MyPaymentTransactionsView,
+    MySavedSenderBanksView,
     OwnerBankAccountDeactivateView,
     OwnerBankAccountsView,
     OwnerPaymentInfoView,
@@ -65,6 +66,7 @@ urlpatterns = [
         name="extract-receipt-data",
     ),
     path("payment/transactions/mine/", MyPaymentTransactionsView.as_view(), name="my-transactions"),
+    path("payment/my-saved-banks/", MySavedSenderBanksView.as_view(), name="my-saved-banks"),
     path(
         "payment/transactions/<uuid:transaction_id>/",
         PaymentTransactionDetailView.as_view(),
@@ -85,7 +87,7 @@ urlpatterns = [
     ),
     # pitch owner: "Payment Detail" table on the pitch page
     path(
-        "payment/pitches/<uuid:pitch_id>/transactions/",
+        "payment/pitches/<int:pitch_id>/transactions/",
         PitchPaymentTransactionsView.as_view(),
         name="pitch-payment-transactions",
     ),

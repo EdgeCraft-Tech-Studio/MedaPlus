@@ -189,22 +189,11 @@
 
 /* ---------- grid ---------- */
 
-.gridScroller {
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  background: #fff;
-  animation: fadeSlideIn 0.4s var(--ease);
-}
 
-.gridTable {
-  width: 100%;
-  border-collapse: collapse;
-  table-layout: fixed;
-  font-size: clamp(10px, 1.6vw, 12.5px);
-}
 
-.timeCol { width: 118px; }
+
+
+.timeCol { width: var(--time-col-w); }
 
 .timeHeaderCorner,
 .dayHeader {
@@ -220,10 +209,11 @@
 
 .timeHeaderCorner {
   border-left: none;
-  width: 118px;
+  width: var(--time-col-w);
   position: sticky;
   left: 0;
-  z-index: 2;
+  z-index: 4;
+  box-shadow: inset -1px 0 0 var(--color-border);
 }
 
 .dayHeaderWeekday {
@@ -246,7 +236,6 @@
   text-align: left;
   font-weight: 700;
   color: var(--color-pitch-900);
-  border-right: 1px solid var(--color-border);
   border-bottom: 1px solid var(--color-border);
   white-space: normal;
   word-break: keep-all;
@@ -254,13 +243,13 @@
   line-height: 1.25;
   position: sticky;
   left: 0;
-  z-index: 1;
-  width: 118px;
-  max-width: 118px;
+  z-index: 3;
+  width: var(--time-col-w);
+  max-width: var(--time-col-w);
   font-size: clamp(8.5px, 1.3vw, 10.5px);
   box-sizing: border-box;
+  box-shadow: inset -1px 0 0 var(--color-border);
 }
-
 /* zebra striping */
 .rowEven .timeLabel,
 .rowEven .gridCellFree { background: #ffffff; }
@@ -505,4 +494,175 @@
 
 .clockWrapDisabled select {
   cursor: not-allowed;
+}
+
+
+.gridScroller {
+  --time-col-w: 118px;
+  --day-col-w: 96px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  background: #fff;
+  animation: fadeSlideIn 0.4s var(--ease);
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  scrollbar-width: thin;
+}
+
+.gridScroller::-webkit-scrollbar { height: 10px; }
+.gridScroller::-webkit-scrollbar-track { background: var(--color-surface-alt); }
+.gridScroller::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 999px;
+  border: 2px solid var(--color-surface-alt);
+}
+.gridScroller::-webkit-scrollbar-thumb:hover { background: var(--color-gold); }
+
+
+
+.gridTable {
+  width: 100%;
+  min-width: calc(var(--time-col-w) + var(--day-count, 7) * var(--day-col-w));
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: clamp(10px, 1.6vw, 12.5px);
+}
+
+
+/* ---------- horizontal scroll: shadow on the pinned time column ---------- */
+.gridScrolled .timeLabel,
+.gridScrolled .timeHeaderCorner {
+  box-shadow: inset -1px 0 0 var(--color-border), 4px 0 10px -4px rgba(20, 24, 29, 0.28);
+}
+
+@media (max-width: 640px) {
+  .gridScroller {
+    --time-col-w: 88px;
+    --day-col-w: 78px;
+  }
+}
+
+/* ---------- drag selection ---------- */
+.gridCellSelected {
+  background: var(--color-gold-soft) !important;
+  border: 1px solid var(--color-gold) !important;
+  box-shadow: inset 0 0 0 2px var(--color-gold);
+}
+
+.gridCellSelected:hover {
+  background: var(--color-gold-soft) !important;
+}
+
+.cellSelectedDot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-gold);
+}
+
+.gridDragging,
+.gridDragging .gridCell {
+  cursor: grabbing;
+}
+
+.gridDragging .gridCell:hover {
+  transform: none;
+}
+
+.gridHint {
+  text-align: center;
+  font-size: 11px;
+  color: var(--color-text-faint);
+  margin: 0 12px 8px;
+}
+
+/* ---------- price hint under the price field ---------- */
+.priceHint {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  margin-top: -3px;
+  padding-left: 2px;
+}
+
+/* ---------- popup shimmer while the price is calculated ---------- */
+.popupSkeleton {
+  display: grid;
+  gap: 8px;
+}
+
+.skelBlock {
+  border-radius: 9px;
+  background: linear-gradient(
+    90deg,
+    var(--color-surface-alt) 25%,
+    #ffffff 50%,
+    var(--color-surface-alt) 75%
+  );
+  background-size: 200% 100%;
+  animation: skeletonShimmer 1.1s ease-in-out infinite;
+}
+
+.skelTabs { height: 34px; border-radius: 999px; margin-bottom: 2px; }
+.skelTag { height: 20px; width: 62%; border-radius: 999px; }
+.skelInput { height: 35px; }
+.skelBtn { height: 38px; border-radius: 10px; margin-top: 2px; }
+
+@keyframes skeletonShimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skelBlock { animation: none; }
+}
+
+/* ---------- arrows under the table ---------- */
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.pagerBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 36px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--color-pitch-900);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, transform 0.1s ease, border-color 0.15s ease;
+}
+
+.pagerBtn:hover:not(:disabled) {
+  background: var(--color-pitch-900);
+  border-color: var(--color-pitch-900);
+  color: #fff;
+}
+
+.pagerBtn:active:not(:disabled) {
+  transform: scale(0.94);
+}
+
+.pagerBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.pagerLabel {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-text-muted);
 }

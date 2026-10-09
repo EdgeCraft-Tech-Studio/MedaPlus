@@ -1,5 +1,5 @@
 from datetime import timedelta
-from decimal import Decimal
+from decimal import Decimal, ROUND_DOWN
 import uuid
 from rest_framework.exceptions import PermissionDenied
 
