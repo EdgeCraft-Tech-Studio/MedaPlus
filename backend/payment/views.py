@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from django.contrib.auth import get_user_model
 from django.shortcuts import get_object_or_404
 import pytesseract
@@ -356,8 +358,17 @@ class OwnerPasswordThrottle(UserRateThrottle):
     rate = "5/min"
 
 
+def _parse_day(value):
+    """'2026-11-09' -> date, anything else -> None (the filter is simply ignored)."""
+    try:
+        return datetime.strptime(value or "", "%Y-%m-%d").date()
+    except ValueError:
+        return None
+
+
 class PitchPaymentTransactionsView(views.APIView):
-    """GET /payment/pitches/{pitch_id}/transactions/?status=all|verified|needs_review|rejected&page=1
+    """GET /payment/pitches/{pitch_id}/transactions/
+        ?status=all|verified|needs_review|rejected&page=1&q=search&date_from=YYYY-MM-DD&date_to=YYYY-MM-DD
     Only the pitch's owner (or a platform admin)."""
 
     permission_classes = [IsAuthenticated]
@@ -378,6 +389,9 @@ class PitchPaymentTransactionsView(views.APIView):
             pitch_id=pitch.id,
             status_filter=request.query_params.get("status", "all"),
             page=page,
+            search=request.query_params.get("q", "")[:80],
+            date_from=_parse_day(request.query_params.get("date_from")),
+            date_to=_parse_day(request.query_params.get("date_to")),
         )
         data["results"] = OwnerPaymentRowSerializer(data["results"], many=True).data
         return Response(data)

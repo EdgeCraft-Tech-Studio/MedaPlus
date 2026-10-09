@@ -416,7 +416,9 @@ export default function MemberPaymentPopup({ payment, kind = "team", onClose, on
 
                     {askAccount && (
                       <label className={styles.field}>
-                        <span className={styles.fieldLabel}><BiText t={TEXT.accountNumber} small /></span>
+                        <span className={styles.fieldLabel}>
+                          <BiText t={TEXT.accountNumber(BANK_AM[senderBank] || bankEnglish(senderBank), bankEnglish(senderBank))} small />
+                        </span>
                         <input
                           type="text"
                           className={`${styles.input} ${accountInvalid ? styles.inputNeedsAttention : ""}`}

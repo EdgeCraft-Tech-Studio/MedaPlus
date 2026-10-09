@@ -458,7 +458,7 @@ export default function Owner() {
           </div>
 
           <OwnerInsights stats={stats} loading={loading} />
-
+           
           {msg && <p className={styles.message}>{msg}</p>}
 
           <PitchWizardModal
@@ -472,7 +472,7 @@ export default function Owner() {
               await refresh();
             }}
           />
-
+          
           <PitchWizardModal
             open={!!editingPitch}
             onClose={() => setEditingPitch(null)}

@@ -39,9 +39,27 @@ function formatMoney(amount: string) {
   const n = Number(amount);
   return `${Number.isFinite(n) ? n.toLocaleString(undefined, { maximumFractionDigits: 2 }) : amount} Br`;
 }
+/** "2026-11-09" + 1 day -> "2026-11-10" (plain calendar maths, Gregorian only). */
+function addOneDay(day: string) {
+  const [y, m, d] = day.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10);
+}
+function prettyDay(day: string) {
+  const [y, m, d] = day.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+}
+
 function formatDateTime(iso: string | null) {
   if (!iso) return "—";
   return new Date(iso).toLocaleString(undefined, { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
+function SearchIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      <circle cx="11" cy="11" r="7" /><path d="M20 20l-4-4" />
+    </svg>
+  );
 }
 
 function EyeIcon({ off }: { off: boolean }) {
@@ -96,6 +114,10 @@ function PaymentFacts({ row }: { row: OwnerPaymentRow }) {
 export default function PaymentDetailTable({ pitchId }: Props) {
   const [filter, setFilter] = useState<OwnerPaymentFilter>("all");
   const [page, setPage] = useState(1);
+  const [searchText, setSearchText] = useState("");
+  const [search, setSearch] = useState("");        // the text we really search with (after a short pause)
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [data, setData] = useState<OwnerPaymentPage | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -111,12 +133,13 @@ export default function PaymentDetailTable({ pitchId }: Props) {
   const [passwordError, setPasswordError] = useState("");
 
   const latestRequest = useRef(0);
+  const appliedSearch = useRef("");
 
   const load = useCallback(async () => {
     const requestId = ++latestRequest.current;
     setLoading(true);
     try {
-      const result = await getPitchPayments(pitchId, { status: filter, page });
+      const result = await getPitchPayments(pitchId, { status: filter, page, q: search, dateFrom, dateTo });
       if (requestId !== latestRequest.current) return; // a newer request replaced this one
       setData(result);
       setLoadError("");
@@ -125,12 +148,41 @@ export default function PaymentDetailTable({ pitchId }: Props) {
     } finally {
       if (requestId === latestRequest.current) setLoading(false);
     }
-  }, [pitchId, filter, page]);
+  }, [pitchId, filter, page, search, dateFrom, dateTo]);
 
   useEffect(() => { load(); }, [load]);
 
+  // search as you type: wait a moment after the last key, then search from page 1
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const next = searchText.trim();
+      if (next !== appliedSearch.current) {
+        appliedSearch.current = next;
+        setSearch(next);
+        setPage(1);
+      }
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [searchText]);
+
   function changeFilter(next: OwnerPaymentFilter) {
     setFilter(next);
+    setPage(1);
+  }
+
+  // Picking "from" fills "to" with the next day automatically ("to" is not included).
+  function changeDateFrom(value: string) {
+    setDateFrom(value);
+    setDateTo(value ? addOneDay(value) : "");
+    setPage(1);
+  }
+  function changeDateTo(value: string) {
+    setDateTo(value);
+    setPage(1);
+  }
+  function clearDates() {
+    setDateFrom("");
+    setDateTo("");
     setPage(1);
   }
 
@@ -194,6 +246,18 @@ export default function PaymentDetailTable({ pitchId }: Props) {
       <h2 className={styles.heading}>Payment Detail</h2>
       <p className={styles.subheading}>Every payment made for this pitch. Payments that need your decision are listed first.</p>
 
+      <div className={styles.searchWrap}>
+        <span className={styles.searchIcon}><SearchIcon /></span>
+        <input
+          className={styles.searchInput}
+          type="search"
+          value={searchText}
+          onChange={(e) => setSearchText(e.target.value)}
+          placeholder="Search"
+          aria-label="Search by name, phone, amount or transaction ID"
+        />
+      </div>
+
       <div className={styles.filterBar} role="tablist">
         {FILTERS.map((f) => {
           const count =
@@ -216,6 +280,39 @@ export default function PaymentDetailTable({ pitchId }: Props) {
           );
         })}
       </div>
+
+      <div className={styles.dateRow}>
+        <label className={styles.dateGroup}>
+          <span className={styles.dateLabel}>From</span>
+          <input
+            className={styles.dateInput}
+            type="date"
+            lang="en-GB"
+            value={dateFrom}
+            onChange={(e) => changeDateFrom(e.target.value)}
+          />
+        </label>
+        <label className={styles.dateGroup}>
+          <span className={styles.dateLabel}>To</span>
+          <input
+            className={styles.dateInput}
+            type="date"
+            lang="en-GB"
+            value={dateTo}
+            min={dateFrom ? addOneDay(dateFrom) : undefined}
+            disabled={!dateFrom}
+            onChange={(e) => changeDateTo(e.target.value)}
+          />
+        </label>
+        {(dateFrom || dateTo) && (
+          <button type="button" className={styles.clearDates} onClick={clearDates}>Clear dates</button>
+        )}
+      </div>
+      {dateFrom && dateTo && (
+        <p className={styles.rangeNote}>
+          Showing payments from <b>{prettyDay(dateFrom)}</b> up to, but not including, <b>{prettyDay(dateTo)}</b>.
+        </p>
+      )}
 
       <div className={styles.tableWrap}>
         <table className={styles.table}>
@@ -247,7 +344,11 @@ export default function PaymentDetailTable({ pitchId }: Props) {
             )}
 
             {!loadError && data && rows.length === 0 && (
-              <tr><td colSpan={10} className={styles.emptyCell}>No payments here yet.</td></tr>
+              <tr>
+                <td colSpan={10} className={styles.emptyCell}>
+                  {search || dateFrom ? "No payments match your search or dates." : "No payments here yet."}
+                </td>
+              </tr>
             )}
 
             {!loadError && rows.map((row) => (

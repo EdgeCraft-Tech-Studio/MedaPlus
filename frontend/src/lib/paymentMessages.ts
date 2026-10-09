@@ -120,7 +120,7 @@ export function friendlyRejection(reason: string): Bi {
       };
     case "transaction_too_old":
       return {
-        am: "ይህ ክፍያ ከዚህ ሜዳ መያዝ 3 ሰዐት ቀድሞ የተከፈለ ስለሆነ መጠቀም አይቻልም። እባክዎ አዲስ ክፍያ ይፈጽሙ ወይም የሜዳውን ባለቤት ያናግሩ።",
+        am: "ይህ ክፍያ ከዚህ ቦታ ማስያዝ በጣም ቀድሞ የተከፈለ ስለሆነ መጠቀም አይቻልም። እባክዎ አዲስ ክፍያ ይፈጽሙ።",
         en: "This payment was made too long before this booking, so it can't be used. Please make a new payment.",
       };
     case "amount_mismatch":
@@ -177,13 +177,14 @@ export const TEXT = {
     am: "ቁጥሩን በራስ-ሰር ማንበብ አልቻልንም። ከደረሰኙ ላይ ይጻፉት።",
     en: "We couldn't read it automatically. Please type it from your receipt.",
   },
-  accountNumber: {
-    am: "የእርሶን የባንክ አካውንት ቁጥር እዚ ያስገቡ",
-    en: "The bank account number you sent this money from",
-  },
+  /** "Enter your <the bank you picked> account number here" */
+  accountNumber: (bankAm: string, bankEn: string): Bi => ({
+    am: `የእርስዎን የ${bankAm} አካውንት ቁጥር እዚህ ያስገቡ`,
+    en: `Enter your ${bankEn} account number here`,
+  }),
   accountHint: {
-    am: "ሙሉውን የአካውንት ቁጥር ያስገቡ።",
-    en: "Type the full account number.",
+    am: "ይህ ገንዘቡን የላኩበት የእርስዎ ራስዎ አካውንት ነው (የፒቹ አካውንት አይደለም)። ሙሉውን ቁጥር ያስገቡ፤ የሚያስፈልገንን ክፍል እኛ እንወስዳለን።",
+    en: "This is your OWN account that you sent the money from (not the pitch's account). Type the full number; we take the part we need.",
   },
   accountRetry: {
     am: "ባንኩ በዚህ ቁጥር አላገኘውም። የላኩበትን አካውንት ቁጥር በትክክል ያስገቡ።",

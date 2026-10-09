@@ -1,13 +1,14 @@
 import re
 import logging
-from datetime import timedelta
-from decimal import Decimal, ROUND_DOWN, InvalidOperation
+from datetime import datetime, timedelta
+from decimal import Decimal, InvalidOperation
 from difflib import SequenceMatcher
 
 import requests
 from django.conf import settings
-from django.db import IntegrityError
+from django.db import DatabaseError, IntegrityError
 from django.db.models import Case, Count, IntegerField, Q, Value, When
+from django.db.models.functions import Coalesce
 from django.db import transaction as db_transaction
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
@@ -71,7 +72,7 @@ VERIFY_ET_WAIT_MS = 20000
 # Both are exposed by PaymentTransaction.reference_date (see models.py).
 # Change the number in settings.py / .env, nothing else needs to move.
 # ─────────────────────────────────────────────────────────────────────────────
-MAX_PAYMENT_TIME_ALLOWED_HOURS = getattr(settings, "MAX_PAYMENT_TIME_ALLOWED_HOURS", 3)
+MAX_PAYMENT_TIME_ALLOWED_HOURS = getattr(settings, "MAX_PAYMENT_TIME_ALLOWED_HOURS", 5)
 
 STALE_PROCESSING_MINUTES = 10
 MAX_BANK_RETRIES = 2
@@ -586,6 +587,24 @@ def _owner_digits_can_work(sender_bank: str, pay_to_bank: str) -> bool:
     return sender_bank == SupportedBank.CBE and pay_to_bank == SupportedBank.CBE
 
 
+def _saved_suffix_for(payer, bank: str) -> str:
+    """The digits we remembered for this player and bank, or ''.
+    Reading them is a bonus: if the table is missing (migrations not run yet) or the
+    database hiccups, the payment simply carries on without them."""
+    try:
+        with db_transaction.atomic():  # savepoint: a failed query cannot poison the request
+            return (
+                PayerBankSuffix.objects.filter(payer=payer, bank=bank)
+                .values_list("suffix", flat=True).first() or ""
+            )
+    except DatabaseError:
+        logger.warning(
+            "Remembered account digits are unavailable - run `python manage.py migrate`. "
+            "Continuing without them."
+        )
+        return ""
+
+
 def _resolve_sender_suffix(*, payer, bank, pay_to_bank, owner_account, sender_account_number, typed_suffix):
     """-> (suffix, source). source: 'payer' | 'saved' | 'owner' | ''.
     Order: what the payer just typed -> digits we remembered from their last
@@ -602,7 +621,7 @@ def _resolve_sender_suffix(*, payer, bank, pay_to_bank, owner_account, sender_ac
     if typed:
         return typed, "payer"
 
-    saved = PayerBankSuffix.objects.filter(payer=payer, bank=bank).values_list("suffix", flat=True).first()
+    saved = _saved_suffix_for(payer, bank)
     if saved:
         return saved, "saved"
 
@@ -627,16 +646,22 @@ def _remember_payer_suffix(transaction: PaymentTransaction) -> None:
                 pass
         if transaction.account_suffix == owner_digits:
             return  # that was the owner's digits, nothing personal to remember
-        PayerBankSuffix.objects.update_or_create(
-            payer_id=transaction.payer_id, bank=transaction.bank,
-            defaults={"suffix": transaction.account_suffix},
-        )
+        with db_transaction.atomic():
+            PayerBankSuffix.objects.update_or_create(
+                payer_id=transaction.payer_id, bank=transaction.bank,
+                defaults={"suffix": transaction.account_suffix},
+            )
     except Exception:
         logger.exception("Could not remember the payer's account digits")
 
 
 def get_saved_sender_banks(user) -> list:
-    return list(PayerBankSuffix.objects.filter(payer=user).values_list("bank", flat=True))
+    try:
+        with db_transaction.atomic():
+            return list(PayerBankSuffix.objects.filter(payer=user).values_list("bank", flat=True))
+    except DatabaseError:
+        logger.warning("Remembered account digits are unavailable - run `python manage.py migrate`.")
+        return []
 
 
 def _build_verify_payload(*, bank, reference_number, owner_account, account_suffix, phone_number) -> dict:
@@ -1270,12 +1295,55 @@ def _owner_visible_payments(pitch_id):
     return PaymentTransaction.objects.filter(on_this_pitch).filter(shown)
 
 
-def list_pitch_payments(*, pitch_id, status_filter: str = "all", page: int = 1, page_size: int = OWNER_TABLE_PAGE_SIZE) -> dict:
-    """3 queries in total (counts, page rows with payer / account / team joined in)."""
+def _start_of_day(day):
+    """Midnight (server time zone) at the start of a calendar date."""
+    return timezone.make_aware(datetime.combine(day, datetime.min.time()), timezone.get_current_timezone())
+
+
+def _apply_owner_table_filters(queryset, *, search: str, date_from, date_to):
+    """Search: every word must match the player's first name, last name, phone, the
+    transaction reference or the amount. Dates: from is INCLUDED, to is NOT included
+    (so from 9 Nov, to 10 Nov = the 9th only). The date used is the time the payment
+    was made (the bank's time when known, otherwise when it was submitted)."""
+    for word in (search or "").split()[:6]:
+        condition = (
+            Q(payer__first_name__icontains=word)
+            | Q(payer__last_name__icontains=word)
+            | Q(payer__phone__icontains=word)
+            | Q(reference_number__icontains=word)
+        )
+        digits = re.sub(r"\D", "", word)
+        if len(digits) >= 7:  # 0911223344 must also find +251911223344
+            condition |= Q(payer__phone__icontains=digits[-9:])
+        try:
+            amount = Decimal(word.replace(",", ""))
+            if amount.is_finite() and abs(amount) < Decimal("100000000"):
+                condition |= Q(verified_amount=amount) | Q(amount_expected=amount)
+        except InvalidOperation:
+            pass
+        queryset = queryset.filter(condition)
+
+    if date_from or date_to:
+        queryset = queryset.annotate(_when=Coalesce("verified_transaction_at", "submitted_at"))
+        if date_from:
+            queryset = queryset.filter(_when__gte=_start_of_day(date_from))
+        if date_to:
+            queryset = queryset.filter(_when__lt=_start_of_day(date_to))
+    return queryset
+
+
+def list_pitch_payments(
+    *, pitch_id, status_filter: str = "all", page: int = 1, page_size: int = OWNER_TABLE_PAGE_SIZE,
+    search: str = "", date_from=None, date_to=None,
+) -> dict:
+    """3 queries in total (counts, page rows with payer / account / team joined in).
+    The chip counts follow the search and the dates too."""
     status_filter = status_filter if status_filter in OWNER_TABLE_FILTERS else "all"
     page = max(int(page or 1), 1)
 
-    base = _owner_visible_payments(pitch_id)
+    base = _apply_owner_table_filters(
+        _owner_visible_payments(pitch_id), search=search, date_from=date_from, date_to=date_to,
+    )
     raw_counts = {row["status"]: row["n"] for row in base.values("status").annotate(n=Count("id"))}
     counts = {
         "verified": raw_counts.get(PaymentStatus.VERIFIED, 0),

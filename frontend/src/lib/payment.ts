@@ -178,10 +178,16 @@ export interface OwnerPaymentPage {
 
 export async function getPitchPayments(
   pitchId: string | number,
-  params: { status?: OwnerPaymentFilter; page?: number } = {}
+  params: { status?: OwnerPaymentFilter; page?: number; q?: string; dateFrom?: string; dateTo?: string } = {}
 ): Promise<OwnerPaymentPage> {
   const res = await api.get(`/payment/pitches/${pitchId}/transactions/`, {
-    params: { status: params.status ?? "all", page: params.page ?? 1 },
+    params: {
+      status: params.status ?? "all",
+      page: params.page ?? 1,
+      ...(params.q ? { q: params.q } : {}),
+      ...(params.dateFrom ? { date_from: params.dateFrom } : {}),
+      ...(params.dateTo ? { date_to: params.dateTo } : {}),
+    },
   });
   return res.data;
 }
