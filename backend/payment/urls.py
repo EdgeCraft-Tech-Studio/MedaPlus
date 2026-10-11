@@ -8,6 +8,9 @@ from .views import (
     ExtractReceiptDataView,
     MyPaymentTransactionsView,
     MySavedSenderBanksView,
+    MyBankAccountActiveView,
+    MyBankAccountDetailView,
+    MyBankAccountsView,
     OwnerBankAccountDeactivateView,
     OwnerBankAccountsView,
     OwnerPaymentInfoView,
@@ -94,7 +97,7 @@ urlpatterns = [
     path(
         "payment/transactions/<uuid:transaction_id>/owner-review/",
         OwnerReviewTransactionView.as_view(),
-        name="owner-review-transaction",
+        name="owner-review-transaction", 
     ),
     path(
         "payment/transactions/<uuid:transaction_id>/owner-reject-verified/",
@@ -103,4 +106,15 @@ urlpatterns = [
     ),
     path("payment/solo-bookings/<uuid:hold_id>/payment-info/", SoloBookingPaymentInfoView.as_view()),
     path("payment/solo-bookings/<uuid:hold_id>/pay/", SubmitSoloBookingPaymentView.as_view()),
+        path("payment/my/bank-accounts/", MyBankAccountsView.as_view(), name="my-bank-accounts"),
+    path(
+        "payment/my/bank-accounts/<uuid:account_id>/",
+        MyBankAccountDetailView.as_view(),
+        name="my-bank-account-detail",
+    ),
+    path(
+        "payment/my/bank-accounts/<uuid:account_id>/active/",
+        MyBankAccountActiveView.as_view(),
+        name="my-bank-account-active",
+    ),
 ]

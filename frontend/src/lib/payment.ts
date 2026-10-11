@@ -174,7 +174,7 @@ export interface OwnerPaymentPage {
   page: number;
   page_size: number;
   counts: Record<OwnerPaymentStatus, number>;
-}
+} 
 
 export async function getPitchPayments(
   pitchId: string | number,

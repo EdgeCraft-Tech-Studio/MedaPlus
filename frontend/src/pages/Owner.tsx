@@ -14,6 +14,7 @@ import ToastContainer, { showToast } from "./Toast";
 import styles from "./css/Owner.module.css";
 import TourGuide from "../tours/TourGuide";
 import OwnerInsights from "./OwnerInsights";
+import OwnerBankAccounts from "./OwnerBankAccounts";
 
 type IconName =
   | "clock"
@@ -458,6 +459,7 @@ export default function Owner() {
           </div>
 
           <OwnerInsights stats={stats} loading={loading} />
+          <OwnerBankAccounts isApproved={isApproved} />
            
           {msg && <p className={styles.message}>{msg}</p>}
 

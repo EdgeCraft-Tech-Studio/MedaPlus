@@ -22,6 +22,8 @@ from .serializers import (
     OwnerPaymentRowSerializer,
     OwnerReverseVerifiedSerializer,
     OwnerReviewActionSerializer,
+    OwnerSetBankAccountActiveSerializer,
+    OwnerUpdateBankAccountSerializer,
     PaymentInfoSerializer,
     PaymentTransactionAdminSerializer,
     PaymentTransactionSerializer,
@@ -45,7 +47,12 @@ from .services import (
     get_pending_payment_completion_for_user,
     get_saved_sender_banks,
     list_pitch_payments,
+    list_my_bank_accounts,
+    owner_add_bank_account,
+    owner_delete_bank_account,
     owner_resolve_payment,
+    owner_set_bank_account_active,
+    owner_update_bank_account,
     owner_reverse_verified_payment,
     resolve_needs_review,
     submit_manual_bank_payment,
@@ -440,7 +447,7 @@ class OwnerReverseVerifiedView(views.APIView):
     """POST /payment/transactions/{id}/owner-reject-verified/  {"password": "..."}
     VERIFIED -> REJECTED, only after the owner re-enters their own password."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated] 
     throttle_classes = [OwnerPasswordThrottle]
 
     def post(self, request, transaction_id):
@@ -473,3 +480,77 @@ class MySavedSenderBanksView(views.APIView):
 
     def get(self, request):
         return Response({"banks": get_saved_sender_banks(request.user)})
+
+
+class MyBankAccountsView(views.APIView):
+    """GET /payment/my/bank-accounts/ — the logged-in owner's accounts (active + inactive)."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        accounts = list_my_bank_accounts(owner=request.user)
+        return Response(PitchOwnerBankAccountSerializer(accounts, many=True).data)
+
+
+class MyBankAccountDetailView(views.APIView):
+    """PATCH  /payment/my/bank-accounts/{account_id}/ — edit bank / name / number.
+    DELETE /payment/my/bank-accounts/{account_id}/ — delete it completely."""
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, account_id):
+        serializer = OwnerUpdateBankAccountSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            account = owner_update_bank_account(
+                owner=request.user, account_id=account_id, **serializer.validated_data
+            )
+        except PaymentNotFound:
+            raise NotFound()
+        except PaymentServiceError as exc:
+            raise ValidationError({"detail": str(exc)})
+        return Response(PitchOwnerBankAccountSerializer(account).data)
+
+    def delete(self, request, account_id):
+        try:
+            owner_delete_bank_account(owner=request.user, account_id=account_id)
+        except PaymentNotFound:
+            raise NotFound()
+        return Response(status=204)
+
+
+    
+
+class MyBankAccountActiveView(views.APIView):
+    """POST /payment/my/bank-accounts/{account_id}/active/  {"is_active": true|false}"""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, account_id):
+        serializer = OwnerSetBankAccountActiveSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            account = owner_set_bank_account_active(
+                owner=request.user, account_id=account_id,
+                is_active=serializer.validated_data["is_active"],
+            )
+        except PaymentNotFound:
+            raise NotFound()
+        except PaymentServiceError as exc:
+            raise ValidationError({"detail": str(exc)})
+        return Response(PitchOwnerBankAccountSerializer(account).data)
+
+class MyBankAccountsView(views.APIView):
+    """GET  /payment/my/bank-accounts/ — the logged-in owner's accounts.
+    POST /payment/my/bank-accounts/ — approved owner adds an account."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        accounts = list_my_bank_accounts(owner=request.user)
+        return Response(PitchOwnerBankAccountSerializer(accounts, many=True).data)
+
+    def post(self, request):
+        serializer = OwnerUpdateBankAccountSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            account = owner_add_bank_account(owner=request.user, **serializer.validated_data)
+        except PaymentServiceError as exc:
+            raise ValidationError({"detail": str(exc)})
+        return Response(PitchOwnerBankAccountSerializer(account).data, status=201)

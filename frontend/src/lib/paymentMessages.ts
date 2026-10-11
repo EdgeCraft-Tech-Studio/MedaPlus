@@ -20,8 +20,8 @@ export const BANK_AM: Record<string, string> = {
 };
 
 export const GENERIC_ERROR: Bi = {
-  am: "የሆነ ችግር ተፈጥሯል። እባክዎ ቆይተው እንደገና ይሞክሩ።",
-  en: "Something went wrong. Please try again later.",
+  am: "እባክዎ ቆይተው እንደገና ይሞክሩ።",
+  en: "Please try again later.",
 };
 
 /** 41 -> "41 seconds"; 330 -> "6 minutes" (rounded up). */
@@ -120,7 +120,7 @@ export function friendlyRejection(reason: string): Bi {
       };
     case "transaction_too_old":
       return {
-        am: "ይህ ክፍያ ከዚህ ቦታ ማስያዝ በጣም ቀድሞ የተከፈለ ስለሆነ መጠቀም አይቻልም። እባክዎ አዲስ ክፍያ ይፈጽሙ።",
+        am: "ይህ ክፍያ ከ 3 ሰዐት ቀድሞ የተከፈለ ስለሆነ መጠቀም አይቻልም። እባክዎ አዲስ ክፍያ ይፈጽሙ።",
         en: "This payment was made too long before this booking, so it can't be used. Please make a new payment.",
       };
     case "amount_mismatch":
@@ -172,7 +172,7 @@ export const TEXT = {
   tapPhoto: { am: "ፎቶ ለመምረጥ እዚህ ይንኩ", en: "Tap here to choose the photo" },
   scanning: { am: "ደረሰኙን በማንበብ ላይ…", en: "Reading your receipt…" },
   txNumber: { am: "የግብይት ቁጥር", en: "Transaction number" },
-  readAuto: { am: "በራስ-ሰር ተነበበ", en: "Read automatically" },
+  readAuto: { am: "ተነበበ", en: "Read automatically" },
   typeTx: {
     am: "ቁጥሩን በራስ-ሰር ማንበብ አልቻልንም። ከደረሰኙ ላይ ይጻፉት።",
     en: "We couldn't read it automatically. Please type it from your receipt.",
@@ -195,9 +195,9 @@ export const TEXT = {
   submitting: { am: "በመላክ ላይ…", en: "Sending…" },
   verifying: { am: "ክፍያዎን በማረጋገጥ ላይ ነን… እባክዎ ይጠብቁ", en: "Checking your payment… please wait" },
   verifyingSlow: {
-    am: "ባንኩ ትንሽ እየዘገየ ነው፤ ገጹን አይዝጉ።",
-    en: "The bank is a little slow. Please keep this page open.",
-  },
+    am: "ገጹን አይዝጉ።",
+    en: "Please keep this page open.",
+  }, 
   needsReview: {
     am: "ክፍያዎ ደርሶናል። የፒቹ ባለቤት በቅርቡ ያረጋግጣል። ቆይተው ይመለከቱ።",
     en: "We received your payment. The pitch owner will confirm it soon. Please check back later.",

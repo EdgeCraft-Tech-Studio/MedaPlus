@@ -1,0 +1,218 @@
+.section { margin: 28px 0; }
+
+.header {
+  display: grid; grid-template-columns: 1fr auto 1fr;
+  align-items: center; gap: 12px; margin-bottom: 16px;
+}
+.headerLeft { min-width: 0; }
+.headerRight { display: flex; justify-content: flex-end; }
+.title { font-size: 20px; font-weight: 800; color: #0f2a1c; letter-spacing: -0.01em; }
+.subtitle { font-size: 13px; color: #64748b; margin-top: 2px; }
+.countPill {
+  font-size: 12px; font-weight: 700; color: #166534;
+  background: #dcfce7; border: 1px solid #bbf7d0;
+  padding: 5px 12px; border-radius: 999px;
+}
+
+/* equal-size boxes, left to right, wrapping */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 16px;
+}
+
+.card {
+  position: relative;
+  display: flex; flex-direction: column; align-items: center; text-align: center;
+  min-height: 250px;
+  padding: 44px 16px 18px;
+  background: linear-gradient(180deg, #ffffff 0%, #f6fbf8 100%);
+  border: 1px solid #e2ece6;
+  border-radius: 20px;
+  box-shadow: 0 1px 2px rgba(15, 42, 28, 0.04), 0 8px 24px rgba(15, 42, 28, 0.06);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+  animation: cardIn 0.4s ease both;
+}
+.card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 2px 4px rgba(15, 42, 28, 0.05), 0 14px 32px rgba(15, 42, 28, 0.12);
+}
+.cardOff { background: #f4f5f6; border-style: dashed; }
+.cardOff .logoWrap, .cardOff .bankName, .cardOff .holder, .cardOff .number {
+  opacity: 0.45; filter: grayscale(1) blur(1.5px);
+}
+@keyframes cardIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+.skeleton {
+  background: linear-gradient(90deg, #eef3f0 25%, #f8fbf9 50%, #eef3f0 75%);
+  background-size: 200% 100%; animation: shimmer 1.2s infinite; border-style: solid;
+}
+@keyframes shimmer { to { background-position: -200% 0; } }
+
+/* top-left edit button */
+.editBtn {
+  position: absolute; top: 12px; left: 12px;
+  width: 34px; height: 34px; border-radius: 11px;
+  display: grid; place-items: center;
+  border: 1px solid #d9e6de; background: #fff; color: #123522; cursor: pointer;
+  transition: all 0.15s ease;
+}
+.editBtn:hover { background: #123522; color: #fff; border-color: #123522; transform: scale(1.06); }
+
+/* top-right toggle */
+.toggle {
+  position: absolute; top: 15px; right: 14px;
+  width: 44px; height: 26px; border-radius: 999px; border: none; padding: 0;
+  background: #cbd5d0; cursor: pointer; transition: background 0.2s ease;
+}
+.toggleOn { background: #16a34a; }
+.toggle:disabled { opacity: 0.6; cursor: wait; }
+.toggleKnob {
+  position: absolute; top: 3px; left: 3px;
+  width: 20px; height: 20px; border-radius: 50%; background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25); transition: transform 0.2s ease;
+}
+.toggleOn .toggleKnob { transform: translateX(18px); }
+
+.logoWrap {
+  display: grid; place-items: center;
+  padding: 6px; border-radius: 18px; background: #fff;
+  box-shadow: 0 2px 10px rgba(15, 42, 28, 0.08);
+  margin-bottom: 12px;
+}
+.bankName { font-size: 14px; font-weight: 800; color: #0f2a1c; }
+.holder {
+  font-size: 13px; font-weight: 600; color: #334155; margin-top: 8px;
+  max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.number {
+  margin-top: 6px; font-size: 14px; font-weight: 700; color: #123522;
+  letter-spacing: 0.06em; font-variant-numeric: tabular-nums;
+  background: #eaf5ee; padding: 5px 12px; border-radius: 10px;
+}
+
+.badge {
+  margin-top: auto; padding-top: 0; font-size: 11px; font-weight: 800;
+  text-transform: uppercase; letter-spacing: 0.08em;
+}
+.badgeOn { color: #16a34a; }
+.badgeOff { color: #94a3b8; }
+
+.empty {
+  padding: 28px; text-align: center; color: #64748b; font-size: 14px;
+  background: #f8fafb; border: 1px dashed #d5dfd9; border-radius: 16px;
+}
+
+/* ───── modals ───── */
+.overlay {
+  position: fixed; inset: 0; z-index: 1000; padding: 16px;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(10, 25, 17, 0.55); backdrop-filter: blur(3px);
+  animation: fadeIn 0.15s ease;
+}
+.modal {
+  position: relative; width: 100%; max-width: 400px;
+  background: #fff; border-radius: 22px; padding: 28px 22px 22px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.3);
+  animation: popIn 0.2s ease;
+}
+.confirmModal { max-width: 360px; text-align: center; }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes popIn { from { opacity: 0; transform: scale(0.94) translateY(8px); } to { opacity: 1; transform: none; } }
+
+.modalClose {
+  position: absolute; top: 12px; right: 12px; width: 34px; height: 34px;
+  display: grid; place-items: center; border: none; border-radius: 10px;
+  background: #f1f5f3; color: #475569; cursor: pointer;
+}
+.modalClose:hover { background: #e2e8e5; }
+
+.modalLogo { display: flex; justify-content: center; margin-bottom: 10px; }
+.modalLogo > * { animation: popIn 0.25s ease; }
+.modalTitle { text-align: center; font-size: 18px; font-weight: 800; color: #0f2a1c; margin-bottom: 18px; }
+
+.field { display: block; margin-bottom: 14px; }
+.fieldLabel { display: block; font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 6px; }
+.input, .select {
+  width: 100%; box-sizing: border-box; height: 46px; padding: 0 14px;
+  font: inherit; font-size: 14px; color: #0f2a1c;
+  background: #f8fbf9; border: 1.5px solid #dbe7df; border-radius: 12px; outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.input:focus, .select:focus { border-color: #16a34a; box-shadow: 0 0 0 4px rgba(22, 163, 74, 0.15); }
+.selectWrap { position: relative; }
+.select { appearance: none; -webkit-appearance: none; padding-right: 38px; cursor: pointer; }
+.selectChevron { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); pointer-events: none; color: #475569; }
+
+.saveBtn {
+  width: 100%; height: 48px; margin-top: 6px; border: none; border-radius: 13px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 15px; font-weight: 800; color: #fff; cursor: pointer;
+  background: linear-gradient(135deg, #16a34a, #123522);
+  box-shadow: 0 8px 20px rgba(22, 163, 74, 0.3); transition: transform 0.15s ease, opacity 0.15s ease;
+}
+.saveBtn:hover:not(:disabled) { transform: translateY(-1px); }
+.saveBtn:disabled { opacity: 0.45; cursor: not-allowed; box-shadow: none; }
+
+.confirmText { font-size: 14px; line-height: 1.55; color: #475569; margin: 0 0 20px; }
+.confirmActions { display: flex; gap: 10px; }
+.cancelBtn, .dangerBtn {
+  flex: 1; height: 44px; border-radius: 12px; font-size: 14px; font-weight: 700; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.cancelBtn { background: #fff; color: #334155; border: 1px solid #dbe3df; }
+.dangerBtn { background: #dc2626; color: #fff; border: none; }
+.cancelBtn:disabled, .dangerBtn:disabled { opacity: 0.6; cursor: wait; }
+
+.spinner { width: 20px; height: 20px; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 520px) {
+  .grid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  .card { padding: 44px 10px 16px; min-height: 240px; }
+}
+@media (max-width: 380px) { .grid { grid-template-columns: 1fr; } }
+
+
+
+/* ───── Add account button (center of header) ───── */
+.addWrap { position: relative; display: inline-flex; }
+.addBtn {
+  display: inline-flex; align-items: center; gap: 7px;
+  height: 42px; padding: 0 20px; border: none; border-radius: 999px;
+  font-size: 14px; font-weight: 800; color: #fff; cursor: pointer;
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  box-shadow: 0 8px 20px rgba(22, 163, 74, 0.32);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.addBtn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 12px 26px rgba(22, 163, 74, 0.4); }
+.addBtn:disabled {
+  background: #cbd5d0; box-shadow: none; cursor: not-allowed;
+  pointer-events: none; /* so the wrapper receives the hover for the tooltip */
+}
+/* tooltip shown only when the button is disabled (data-tip is empty otherwise) */
+.addWrap[data-tip]:not([data-tip=""]):hover::after {
+  content: attr(data-tip);
+  position: absolute; top: calc(100% + 8px); left: 50%; transform: translateX(-50%);
+  white-space: nowrap; padding: 6px 12px; border-radius: 8px;
+  font-size: 12px; font-weight: 700; color: #fff; background: #0f2a1c;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25); z-index: 20;
+}
+
+/* ───── delete button (bottom-right, red) ───── */
+.deleteBtn {
+  position: absolute; bottom: 12px; right: 12px;
+  width: 34px; height: 34px; border-radius: 11px; border: none;
+  display: grid; place-items: center; cursor: pointer;
+  color: #fff; background: #dc2626;
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.35);
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+.deleteBtn:hover:not(:disabled) { background: #b91c1c; transform: scale(1.08); }
+.deleteBtn:disabled { opacity: 0.6; cursor: wait; }
+
+@media (max-width: 640px) {
+  .header { grid-template-columns: 1fr auto; }
+  .headerLeft { grid-column: 1 / -1; }
+  .headerRight { justify-content: flex-end; }
+}

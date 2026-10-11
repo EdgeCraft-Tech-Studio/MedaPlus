@@ -34,7 +34,7 @@ VERIFY_ET_BASE_URL = os.getenv("VERIFY_ET_BASE_URL", "https://verify.et")
 
 
 CHECK_NAME_FOR_PAYMENT = False
-MAX_PAYMENT_TIME_ALLOWED_HOURS = 29
+MAX_PAYMENT_TIME_ALLOWED_HOURS = 60
 
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -427,11 +427,8 @@ export default function MemberPaymentPopup({ payment, kind = "team", onClose, on
                           maxLength={24}
                           value={accountNumber}
                           onChange={(e) => { setAccountNumber(e.target.value.replace(/\D/g, "")); setAccountInvalid(false); }}
-                          placeholder="1000123456789"
+                          placeholder="xxxxx...."
                         />
-                        <span className={`${styles.manualHint} ${flow.hint}`}>
-                          <BiText t={accountFallback && accountNumber ? TEXT.accountRetry : TEXT.accountHint} small />
-                        </span>
                       </label>
                     )}
 

@@ -230,3 +230,15 @@ class OwnerReviewActionSerializer(serializers.Serializer):
 
 class OwnerReverseVerifiedSerializer(serializers.Serializer):
     password = serializers.CharField(write_only=True, trim_whitespace=False, max_length=128)
+
+
+class OwnerUpdateBankAccountSerializer(serializers.Serializer):
+    bank = serializers.ChoiceField(choices=SupportedBank.choices)
+    account_holder_name = serializers.CharField(max_length=150)
+    account_number = serializers.CharField(required=False, allow_blank=True, default="", max_length=30)
+    phone_number = serializers.CharField(required=False, allow_blank=True, default="", max_length=20)
+
+
+class OwnerSetBankAccountActiveSerializer(serializers.Serializer):
+    is_active = serializers.BooleanField()
+     

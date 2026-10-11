@@ -15,6 +15,8 @@ const ICONS: Record<string, string> = {
   chart: "M3 17l5-6 4 3 8-9M3 21h18",
   bulb: "M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.2 1 2.3h6c0-1.1.4-1.8 1-2.3A7 7 0 0 0 12 2z",
   replay: "M3 12a9 9 0 1 0 3-6.7M3 4v5h5",
+  clock: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 7v5l3 2",
+  leaf: "M5 19c0-9 5-14 14-14 0 9-5 14-14 14zM5 19l7-7",
 };
 
 function Ico({ n, size = 22 }: { n: keyof typeof ICONS; size?: number }) {
@@ -29,9 +31,10 @@ function Ico({ n, size = 22 }: { n: keyof typeof ICONS; size?: number }) {
 const birr = (v: number | string | undefined) =>
   `${(Number(v) || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })} Br`;
 
+/* rank 1 = stronger light green, everyone else = softer light green */
 const BAR_COLORS = [
-  ["#0ea5e9", "#38bdf8"], // rank 1: slightly stronger
-  ["#38bdf8", "#7dd3fc"], // everyone else: soft light blue
+  ["#22c55e", "#4ade80"],
+  ["#86efac", "#bbf7d0"],
 ];
 
 function hourLabel(h: number) {
@@ -52,15 +55,7 @@ function countByHour(items: { start_iso: string; end_iso: string }[]) {
 }
 
 /* smooth SVG path through points */
-function smooth(pts: { x: number; y: number }[]) {
-  if (!pts.length) return "";
-  let d = `M${pts[0].x},${pts[0].y}`;
-  for (let i = 1; i < pts.length; i++) {
-    const mx = (pts[i - 1].x + pts[i].x) / 2;
-    d += ` C${mx},${pts[i - 1].y} ${mx},${pts[i].y} ${pts[i].x},${pts[i].y}`;
-  }
-  return d;
-}
+
 
 /* ------------------------------ KPI tiles ------------------------------ */
 function Kpis({ stats, loading }: Props) {
@@ -68,17 +63,17 @@ function Kpis({ stats, loading }: Props) {
   const bookings = stats?.total_bookings ?? 0;
   const avg = bookings > 0 ? total / bookings : 0;
   const tiles = [
-    { icon: "cash", label: "Money you made", value: birr(total), hint: "All confirmed bookings, total", c: "gold" },
-    { icon: "cal", label: "Times people booked", value: String(bookings), hint: "Number of confirmed bookings", c: "green" },
-    { icon: "check", label: "Pitches open for booking", value: String(stats?.active_pitches ?? 0), hint: "Approved and ready", c: "blue" },
-    { icon: "avg", label: "Average per booking", value: birr(avg), hint: "Money made ÷ bookings", c: "purple" },
+    { icon: "cash", label: "Money you made", value: birr(total), hint: "All confirmed bookings, total" },
+    { icon: "cal", label: "Times people booked", value: String(bookings), hint: "Number of confirmed bookings" },
+    { icon: "check", label: "Pitches open for booking", value: String(stats?.active_pitches ?? 0), hint: "Approved and ready" },
+    { icon: "avg", label: "Average per booking", value: birr(avg), hint: "Money made ÷ bookings" },
   ] as const;
 
   return (
     <div className={s.kpiGrid}>
-      {tiles.map((t) => (
-        <div key={t.label} className={`${s.kpi} ${s[`kpi_${t.c}`]}`}>
-          <div className={s.kpiIcon}><Ico n={t.icon as keyof typeof ICONS} size={26} /></div>
+      {tiles.map((t, i) => (
+        <div key={t.label} className={s.kpi} style={{ animationDelay: `${i * 70}ms` }}>
+          <div className={s.kpiIcon}><Ico n={t.icon as keyof typeof ICONS} size={24} /></div>
           <div className={s.kpiBody}>
             <div className={s.kpiLabel}>{t.label}</div>
             {loading ? <div className={s.kpiSkel} /> : <div className={s.kpiValue}>{t.value}</div>}
@@ -118,14 +113,14 @@ function RaceChart({ stats, loading }: Props) {
   return (
     <div className={`${s.panel} ${s.race}`}>
       <div className={s.panelHead}>
-        <div className={`${s.panelIcon} ${s.ic_gold}`}><Ico n="trophy" size={20} /></div>
+        <div className={s.panelIcon}><Ico n="trophy" size={20} /></div>
         <div>
           <div className={s.panelTitle}>Who earns the most?</div>
           <div className={s.panelSub}>Longest bar = the pitch that made the most money</div>
         </div>
         {rows.length > 0 && (
           <button className={s.replayBtn} onClick={replay} type="button">
-            <Ico n="replay" size={14} /> Replay race
+            <Ico n="replay" size={14} /> Refresh
           </button>
         )}
       </div>
@@ -134,7 +129,7 @@ function RaceChart({ stats, loading }: Props) {
         <div className={s.skelRows}>{[0, 1, 2, 3].map((i) => <div key={i} className={s.skelRow} />)}</div>
       ) : rows.length === 0 ? (
         <div className={s.empty}>
-          <Ico n="bulb" size={28} />
+          <Ico n="leaf" size={30} />
           <p>No earnings yet. When people book your pitches, the race starts here!</p>
         </div>
       ) : (
@@ -157,13 +152,10 @@ function RaceChart({ stats, loading }: Props) {
                       className={s.bar}
                       style={{
                         width: go ? `${pct}%` : "0%",
-                        background: `linear-gradient(180deg, ${c2}, ${c1})`,
-                        boxShadow: "none",
+                        background: `linear-gradient(90deg, ${c1}, ${c2})`,
                         transitionDelay: `${i * 110}ms`,
                       }}
-                    >
-                      
-                    </div>
+                    />
                   </div>
                   <div className={s.raceNote}>
                     {p.bookings_count} {p.bookings_count === 1 ? "booking" : "bookings"} · {share}% of all your money
@@ -179,45 +171,40 @@ function RaceChart({ stats, loading }: Props) {
 }
 
 /* ----------------------------- Line chart ------------------------------ */
-function TodayLine({ stats, loading }: Props) {
-  const [hover, setHover] = useState<number | null>(null);
+
+/* ------------------------- Hour-by-hour columns ------------------------- */
+function TodayHours({ stats, loading }: Props) {
+  const [sel, setSel] = useState<number | null>(null);
 
   const data = useMemo(() => {
     const booked = countByHour(stats?.today_bookings || []);
     const free = countByHour(stats?.today_free || []);
     const hrs = [...Object.keys(booked), ...Object.keys(free)].map(Number);
     if (!hrs.length) return null;
-    const lo = Math.max(0, Math.min(...hrs) - 0);
+    const lo = Math.max(0, Math.min(...hrs));
     const hi = Math.min(23, Math.max(...hrs));
-    const list = [];
+    const list: { h: number; booked: number; free: number }[] = [];
     for (let h = lo; h <= hi; h++) list.push({ h, booked: booked[h] || 0, free: free[h] || 0 });
     return list;
   }, [stats]);
 
-  const W = 600, H = 230, L = 34, R = 14, T = 16, B = 34;
-  const maxY = data ? Math.max(1, ...data.map((d) => Math.max(d.booked, d.free))) : 1;
-  const x = (i: number) => (data && data.length > 1 ? L + (i * (W - L - R)) / (data.length - 1) : W / 2);
-  const y = (v: number) => T + (1 - v / maxY) * (H - T - B);
-
-  const bookedPts = data?.map((d, i) => ({ x: x(i), y: y(d.booked) })) || [];
-  const freePts = data?.map((d, i) => ({ x: x(i), y: y(d.free) })) || [];
-  const bookedPath = smooth(bookedPts);
-  const freePath = smooth(freePts);
-  const area = bookedPts.length
-    ? `${bookedPath} L${bookedPts[bookedPts.length - 1].x},${H - B} L${bookedPts[0].x},${H - B} Z`
-    : "";
-
+  const maxTotal = data ? Math.max(1, ...data.map((d) => d.booked + d.free)) : 1;
   const busiest = data ? [...data].sort((a, b) => b.booked - a.booked)[0] : null;
-  const step = data ? Math.ceil(data.length / 8) : 1;
-  const hv = hover !== null && data ? data[hover] : null;
+  const emptiest = data ? [...data].sort((a, b) => b.free - a.free)[0] : null;
+
+  // the hour shown in the readout box: hovered one, otherwise the busiest hour
+  const active =
+    data && (sel !== null ? data.find((d) => d.h === sel) : busiest && busiest.booked > 0 ? busiest : data[0]);
+
+  const plural = (n: number) => (n === 1 ? "pitch" : "pitches");
 
   return (
     <div className={`${s.panel} ${s.line}`}>
       <div className={s.panelHead}>
-        <div className={`${s.panelIcon} ${s.ic_blue}`}><Ico n="chart" size={20} /></div>
+        <div className={s.panelIcon}><Ico n="chart" size={20} /></div>
         <div>
           <div className={s.panelTitle}>Your day today</div>
-          <div className={s.panelSub}>How many pitches are busy or empty, hour by hour</div>
+          <div className={s.panelSub}>Each column is one hour. See how many pitches are booked or free.</div>
         </div>
       </div>
 
@@ -225,62 +212,78 @@ function TodayLine({ stats, loading }: Props) {
         <div className={s.skelChart} />
       ) : !data ? (
         <div className={s.empty}>
-          <Ico n="bulb" size={28} />
+          <Ico n="leaf" size={30} />
           <p>Nothing to show for today yet. Bookings and free hours will appear here.</p>
         </div>
       ) : (
         <>
           <div className={s.legend}>
-            <span><i style={{ background: "#0ea5e9" }} /> Booked (busy)</span>
-            <span><i style={{ background: "#94a3b8" }} /> Free (empty)</span>
+            <span><i className={s.dotBooked} /> Booked</span>
+            <span><i className={s.dotFree} /> Free</span>
           </div>
-          <svg className={s.chart} viewBox={`0 0 ${W} ${H}`} onMouseLeave={() => setHover(null)}>
-            <defs>
-              <linearGradient id="oiArea" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#0ea5e9" stopOpacity="0.38" />
-                <stop offset="100%" stopColor="#0ea5e9" stopOpacity="0" />
-              </linearGradient>
-            </defs>
-            {Array.from({ length: maxY + 1 }).map((_, v) => (
-              <g key={v}>
-                <line x1={L} x2={W - R} y1={y(v)} y2={y(v)} className={s.grid} />
-                <text x={L - 8} y={y(v) + 4} className={s.axis} textAnchor="end">{v}</text>
-              </g>
+
+          <div className={s.cols}>
+            {data.map((d) => (
+              <button
+                type="button"
+                key={d.h}
+                className={`${s.col} ${active?.h === d.h ? s.colActive : ""}`}
+                onMouseEnter={() => setSel(d.h)}
+                onClick={() => setSel(d.h)}
+                aria-label={`${hourLabel(d.h)}: ${d.booked} booked, ${d.free} free`}
+              >
+                <span className={s.stack}>
+                  <span className={s.segFree} style={{ height: `${(d.free / maxTotal) * 100}%` }} />
+                  <span className={s.segBooked} style={{ height: `${(d.booked / maxTotal) * 100}%` }}>
+                    {d.booked > 0 ? d.booked : ""}
+                  </span>
+                </span>
+                <span className={s.colHour}>{hourLabel(d.h)}</span>
+              </button>
             ))}
-            <path d={area} fill="url(#oiArea)" />
-            <path d={freePath} className={s.lineFree} pathLength={1} />
-            <path d={bookedPath} className={s.lineBooked} pathLength={1} />
-            {data!.map((d, i) => (
-              <g key={d.h}>
-                {i % step === 0 && (
-                  <text x={x(i)} y={H - 10} className={s.axis} textAnchor="middle">{hourLabel(d.h)}</text>
-                )}
-                <circle cx={x(i)} cy={y(d.free)} r={hover === i ? 4.5 : 0} fill="#94a3b8" stroke="#fff" strokeWidth="2" />
-                <circle cx={x(i)} cy={y(d.booked)} r={hover === i ? 5.5 : 0} fill="#0ea5e9" stroke="#fff" strokeWidth="2" />
-                <rect x={x(i) - 14} y={T} width={28} height={H - T - B} fill="transparent" onMouseEnter={() => setHover(i)} />
-              </g>
-            ))}
-            {hv && (
-              <g transform={`translate(${Math.min(Math.max(x(hover!), 70), W - 70)},${T + 4})`}>
-                <rect x="-64" y="0" width="128" height="46" rx="10" className={s.tip} />
-                <text x="0" y="17" textAnchor="middle" className={s.tipTitle}>{hourLabel(hv.h)}</text>
-                <text x="0" y="35" textAnchor="middle" className={s.tipText}>
-                  {hv.booked} busy · {hv.free} free
-                </text>
-              </g>
-            )}
-          </svg>
-          {busiest && busiest.booked > 0 && (
-            <div className={s.insight}>
-              <Ico n="bulb" size={16} /> Your busiest time today is <b>{hourLabel(busiest.h)}</b> with{" "}
-              <b>{busiest.booked}</b> {busiest.booked === 1 ? "pitch" : "pitches"} booked.
+          </div>
+
+          {active && (
+            <div className={s.readout}>
+              <div className={s.readoutHour}>At {hourLabel(active.h)}</div>
+              <div className={s.readoutRows}>
+                <div><i className={s.dotBooked} /> <b>{active.booked}</b> {plural(active.booked)} booked</div>
+                <div><i className={s.dotFree} /> <b>{active.free}</b> {plural(active.free)} free</div>
+              </div>
             </div>
           )}
+
+          <div className={s.chips}>
+            {busiest && busiest.booked > 0 && (
+              <div className={s.chip}>
+                <div className={s.chipIcon}><Ico n="clock" size={16} /></div>
+                <div>
+                  <div className={s.chipLabel}>Busiest hour</div>
+                  <div className={s.chipValue}>
+                    {hourLabel(busiest.h)} <span>· {busiest.booked} {plural(busiest.booked)} booked</span>
+                  </div>
+                </div>
+              </div>
+            )}
+            {emptiest && emptiest.free > 0 && (
+              <div className={`${s.chip} ${s.chipSoft}`}>
+                <div className={s.chipIcon}><Ico n="leaf" size={16} /></div>
+                <div>
+                  <div className={s.chipLabel}>Most empty hour</div>
+                  <div className={s.chipValue}>
+                    {hourLabel(emptiest.h)} <span>· {emptiest.free} {plural(emptiest.free)} free</span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         </>
       )}
     </div>
   );
 }
+
+
 
 export default function OwnerInsights({ stats, loading }: Props) {
   return (
@@ -292,7 +295,7 @@ export default function OwnerInsights({ stats, loading }: Props) {
       <Kpis stats={stats} loading={loading} />
       <div className={s.twoCol}>
         <RaceChart stats={stats} loading={loading} />
-        <TodayLine stats={stats} loading={loading} />
+        <TodayHours stats={stats} loading={loading} />
       </div>
     </section>
   );

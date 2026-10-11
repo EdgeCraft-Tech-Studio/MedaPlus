@@ -322,7 +322,7 @@ export default function PaymentDetailTable({ pitchId }: Props) {
               <th>Last name</th>
               <th>Phone</th>
               <th>Amount</th>
-              <th>Paid from → to</th>
+              <th>Paid from → to</th> 
               <th>Reference</th>
               <th>Paid on</th>
               <th>Type</th>

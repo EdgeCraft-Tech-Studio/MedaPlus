@@ -1149,7 +1149,8 @@ def upsert_bank_account(
 
 def deactivate_bank_account(*, bank_account: PitchOwnerBankAccount) -> PitchOwnerBankAccount:
     bank_account.is_active = False
-    bank_account.save(update_fields=["is_active", "updated_at"])
+    bank_account.disabled_by_owner = False  # admin removal: hide it from the owner page too
+    bank_account.save(update_fields=["is_active", "disabled_by_owner", "updated_at"])
     return bank_account
 
 
@@ -1463,3 +1464,156 @@ def owner_reverse_verified_payment(*, transaction_id, owner, password: str) -> P
         owner.id, transaction.id,
     )
     return transaction
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PITCH OWNER: manage OWN bank accounts (edit / turn on-off)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def list_my_bank_accounts(*, owner):
+    """Active accounts + accounts the OWNER switched off (shown blurred).
+    Accounts removed by the admin are not listed."""
+    return (
+        PitchOwnerBankAccount.objects
+        .filter(owner=owner)
+        .filter(Q(is_active=True) | Q(disabled_by_owner=True))
+        .order_by("created_at")
+    )
+
+
+def _other_active_exists(owner, bank: str, exclude_id) -> bool:
+    return (
+        PitchOwnerBankAccount.objects
+        .filter(owner=owner, bank=bank, is_active=True)
+        .exclude(id=exclude_id)
+        .exists()
+    )
+
+
+def owner_update_bank_account(
+    *, owner, account_id, bank: str, account_holder_name: str,
+    account_number: str = "", phone_number: str = "",
+) -> PitchOwnerBankAccount:
+    if bank == SupportedBank.ZEMEN:
+        raise PaymentValidationError("Zemen Bank can't be verified automatically yet.")
+
+    account_holder_name = (account_holder_name or "").strip()
+    account_number = (account_number or "").strip()
+    phone_number = (phone_number or "").strip()
+
+    if len(_name_tokens(account_holder_name)) < 2:
+        raise PaymentValidationError(
+            "Enter the account holder's full name (at least two words) exactly as the bank shows it."
+        )
+
+    if bank in WALLET_BANKS:
+        if not phone_number:
+            raise PaymentValidationError("Enter the phone number.")
+        account_number = ""
+    else:
+        if not account_number:
+            raise PaymentValidationError("Enter the account number.")
+        phone_number = ""
+
+    try:
+        with db_transaction.atomic():
+            try:
+                account = PitchOwnerBankAccount.objects.select_for_update().get(id=account_id, owner=owner)
+            except PitchOwnerBankAccount.DoesNotExist:
+                raise PaymentNotFound("Account not found.")
+
+            if account.is_active and _other_active_exists(owner, bank, account.id):
+                raise PaymentValidationError(
+                    "You already have an active account for this bank. Turn it off or edit it first."
+                )
+
+            account.bank = bank
+            account.account_holder_name = account_holder_name
+            account.account_number = account_number
+            account.phone_number = phone_number
+            account.save(update_fields=["bank", "account_holder_name", "account_number", "phone_number", "updated_at"])
+            return account
+    except IntegrityError:
+        raise PaymentValidationError("You already have an active account for this bank.")
+
+
+def owner_set_bank_account_active(*, owner, account_id, is_active: bool) -> PitchOwnerBankAccount:
+    try:
+        with db_transaction.atomic():
+            try:
+                account = PitchOwnerBankAccount.objects.select_for_update().get(id=account_id, owner=owner)
+            except PitchOwnerBankAccount.DoesNotExist:
+                raise PaymentNotFound("Account not found.")
+
+            if is_active and _other_active_exists(owner, account.bank, account.id):
+                raise PaymentValidationError(
+                    "Another account for this bank is already active. Turn it off first."
+                )
+            account.is_active = is_active
+            account.disabled_by_owner = not is_active
+            account.save(update_fields=["is_active", "disabled_by_owner", "updated_at"])
+            return account
+    except IntegrityError:
+        raise PaymentValidationError("Another account for this bank is already active.")
+
+def owner_add_bank_account(
+    *, owner, bank: str, account_holder_name: str,
+    account_number: str = "", phone_number: str = "",
+) -> PitchOwnerBankAccount:
+    """An APPROVED pitch owner adds a bank / wallet for himself."""
+    if not getattr(owner, "is_approved", False):
+        raise PaymentValidationError("Your account is not approved by the admin yet.")
+    if bank == SupportedBank.ZEMEN:
+        raise PaymentValidationError("Zemen Bank can't be verified automatically yet.")
+
+    account_holder_name = (account_holder_name or "").strip()
+    account_number = (account_number or "").strip()
+    phone_number = (phone_number or "").strip()
+
+    if len(_name_tokens(account_holder_name)) < 2:
+        raise PaymentValidationError(
+            "Enter the account holder's full name (at least two words) exactly as the bank shows it."
+        )
+    if bank in WALLET_BANKS:
+        if not phone_number:
+            raise PaymentValidationError("Enter the phone number.")
+        account_number = ""
+    else:
+        if not account_number:
+            raise PaymentValidationError("Enter the account number.")
+        phone_number = ""
+
+    try:
+        with db_transaction.atomic():
+            if PitchOwnerBankAccount.objects.filter(owner=owner, bank=bank, is_active=True).exists():
+                raise PaymentValidationError(
+                    "You already have an active account for this bank. Edit it, turn it off, or delete it first."
+                )
+            account = PitchOwnerBankAccount.objects.create(
+                owner=owner,
+                bank=bank,
+                account_holder_name=account_holder_name,
+                account_number=account_number,
+                phone_number=phone_number,
+            )
+            # Players only see accounts when the profile is in manual-bank mode
+            # (the admin screen does the same when it adds an account).
+            profile, _ = PitchOwnerPaymentProfile.objects.get_or_create(owner=owner)
+            if profile.payment_mode == PaymentMode.NOT_CONFIGURED:
+                profile.payment_mode = PaymentMode.MANUAL_BANK
+                profile.configured_at = timezone.now()
+                profile.save(update_fields=["payment_mode", "configured_at", "updated_at"])
+            return account
+    except IntegrityError:
+        raise PaymentValidationError("You already have an active account for this bank.")
+
+
+def owner_delete_bank_account(*, owner, account_id) -> None:
+    """Permanently deletes one of the owner's own accounts.
+    Old payments keep working: their owner_bank_account link just becomes empty."""
+    try:
+        with db_transaction.atomic():
+            account = PitchOwnerBankAccount.objects.select_for_update().get(id=account_id, owner=owner)
+            account.delete()
+    except PitchOwnerBankAccount.DoesNotExist:
+        raise PaymentNotFound("Account not found.") 

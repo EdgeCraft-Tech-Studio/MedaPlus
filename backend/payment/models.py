@@ -79,9 +79,10 @@ class PitchOwnerBankAccount(models.Model):
     account_number = models.CharField(max_length=30, blank=True)
     phone_number = models.CharField(max_length=20, blank=True)
     is_active = models.BooleanField(default=True)
+    disabled_by_owner = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-
+ 
     class Meta:
         db_table = "payment_owner_bank_account"
         constraints = [
