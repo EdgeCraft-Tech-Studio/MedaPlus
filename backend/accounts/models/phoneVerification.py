@@ -64,7 +64,8 @@ class PhoneVerification(TimeStampedModel):
         LOGIN = "login", "Login"
         PASSWORD_RESET = "password_reset", "Password Reset"
         PHONE_CHANGE = "phone_change", "Phone Change"
-        BID_CONFIRM = "bid_confirm", "Bid Confirm" 
+        BID_CONFIRM = "bid_confirm", "Bid Confirm"
+        PAYMENT_REJECT = "payment_reject", "Payment Reject"
 
     MAX_ATTEMPTS = 5
 

@@ -10,6 +10,7 @@ from .models import (
     PitchOwnerBankAccount,
     PitchOwnerPaymentProfile,
 )
+from .rejection import can_owner_reject, reject_deadline
 from .services import get_bank_requirement, normalize_ethiopian_phone, payment_time_from_response
 
 MAX_SCREENSHOT_BYTES = 8 * 1024 * 1024
@@ -187,6 +188,8 @@ class OwnerPaymentRowSerializer(serializers.ModelSerializer):
     team_name = serializers.SerializerMethodField()
     paid_at = serializers.SerializerMethodField()
     review_reason = serializers.SerializerMethodField()
+    can_reject = serializers.SerializerMethodField()
+    reject_deadline = serializers.SerializerMethodField()
 
     class Meta:
         model = PaymentTransaction
@@ -195,6 +198,7 @@ class OwnerPaymentRowSerializer(serializers.ModelSerializer):
             "payer_first_name", "payer_last_name", "payer_phone",
             "amount", "sender_bank", "pay_to_bank", "reference_number",
             "paid_at", "submitted_at", "review_reason",
+            "can_reject", "reject_deadline",
         ]
         read_only_fields = fields
 
@@ -223,13 +227,25 @@ class OwnerPaymentRowSerializer(serializers.ModelSerializer):
     def get_review_reason(self, obj):
         return obj.rejection_reason if obj.status == "needs_review" else ""
 
+    def get_can_reject(self, obj):
+        return can_owner_reject(obj)
+
+    def get_reject_deadline(self, obj):
+        if obj.status != "verified":
+            return None
+        deadline = reject_deadline(obj)
+        return deadline.isoformat() if deadline else None
+
 
 class OwnerReviewActionSerializer(serializers.Serializer):
     action = serializers.ChoiceField(choices=["approve", "reject"])
 
 
 class OwnerReverseVerifiedSerializer(serializers.Serializer):
-    password = serializers.CharField(write_only=True, trim_whitespace=False, max_length=128)
+    code = serializers.RegexField(
+        r"^\d{5}$", write_only=True,
+        error_messages={"invalid": "Enter the 5-digit code."},
+    )
 
 
 class OwnerUpdateBankAccountSerializer(serializers.Serializer):

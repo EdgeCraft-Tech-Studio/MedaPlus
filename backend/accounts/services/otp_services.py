@@ -110,6 +110,7 @@ class OTPService:
         PhoneVerification.Purpose.PASSWORD_RESET: 'reset your password',
         PhoneVerification.Purpose.PHONE_CHANGE:   'change your phone number',
         PhoneVerification.Purpose.BID_CONFIRM:    'confirm your action',
+        PhoneVerification.Purpose.PAYMENT_REJECT: 'confirm rejecting a payment',
     }
 
     # ── private helpers ──

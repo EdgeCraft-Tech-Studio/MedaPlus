@@ -31,10 +31,9 @@ VERIFY_ET_API_KEY = os.getenv("VERIFY_ET_API_KEY")
 
 VERIFY_ET_BASE_URL = os.getenv("VERIFY_ET_BASE_URL", "https://verify.et")
 
-
-
+REJECTION_ALLOWED_TIME = 1
 CHECK_NAME_FOR_PAYMENT = False
-MAX_PAYMENT_TIME_ALLOWED_HOURS = 60
+MAX_PAYMENT_TIME_ALLOWED_HOURS = 2
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -45,7 +44,7 @@ EMAIL_BACKEND       = "django.core.mail.backends.smtp.EmailBackend"
 EMAIL_HOST          = "smtp.gmail.com"
 EMAIL_PORT          = 587
 EMAIL_USE_TLS       = True
-EMAIL_TIMEOUT       = 10
+EMAIL_TIMEOUT       = 30
 EMAIL_HOST_USER     = os.getenv("EMAIL_HOST_USER")
 EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD")    # Gmail *App Password*, not your login password
 DEFAULT_FROM_EMAIL  = "MedaPlus <medaplussupport@gmail.com>"
@@ -189,6 +188,13 @@ REST_FRAMEWORK = {
 
 
 CORS_ALLOWED_ORIGINS = os.getenv("CORS_ALLOWED_ORIGINS", "").split(",")
+
+
+# for development uncomment this cors and comment like 191
+# CORS_ALLOWED_ORIGINS = [
+#     "http://localhost:5173",
+#     "http://127.0.0.1:5173",
+# ]
 
 
 # Internationalization
