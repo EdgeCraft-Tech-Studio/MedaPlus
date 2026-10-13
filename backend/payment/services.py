@@ -30,6 +30,18 @@ from .models import (
     PitchOwnerBankAccount,
     PitchOwnerPaymentProfile,
 )
+from accounts.models import PhoneVerification
+from accounts.services.otp_services import OTPService
+from .rejection import (
+    RejectCodeExpired,
+    RejectCodeInvalid,
+    RejectCodeLocked,
+    RejectionWindowClosed,
+    can_owner_reject,
+    cancel_booking_for_rejected_payment,
+    send_rejection_notifications,
+    window_closed_message,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -800,6 +812,13 @@ def submit_manual_bank_payment(
     if already_verified:
         raise DuplicateTransactionError("This transaction reference has already been used.")
 
+    # a reference whose payment the owner rejected after it was verified can't be re-used by anyone
+    if PaymentTransaction.objects.filter(
+        bank=bank, reference_number=reference_number,
+        rejection_reason__startswith="owner_rejected_verified",
+    ).exists():
+        raise DuplicateTransactionError("This transaction reference has already been used.")
+
     # Tie the typed reference number to what's actually IN the
     # uploaded image. Without this, any unrelated image plus a
     # manually-typed reference number sails straight through to
@@ -1360,7 +1379,10 @@ def list_pitch_payments(
     offset = (page - 1) * page_size
     rows = list(
         rows_qs
-        .select_related("payer", "owner_bank_account", "team_booking_payment__request__team")
+        .select_related(
+            "payer", "owner_bank_account", "team_booking_payment__request__team",
+            "solo_booking_hold", "booking",
+        )
         .annotate(_priority=Case(
             When(status=PaymentStatus.NEEDS_REVIEW, then=Value(0)),
             default=Value(1), output_field=IntegerField(),
@@ -1439,32 +1461,101 @@ def owner_resolve_payment(*, transaction_id, owner, action: str) -> PaymentTrans
     return transaction
 
 
-def owner_reverse_verified_payment(*, transaction_id, owner, password: str) -> PaymentTransaction:
-    """The pitch owner changes a VERIFIED payment to REJECTED. Needs the owner's
-    own account password (stored hashed, checked with Django's check_password).
+def _get_owner_verified_payment(transaction_id, owner) -> PaymentTransaction:
+    """Pre-check shared by 'send code' and 'reject': owner's own, VERIFIED, still inside the time window."""
+    try:
+        transaction = (
+            PaymentTransaction.objects
+            .select_related("payer", "booking", "solo_booking_hold", "team_booking_payment__request")
+            .get(id=transaction_id, pitch_owner_id=owner.id)
+        )
+    except PaymentTransaction.DoesNotExist:
+        raise PaymentNotFound("Payment not found.")
+    if transaction.status != PaymentStatus.VERIFIED:
+        raise PaymentValidationError("Only a verified payment can be rejected this way.")
+    if not can_owner_reject(transaction):
+        raise RejectionWindowClosed(window_closed_message())
+    return transaction
 
-    NOTE: this only changes the payment record. A team share already marked paid
-    or a solo booking already created is NOT cancelled here - that belongs to the
-    booking / team_booking services.
+
+def _mask_email(email: str) -> str:
+    name, _, domain = (email or "").partition("@")
+    return f"{name[:1]}{'*' * max(len(name) - 1, 2)}@{domain}"
+
+
+def owner_send_reject_code(*, transaction_id, owner) -> dict:
+    """Emails the owner a 5-digit code for rejecting a VERIFIED payment.
+    OTPService errors (OTPRateLimitError / OTPLockedError / SMSSendError) are
+    left for the view to translate."""
+    _get_owner_verified_payment(transaction_id, owner)
+    if not owner.email:
+        raise PaymentValidationError("Your account has no email address, so a code can't be sent.")
+    OTPService().send(
+        phone=owner.phone,
+        purpose=PhoneVerification.Purpose.PAYMENT_REJECT,
+        user=owner,
+        email=owner.email,
+    )
+    return {
+        "email_hint": _mask_email(owner.email),
+        "expires_in_seconds": OTPService.OTP_EXPIRY_MINUTES * 60,
+    }
+
+
+def _verify_reject_code(owner, code: str) -> PhoneVerification:
+    """Checked here (not with OTPService.verify) so a wrong guess is really COUNTED:
+    OTPService.verify raises inside @atomic, which rolls the attempt counter back."""
+    verification = (
+        PhoneVerification.objects.valid()
+        .for_phone(owner.phone)
+        .by_purpose(PhoneVerification.Purpose.PAYMENT_REJECT)
+        .filter(user=owner)
+        .order_by("-created_at", "-id")
+        .first()
+    )
+    if verification is None:
+        raise RejectCodeExpired("The code has expired. Please request a new one.")
+    if verification.is_locked():
+        raise RejectCodeLocked("Too many incorrect codes. Please try again later.")
+    if not verification.check_otp(code or ""):
+        verification.increment_attempts()
+        raise RejectCodeInvalid("Incorrect code.")
+    return verification
+
+
+def owner_reverse_verified_payment(*, transaction_id, owner, code: str) -> PaymentTransaction:
+    """VERIFIED -> REJECTED, only with the 5-digit code emailed to the owner, and
+    only until REJECTION_ALLOWED_TIME hours before the booking starts.
+
+    The booking this ONE payment paid for FAILS with it (solo hold / whole team
+    request / plain booking): the slots become free again and everyone involved
+    is notified. Refunding the money is still a manual job.
     """
-    if not owner.check_password(password or ""):
-        raise InvalidOwnerPassword("Incorrect password.")
+    _get_owner_verified_payment(transaction_id, owner)      # fail early, before the code is tried
+    verification = _verify_reject_code(owner, code)
 
     with db_transaction.atomic():
         transaction = _lock_owner_payment(transaction_id, owner)
         if transaction.status != PaymentStatus.VERIFIED:
             raise PaymentValidationError("Only a verified payment can be rejected this way.")
+        if not can_owner_reject(transaction):
+            raise RejectionWindowClosed(window_closed_message())
+
         transaction.status = PaymentStatus.REJECTED
         transaction.rejection_reason = f"owner_rejected_verified:{owner.id}"
         transaction.processed_at = timezone.now()
         transaction.save(update_fields=["status", "rejection_reason", "processed_at", "updated_at"])
 
-    logger.warning(
-        "Owner %s reversed VERIFIED payment %s (booking / share is NOT cancelled automatically).",
-        owner.id, transaction.id,
-    )
+        notifications = cancel_booking_for_rejected_payment(transaction)
+
+        # the code works once; if anything above failed it stays valid
+        PhoneVerification.objects.filter(pk=verification.pk).update(is_used=True, used_at=timezone.now())
+
+    send_rejection_notifications(notifications)
+    logger.warning("Owner %s rejected VERIFIED payment %s; booking cancelled.", owner.id, transaction.id)
     return transaction
 
+    
 
 # ─────────────────────────────────────────────────────────────────────────────
 # PITCH OWNER: manage OWN bank accounts (edit / turn on-off)

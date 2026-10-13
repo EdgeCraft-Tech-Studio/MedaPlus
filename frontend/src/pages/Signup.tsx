@@ -557,7 +557,7 @@ export default function Signup() {
 
             <div className={styles.field}>
               <label className={styles.label} htmlFor="signup-email">
-                Email <span style={{ fontWeight: 400, color: "var(--muted)" }}>(optional)</span>
+                Email <span style={{ fontWeight: 400, color: "var(--muted)" }}></span>
               </label>
               <input
                 id="signup-email"

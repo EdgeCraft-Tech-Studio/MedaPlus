@@ -166,6 +166,8 @@ export interface OwnerPaymentRow {
   paid_at: string | null;
   submitted_at: string;
   review_reason: string;
+  can_reject: boolean;
+  reject_deadline: string | null;
 }
 
 export interface OwnerPaymentPage {
@@ -201,12 +203,20 @@ export async function ownerReviewPayment(
   return res.data;
 }
 
-/** Turn a VERIFIED payment into REJECTED. Needs the owner's own password. */
+/** Emails a 5-digit code to the pitch owner (needed to reject a VERIFIED payment). */
+export async function ownerRequestRejectCode(
+  transactionId: string
+): Promise<{ email_hint: string; expires_in_seconds: number }> {
+  const res = await api.post(`/payment/transactions/${transactionId}/owner-reject-verified/request-code/`);
+  return res.data;
+}
+
+/** Turn a VERIFIED payment into REJECTED (the booking fails with it). Needs the emailed code. */
 export async function ownerRejectVerifiedPayment(
   transactionId: string,
-  password: string
+  code: string
 ): Promise<OwnerPaymentRow> {
-  const res = await api.post(`/payment/transactions/${transactionId}/owner-reject-verified/`, { password });
+  const res = await api.post(`/payment/transactions/${transactionId}/owner-reject-verified/`, { code });
   return res.data;
 }
 

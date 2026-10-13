@@ -6,7 +6,7 @@ export interface SessionUser {
   full_name: string;
   role: "ADMIN" | "OWNER" | "PLAYER";
   phone: string;
-  email: string | null;
+  email: string;
   profile_photo_url: string | null;
   active: boolean;
   is_blocked: boolean;

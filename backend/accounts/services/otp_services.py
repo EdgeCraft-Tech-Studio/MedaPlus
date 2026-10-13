@@ -110,6 +110,7 @@ class OTPService:
         PhoneVerification.Purpose.PASSWORD_RESET: 'reset your password',
         PhoneVerification.Purpose.PHONE_CHANGE:   'change your phone number',
         PhoneVerification.Purpose.BID_CONFIRM:    'confirm your action',
+        PhoneVerification.Purpose.PAYMENT_REJECT: 'confirm rejecting a payment',
     }
 
     # ── private helpers ──
@@ -290,7 +291,7 @@ class OTPService:
         #     )
         #
         # except requests.exceptions.ConnectionError:
-        #     logger.error(
+        #     logger.error( 
         #         'AfroMessage API connection error',
         #         extra={'phone': phone, 'purpose': purpose}
         #     )
@@ -343,6 +344,7 @@ class OTPService:
             PhoneVerification.Purpose.LOGIN,
             PhoneVerification.Purpose.PHONE_CHANGE,
             PhoneVerification.Purpose.BID_CONFIRM,
+            PhoneVerification.Purpose.PAYMENT_REJECT,
         ] and user is None:
             raise ValueError(
                 f"user required for purpose {purpose}"

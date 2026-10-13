@@ -40,5 +40,9 @@ class NotificationType(models.TextChoices):
     TEAM_BOOKING_PITCH_BOOKED = "team_booking_pitch_booked", "Pitch Booked"
     TEAM_BOOKING_PITCH_UNAVAILABLE = "team_booking_pitch_unavailable", "Pitch Unavailable"
     TEAM_BOOKING_OPEN_SLOT_JOINED = "team_booking_open_slot_joined", "Player Joined Open Slot"
+
+    # --- Payment / booking rejected by the pitch owner ---
+    PAYMENT_REJECTED = "payment_rejected", "Payment Rejected"
+    BOOKING_REJECTED = "booking_rejected", "Booking Rejected"
     # --- Fallback ---
     SYSTEM = "system", "System"

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import styles from "./css/PaymentDetailTable.module.css";
 import {
-  getPitchPayments, ownerReviewPayment, ownerRejectVerifiedPayment,
+  getPitchPayments, ownerReviewPayment, ownerRejectVerifiedPayment, ownerRequestRejectCode,
   type OwnerPaymentFilter, type OwnerPaymentPage, type OwnerPaymentRow,
 } from "../lib/payment";
 import { SUPPORTED_BANKS } from "../lib/paymentAdmin";
@@ -32,6 +32,9 @@ const REVIEW_REASON_TEXT: Record<string, string> = {
 
 const KIND_LABEL = { solo: "Solo booking", team: "Team booking", booking: "Booking" } as const;
 
+const CODE_LENGTH = 5;
+const RESEND_SECONDS = 60;
+
 function bankLabel(value: string) {
   return SUPPORTED_BANKS.find((b) => b.value === value)?.label.replace(" (not supported for verification)", "") || value || "—";
 }
@@ -54,6 +57,11 @@ function formatDateTime(iso: string | null) {
   return new Date(iso).toLocaleString(undefined, { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
+function apiMessage(err: any, fallback: string): string {
+  const detail = err?.response?.data?.detail;
+  return typeof detail === "string" && detail ? detail : fallback;
+}
+
 function SearchIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -62,15 +70,6 @@ function SearchIcon() {
   );
 }
 
-function EyeIcon({ off }: { off: boolean }) {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" />
-      <circle cx="12" cy="12" r="3" />
-      {off && <path d="M3 3l18 18" />}
-    </svg>
-  );
-}
 function CloseIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
@@ -128,9 +127,15 @@ export default function PaymentDetailTable({ pitchId }: Props) {
   const [duplicateRef, setDuplicateRef] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [passwordError, setPasswordError] = useState("");
+  // rejecting a VERIFIED payment: emailed 5-digit code
+  const [code, setCode] = useState("");
+  const [codeError, setCodeError] = useState("");
+  const [emailHint, setEmailHint] = useState("");
+  const [sendingCode, setSendingCode] = useState(false);
+  const [resendIn, setResendIn] = useState(0);
+
+  // "now" ticks so a Reject button disappears by itself when its time is over
+  const [now, setNow] = useState(() => Date.now());
 
   const latestRequest = useRef(0);
   const appliedSearch = useRef("");
@@ -165,6 +170,18 @@ export default function PaymentDetailTable({ pitchId }: Props) {
     return () => clearTimeout(timer);
   }, [searchText]);
 
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // "Send code again" cooldown
+  useEffect(() => {
+    if (resendIn <= 0) return;
+    const timer = setTimeout(() => setResendIn((s) => s - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [resendIn]);
+
   function changeFilter(next: OwnerPaymentFilter) {
     setFilter(next);
     setPage(1);
@@ -186,11 +203,50 @@ export default function PaymentDetailTable({ pitchId }: Props) {
     setPage(1);
   }
 
+  /** Reject is offered only for a verified payment whose booking has not reached its cut-off time. */
+  function canRejectNow(row: OwnerPaymentRow) {
+    if (row.status !== "verified" || !row.can_reject) return false;
+    return !row.reject_deadline || now <= new Date(row.reject_deadline).getTime();
+  }
+
   function closeReverse() {
     setReverseRow(null);
-    setPassword("");
-    setShowPassword(false);
-    setPasswordError("");
+    setCode("");
+    setCodeError("");
+    setEmailHint("");
+    setResendIn(0);
+  }
+
+  async function sendCode(row: OwnerPaymentRow) {
+    setSendingCode(true);
+    setCodeError("");
+    try {
+      const res = await ownerRequestRejectCode(row.id);
+      setEmailHint(res.email_hint);
+      setCode("");
+      setResendIn(RESEND_SECONDS);
+    } catch (err: any) {
+      const body = err?.response?.data;
+      if (body?.code === "rejection_window_closed") {
+        closeReverse();
+        showToast(apiMessage(err, "This payment can't be rejected any more."), "delete");
+        await load();
+      } else {
+        setCodeError(apiMessage(err, "Couldn't send the code. Please try again."));
+      }
+    } finally {
+      setSendingCode(false);
+    }
+  }
+
+  // clicking Reject on a verified payment: open the popup AND email the code straight away
+  function openReverse(row: OwnerPaymentRow) {
+    setReverseRow(row);
+    setCode("");
+    setCodeError("");
+    setEmailHint("");
+    setResendIn(0);
+    void sendCode(row);
   }
 
   async function runReview() {
@@ -216,23 +272,23 @@ export default function PaymentDetailTable({ pitchId }: Props) {
   }
 
   async function runReverse() {
-    if (!reverseRow) return;
-    if (!password) {
-      setPasswordError("Enter your password.");
-      return;
-    }
+    if (!reverseRow || code.length !== CODE_LENGTH) return;
     setBusy(true);
-    setPasswordError("");
+    setCodeError("");
     try {
-      await ownerRejectVerifiedPayment(reverseRow.id, password);
-      showToast("Payment rejected.", "update");
+      await ownerRejectVerifiedPayment(reverseRow.id, code);
+      showToast("Payment rejected. The booking was cancelled and everyone was notified.", "update");
       closeReverse();
       await load();
     } catch (err: any) {
-      const status = err?.response?.status;
-      if (status === 403 && err?.response?.data?.code === "invalid_password") setPasswordError("Incorrect password.");
-      else if (status === 429) setPasswordError("Too many attempts. Please wait a minute and try again.");
-      else setPasswordError(err?.response?.data?.detail || "Couldn't reject this payment.");
+      const body = err?.response?.data;
+      if (body?.code === "rejection_window_closed") {
+        closeReverse();
+        showToast(apiMessage(err, "This payment can't be rejected any more."), "delete");
+        await load();
+      } else {
+        setCodeError(apiMessage(err, "Couldn't reject this payment."));
+      }
     } finally {
       setBusy(false);
     }
@@ -322,7 +378,7 @@ export default function PaymentDetailTable({ pitchId }: Props) {
               <th>Last name</th>
               <th>Phone</th>
               <th>Amount</th>
-              <th>Paid from → to</th> 
+              <th>Paid from → to</th>
               <th>Reference</th>
               <th>Paid on</th>
               <th>Type</th>
@@ -387,7 +443,9 @@ export default function PaymentDetailTable({ pitchId }: Props) {
                     </>
                   )}
                   {row.status === "verified" && (
-                    <button className={`${styles.btn} ${styles.btnReject}`} disabled={busy} onClick={() => setReverseRow(row)}>Reject</button>
+                    canRejectNow(row)
+                      ? <button className={`${styles.btn} ${styles.btnReject}`} disabled={busy} onClick={() => openReverse(row)}>Reject</button>
+                      : <span className={styles.subtle}>—</span>
                   )}
                   {row.status === "rejected" && <span className={styles.subtle}>—</span>}
                 </td>
@@ -443,40 +501,52 @@ export default function PaymentDetailTable({ pitchId }: Props) {
         </Modal>
       )}
 
-      {/* rejecting a VERIFIED payment needs the owner's password */}
+      {/* rejecting a VERIFIED payment needs the 5-digit code we email to the owner */}
       {reverseRow && (
         <Modal title="Reject a verified payment" onClose={closeReverse} busy={busy}>
           <PaymentFacts row={reverseRow} />
           <p className={styles.modalText}>
-            This payment is already verified. Enter your account password to confirm that you are the pitch owner.
+            {sendingCode && !emailHint
+              ? "Sending a code to your email…"
+              : emailHint
+                ? <>We sent a {CODE_LENGTH}-digit code to <b>{emailHint}</b>. Enter it to confirm. The booking for this payment will be cancelled, the pitch becomes free again, and the players will be notified.</>
+                : "We couldn't send the code yet. Use “Send code again” below."}
           </p>
-          <label className={styles.passwordLabel} htmlFor="owner-password">Password</label>
-          <div className={styles.passwordWrap}>
-            <input
-              id="owner-password"
-              className={`${styles.passwordInput} ${passwordError ? styles.passwordInputError : ""}`}
-              type={showPassword ? "text" : "password"}
-              autoComplete="current-password"
-              value={password}
-              disabled={busy}
-              onChange={(e) => { setPassword(e.target.value); setPasswordError(""); }}
-              onKeyDown={(e) => { if (e.key === "Enter") runReverse(); }}
-              placeholder="Your password"
-              autoFocus
-            />
+
+          <input
+            className={`${styles.codeInput} ${codeError ? styles.codeInputError : ""}`}
+            type="text"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            maxLength={CODE_LENGTH}
+            value={code}
+            disabled={busy}
+            autoFocus
+            placeholder="•••••"
+            aria-label="Verification code"
+            onChange={(e) => { setCode(e.target.value.replace(/\D/g, "").slice(0, CODE_LENGTH)); setCodeError(""); }}
+            onKeyDown={(e) => { if (e.key === "Enter") runReverse(); }}
+          />
+          <div className={styles.codeMeta}>
+            <span>{code.length}/{CODE_LENGTH}</span>
             <button
               type="button"
-              className={styles.eyeBtn}
-              onClick={() => setShowPassword((v) => !v)}
-              aria-label={showPassword ? "Hide password" : "Show password"}
+              className={styles.resendBtn}
+              disabled={busy || sendingCode || resendIn > 0}
+              onClick={() => sendCode(reverseRow)}
             >
-              <EyeIcon off={showPassword} />
+              {sendingCode ? "Sending…" : resendIn > 0 ? `Send code again in ${resendIn}s` : "Send code again"}
             </button>
           </div>
-          {passwordError && <div className={styles.passwordError}>{passwordError}</div>}
+          {codeError && <div className={styles.passwordError}>{codeError}</div>}
+
           <div className={styles.modalActions}>
             <button className={styles.btnGhost} onClick={closeReverse} disabled={busy}>Cancel</button>
-            <button className={`${styles.btnWide} ${styles.btnReject}`} onClick={runReverse} disabled={busy}>
+            <button
+              className={`${styles.btnWide} ${styles.btnReject}`}
+              onClick={runReverse}
+              disabled={busy || sendingCode || code.length !== CODE_LENGTH}
+            >
               {busy ? "Checking…" : "Reject payment"}
             </button>
           </div>

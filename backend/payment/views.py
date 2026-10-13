@@ -14,6 +14,15 @@ from .models import PaymentTransaction, PitchOwnerBankAccount
 from .permissions import IsPlatformAdmin
 from .ocr import extract_reference_from_image
 from .throttling import PaymentSubmitThrottle, ReceiptExtractionThrottle
+from accounts.services.otp_services import OTPLockedError, OTPRateLimitError, SMSSendError
+from team_booking.models import TeamBookingRequestStatus
+from .rejection import (
+    RejectCodeExpired,
+    RejectCodeInvalid,
+    RejectCodeLocked,
+    RejectionWindowClosed,
+)
+from .services import owner_send_reject_code
 from .serializers import (
     BankRequirementSerializer,
     ConfigurePaymentProfileSerializer,
@@ -232,6 +241,8 @@ class SubmitTeamBookingPaymentView(views.APIView):
             raise ValidationError({"detail": "This payment is no longer pending."})
         if tbp.request.is_payment_expired:
             raise ValidationError({"detail": "The payment window has closed."})
+        if tbp.request.status == TeamBookingRequestStatus.CANCELLED:
+            raise ValidationError({"detail": "This booking was cancelled."})
 
         serializer = SubmitManualBankPaymentSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -358,11 +369,16 @@ class AcknowledgePaymentCompletionView(views.APIView):
 # PITCH OWNER: "Payment Detail" table on the pitch page
 # ─────────────────────────────────────────────────────────────────────────────
 
-class OwnerPasswordThrottle(UserRateThrottle):
-    """Rejecting a VERIFIED payment asks for the password, so guessing it must
-    be slow even for someone holding a logged-in session."""
-    scope = "payment_owner_password"
+class OwnerRejectConfirmThrottle(UserRateThrottle):
+    """Guessing the 5-digit code must be slow."""
+    scope = "payment_owner_reject_confirm"
     rate = "5/min"
+
+
+class OwnerRejectCodeRequestThrottle(UserRateThrottle):
+    """Each request sends an email."""
+    scope = "payment_owner_reject_code"
+    rate = "3/min"
 
 
 def _parse_day(value):
@@ -403,10 +419,9 @@ class PitchPaymentTransactionsView(views.APIView):
         data["results"] = OwnerPaymentRowSerializer(data["results"], many=True).data
         return Response(data)
 
-
 def _owner_action_error_response(exc):
-    """409 for 'this reference is already verified' (the UI shows a popup),
-    404 unknown payment, 400 everything else."""
+    """409 'reference already verified' (popup), 404 unknown payment,
+    code-specific answers for the reject flow, 400 everything else."""
     if isinstance(exc, ReferenceAlreadyVerified):
         return Response(
             {"code": "reference_already_verified", "detail": str(exc), "reference_number": exc.reference_number},
@@ -414,6 +429,14 @@ def _owner_action_error_response(exc):
         )
     if isinstance(exc, PaymentNotFound):
         return Response({"detail": "Payment not found."}, status=404)
+    if isinstance(exc, RejectionWindowClosed):
+        return Response({"code": "rejection_window_closed", "detail": str(exc)}, status=400)
+    if isinstance(exc, RejectCodeInvalid):
+        return Response({"code": "invalid_code", "detail": str(exc)}, status=403)
+    if isinstance(exc, RejectCodeExpired):
+        return Response({"code": "code_expired", "detail": str(exc)}, status=400)
+    if isinstance(exc, RejectCodeLocked):
+        return Response({"code": "code_locked", "detail": str(exc)}, status=429)
     return Response({"detail": str(exc)}, status=400)
 
 
@@ -443,12 +466,36 @@ class OwnerReviewTransactionView(views.APIView):
         return Response(OwnerPaymentRowSerializer(transaction).data)
 
 
-class OwnerReverseVerifiedView(views.APIView):
-    """POST /payment/transactions/{id}/owner-reject-verified/  {"password": "..."}
-    VERIFIED -> REJECTED, only after the owner re-enters their own password."""
+class OwnerRejectCodeRequestView(views.APIView):
+    """POST /payment/transactions/{id}/owner-reject-verified/request-code/
+    Emails a 5-digit code to the pitch owner."""
 
-    permission_classes = [IsAuthenticated] 
-    throttle_classes = [OwnerPasswordThrottle]
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [OwnerRejectCodeRequestThrottle]
+
+    def post(self, request, transaction_id):
+        try:
+            data = owner_send_reject_code(transaction_id=transaction_id, owner=request.user)
+        except OTPRateLimitError as exc:
+            body = {"code": "code_rate_limited", "detail": str(exc)}
+            if exc.blocked_until:
+                body["blocked_until"] = exc.blocked_until.isoformat()
+            return Response(body, status=429)
+        except OTPLockedError as exc:
+            return Response({"code": "code_locked", "detail": str(exc)}, status=429)
+        except SMSSendError:
+            return Response({"detail": "Email service unavailable. Please try again."}, status=503)
+        except PaymentServiceError as exc:
+            return _owner_action_error_response(exc)
+        return Response(data)
+
+
+class OwnerReverseVerifiedView(views.APIView):
+    """POST /payment/transactions/{id}/owner-reject-verified/  {"code": "12345"}
+    VERIFIED -> REJECTED with the emailed code; the booking fails with it."""
+
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [OwnerRejectConfirmThrottle]
 
     def post(self, request, transaction_id):
         serializer = OwnerReverseVerifiedSerializer(data=request.data)
@@ -457,19 +504,19 @@ class OwnerReverseVerifiedView(views.APIView):
             transaction = owner_reverse_verified_payment(
                 transaction_id=transaction_id,
                 owner=request.user,
-                password=serializer.validated_data["password"],
+                code=serializer.validated_data["code"],
             )
-        except InvalidOwnerPassword:
-            return Response({"code": "invalid_password", "detail": "Incorrect password."}, status=403)
         except PaymentServiceError as exc:
             return _owner_action_error_response(exc)
         transaction = (
-            PaymentTransaction.objects
-            .select_related("payer", "owner_bank_account", "team_booking_payment__request__team")
+            PaymentTransaction.objects 
+            .select_related(
+                "payer", "owner_bank_account", "team_booking_payment__request__team",
+                "solo_booking_hold", "booking",
+            )
             .get(id=transaction.id)
         )
         return Response(OwnerPaymentRowSerializer(transaction).data)
-
 
 class MySavedSenderBanksView(views.APIView):
     """GET /payment/my-saved-banks/ -> {"banks": ["cbe", ...]}

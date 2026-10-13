@@ -112,7 +112,14 @@ function timeAgoColor(read: boolean) {
   return read ? "var(--muted)" : "var(--grass)";
 }
 
+const REJECTED_NOTIFICATION_TYPES = new Set(["payment_rejected", "booking_rejected"]);
+
+function isRejectedNotification(n: AppNotification): boolean {
+  return REJECTED_NOTIFICATION_TYPES.has(n.rawType || "");
+}
+
 function notifAccentColor(n: AppNotification): string {
+  if (isRejectedNotification(n)) return "#dc2626";
   const title = n.title.toLowerCase();
   if (title.includes("confirmed") || title.includes("paid") || title.includes("booked")) return "#0f7a52";
   if (title.includes("can't") || title.includes("unavailable") || title.includes("declined")) return "#dc2626";
@@ -120,6 +127,7 @@ function notifAccentColor(n: AppNotification): string {
 }
 
 function notifBgColor(n: AppNotification): string {
+  if (isRejectedNotification(n)) return "#fdf0f0";
   const title = n.title.toLowerCase();
   if (title.includes("confirmed") || title.includes("paid") || title.includes("booked")) return "#eefaf3";
   if (title.includes("can't") || title.includes("unavailable") || title.includes("declined")) return "#fdf0f0";
@@ -804,7 +812,19 @@ async function handleAcknowledgeCompletion() {
                     className={`${styles.notifItem} ${!n.read ? styles.notifItemUnread : ""}`}
                     style={{ backgroundColor: notifBgColor(n) }}
                   >
-                    <span className={styles.notifDot} style={{ background: notifAccentColor(n) }} />
+                    {isRejectedNotification(n) ? (
+                      <span
+                        aria-label="Rejected"
+                        style={{
+                          color: "#dc2626", display: "inline-flex", flexShrink: 0,
+                          alignItems: "center", justifyContent: "center", width: 18, height: 18,
+                        }}
+                      >
+                        <XIcon width={16} height={16} />
+                      </span>
+                    ) : (
+                      <span className={styles.notifDot} style={{ background: notifAccentColor(n) }} />
+                    )}
                     <div className={styles.notifBody}>
                       <div className={styles.notifTopRow}>
                         <span className={styles.notifTag}>{CATEGORY_LABEL[n.category]}</span>

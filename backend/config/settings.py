@@ -17,12 +17,12 @@ from dotenv import load_dotenv
 import os
 
 load_dotenv(override=True)
-
+ 
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "dev")
 
-DEBUG = os.getenv("DEBUG", "0") == "1"
+DEBUG = 1#os.getenv("DEBUG", "0") == "1" 
 
-ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "localhost").split(",")
+ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "localhost").split(",") 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -32,7 +32,7 @@ VERIFY_ET_API_KEY = os.getenv("VERIFY_ET_API_KEY")
 VERIFY_ET_BASE_URL = os.getenv("VERIFY_ET_BASE_URL", "https://verify.et")
 
 
-
+REJECTION_ALLOWED_TIME = 1
 CHECK_NAME_FOR_PAYMENT = False
 MAX_PAYMENT_TIME_ALLOWED_HOURS = 60
 
@@ -242,10 +242,10 @@ CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 
 CELERY_RESULT_SERIALIZER = "json"
-
+ 
 CELERY_TIMEZONE = TIME_ZONE
 
-CELERY_BEAT_SCHEDULE = {
+CELERY_BEAT_SCHEDULE = { 
     "team-booking-sweep-every-minute": {
         "task": "team_booking.tasks.team_booking_sweep",
         "schedule": 60.0,
